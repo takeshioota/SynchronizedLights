@@ -52,6 +52,14 @@ namespace Lib.Ui.Screens.ViewModels
         private Rgb currentColor = new(255, 255, 255);
 
         /// <summary>
+        /// 現在対象
+        /// 概要：Preset画面で現在選択中の対象を保持する。
+        /// MainWindow 側のAppStateと同期して利用する。
+        /// </summary>
+        [ObservableProperty]
+        private Target selectedTarget = Target.All;
+
+        /// <summary>
         /// 現在色表示文字列
         /// 概要：画面に表示する現在色の文字列表現を返す。
         /// </summary>
@@ -76,6 +84,10 @@ namespace Lib.Ui.Screens.ViewModels
             RefreshStatus();
         }
 
+        /// <summary>
+        /// 現在色変更時処理
+        /// 概要：現在色表示文字列を再描画し、親画面へ色変更を通知する。
+        /// </summary>
         partial void OnCurrentColorChanged(Rgb value)
         {
             OnPropertyChanged(nameof(CurrentColorLabel));
@@ -123,26 +135,29 @@ namespace Lib.Ui.Screens.ViewModels
         {
             CurrentColor = new Rgb(255, 255, 255);
         }
+
         /// <summary>
         /// 点灯コマンド
-        /// 概要：全体ターゲットに対して点灯操作を実行し、状態表示を更新する。
+        /// 概要：現在選択中の対象と色を使用して点灯操作を実行し、状態表示を更新する。
+        /// STEP⑨対応：固定値ではなく、現在の SelectedTarget / CurrentColor と連動して送信・表示する。
         /// </summary>
         [RelayCommand]
         private async Task TurnOnAsync()
         {
-            await _presetUseCase.TurnOnAsync(Target.All, Rgb.White);
-            RefreshStatus("TurnOn sent");
+            await _presetUseCase.TurnOnAsync(SelectedTarget, CurrentColor);
+            RefreshStatus($"TurnOn sent : {SelectedTarget} / {CurrentColorLabel}");
         }
 
         /// <summary>
         /// 消灯コマンド
-        /// 概要：全体ターゲットに対して消灯操作を実行し、状態表示を更新する。
+        /// 概要：現在選択中の対象を使用して消灯操作を実行し、状態表示を更新する。
+        /// STEP⑨対応：固定値ではなく、現在の SelectedTarget と連動して送信・表示する。
         /// </summary>
         [RelayCommand]
         private async Task TurnOffAsync()
         {
-            await _presetUseCase.TurnOffAsync(Target.All);
-            RefreshStatus("TurnOff sent");
+            await _presetUseCase.TurnOffAsync(SelectedTarget);
+            RefreshStatus($"TurnOff sent : {SelectedTarget}");
         }
         #endregion コマンド
 
@@ -157,6 +172,17 @@ namespace Lib.Ui.Screens.ViewModels
             var status = _transport.GetStatus();
             StatusText = message ?? "Preset ready";
             QueueText = $"Queue: {status.QueueLength}";
+        }
+
+        /// <summary>
+        /// 外部状態をPreset画面へ反映する
+        /// 概要：MainWindow 側で保持している対象・色の状態をPreset画面へ同期する。
+        /// STEP⑨ではこのメソッド経由で Target / Color を連動させる。
+        /// </summary>
+        public void ApplyState(Target target, Rgb color)
+        {
+            SelectedTarget = target;
+            CurrentColor = color;
         }
         #endregion メソッド
     }

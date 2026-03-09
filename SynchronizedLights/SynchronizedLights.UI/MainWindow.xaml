@@ -6,7 +6,10 @@
         mc:Ignorable="d"
         Title="{Binding WindowTitle}"
         WindowState="Maximized"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Background="{StaticResource AppBgBrush}"
+        Foreground="{StaticResource TextBrushMain}"
+        >
 
     <Grid>
         <Grid.RowDefinitions>
@@ -25,9 +28,7 @@
         <!-- TopBar -->
         <Border Grid.Row="0"
                 Grid.ColumnSpan="2"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
+                Style="{StaticResource GrandMaPanelBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="120"/>
@@ -49,14 +50,14 @@
 
                 <TextBlock Grid.Column="0"
                         Text="TOP"
-                        VerticalAlignment="Center"
-                        FontSize="18"
-                        FontWeight="Bold" />
+                        Style="{StaticResource GrandMaSectionTitleStyle}" />
 
                 <Button x:Name="BtnSpeed01"
                         Grid.Column="1"
                         Content="Speed01"
                         Command="{Binding ApplySpeed01Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSpeed01Selected}"                        
                         MinWidth="110"
                         MinHeight="44"
                         Margin="10,0,0,0" />
@@ -65,6 +66,8 @@
                         Grid.Column="2"
                         Content="Speed02"
                         Command="{Binding ApplySpeed02Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSpeed02Selected}"
                         MinWidth="110"
                         MinHeight="44"
                         Margin="10,0,0,0" />
@@ -73,6 +76,8 @@
                         Grid.Column="3"
                         Content="Speed03"
                         Command="{Binding ApplySpeed03Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSpeed03Selected}"
                         MinWidth="110"
                         MinHeight="44"
                         Margin="10,0,0,0" />
@@ -81,6 +86,8 @@
                         Grid.Column="4"
                         Content="Speed04"
                         Command="{Binding ApplySpeed04Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSpeed04Selected}"
                         MinWidth="110"
                         MinHeight="44"
                         Margin="10,0,0,0" />
@@ -130,41 +137,45 @@
         <!-- MainPanelHost -->
         <Border Grid.Row="1"
                 Grid.Column="0"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Margin="0">
+                Margin="0"
+                Style="{StaticResource GrandMaPanelBorderStyle}">
             <ContentControl Content="{Binding CurrentViewModel}" />
         </Border>
 
         <!-- CategoryMenu -->
         <Border Grid.Row="1"
                 Grid.Column="1"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
+                Style="{StaticResource GrandMaPanelBorderStyle}">
             <StackPanel VerticalAlignment="Stretch">
                 <TextBlock Text="CATEGORY"
-                           FontSize="18"
-                           FontWeight="Bold"
+                           Style="{StaticResource GrandMaSectionTitleStyle}"
                            Margin="0,0,0,10"/>
 
                 <Button Content="Preset"
                         Command="{Binding ShowPresetCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsPresetSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
 
                 <Button Content="Mode"
                         Command="{Binding ShowModeCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsModeSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
 
                 <Button Content="Animation"
                         Command="{Binding ShowAnimationCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsAnimationSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
 
                 <Button Content="Setting"
                         Command="{Binding ShowSettingCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSettingSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
             </StackPanel>
@@ -173,10 +184,8 @@
         <!-- TargetBar -->
         <Border Grid.Row="2"
                 Grid.ColumnSpan="2"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
-            <Grid>
+                Style="{StaticResource GrandMaPanelBorderStyle}">
+             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140"/>
                     <ColumnDefinition Width="Auto"/>
@@ -189,15 +198,14 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
-                           Text="TARGET"
-                           VerticalAlignment="Center"
-                           FontSize="18"
-                           FontWeight="Bold" />
+                        Text="TARGET"
+                        Style="{StaticResource GrandMaSectionTitleStyle}" />                           
 
                 <Button x:Name="BtnTargetAll"
                         Grid.Column="1"
                         Content="ALL"
                         Command="{Binding SelectTargetAllCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />                        
@@ -206,6 +214,8 @@
                         Grid.Column="2"
                         Content="Group01"
                         Command="{Binding SelectTargetGroup01Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetGroup01Selected}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -214,6 +224,8 @@
                         Grid.Column="3"
                         Content="Group02"
                         Command="{Binding SelectTargetGroup02Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetGroup02Selected}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -222,6 +234,8 @@
                         Grid.Column="4"
                         Content="Group03"
                         Command="{Binding SelectTargetGroup03Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetGroup03Selected}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -230,6 +244,8 @@
                         Grid.Column="5"
                         Content="Group04"
                         Command="{Binding SelectTargetGroup04Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetGroup04Selected}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -238,6 +254,8 @@
                         Grid.Column="6"
                         Content="Group05"
                         Command="{Binding SelectTargetGroup05Command}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetGroup05Selected}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -247,9 +265,7 @@
         <!-- EffectBar -->
         <Border Grid.Row="3"
                 Grid.ColumnSpan="2"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
+                Style="{StaticResource GrandMaPanelBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140"/>
@@ -261,15 +277,14 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
-                           Text="EFFECT"
-                           VerticalAlignment="Center"
-                           FontSize="18"
-                           FontWeight="Bold" />
+                            Text="EFFECT"
+                            Style="{StaticResource GrandMaSectionTitleStyle}" />
 
                 <Button x:Name="BtnFxFlash"
                         Grid.Column="1"
                         Content="Flash"
                         Command="{Binding ExecuteFlashCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -278,6 +293,7 @@
                         Grid.Column="2"
                         Content="FadeIn"
                         Command="{Binding ExecuteFadeInCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -286,6 +302,7 @@
                         Grid.Column="3"
                         Content="FadeOut"
                         Command="{Binding ExecuteFadeOutCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -294,6 +311,7 @@
                         Grid.Column="4"
                         Content="StrobeOff"
                         Command="{Binding ExecuteStrobeOffCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="120"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -304,9 +322,7 @@
         <!-- SequenceBar -->
         <Border Grid.Row="4"
                 Grid.ColumnSpan="2"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
+                Style="{StaticResource GrandMaPanelBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140"/>
@@ -320,13 +336,13 @@
 
                 <TextBlock Grid.Column="0"
                            Text="SEQUENCE"
-                           VerticalAlignment="Center"
-                           FontSize="18"
-                           FontWeight="Bold" />
+                           Style="{StaticResource GrandMaSectionTitleStyle}" />
 
                 <Button x:Name="BtnSeq01"
                         Grid.Column="1"
                         Content="Sequence01"
+                        Command="{Binding ExecuteSequence01Command}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -334,6 +350,8 @@
                 <Button x:Name="BtnSeq02"
                         Grid.Column="2"
                         Content="Sequence02"
+                        Command="{Binding ExecuteSequence02Command}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -341,6 +359,8 @@
                 <Button x:Name="BtnSeq03"
                         Grid.Column="3"
                         Content="Sequence03"
+                        Command="{Binding ExecuteSequence03Command}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -348,6 +368,8 @@
                 <Button x:Name="BtnSeq04"
                         Grid.Column="4"
                         Content="Sequence04"
+                        Command="{Binding ExecuteSequence04Command}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
@@ -355,10 +377,13 @@
                 <Button x:Name="BtnSeqStop"
                         Grid.Column="5"
                         Content="Stop"
+                        Command="{Binding StopSequenceCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
             </Grid>
         </Border>
+
     </Grid>
 </Window>

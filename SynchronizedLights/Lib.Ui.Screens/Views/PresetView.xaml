@@ -12,14 +12,22 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="20"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- タイトル -->
         <TextBlock Grid.Row="0"
                    Text="Preset"
                    FontSize="28"
                    FontWeight="Bold" />
 
+        <!-- 色選択 -->
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal">
             <Button x:Name="BtnColorRed"
@@ -50,9 +58,38 @@
                     MinHeight="56" />
         </StackPanel>
 
+        <!-- 現在色表示 -->
         <TextBlock Grid.Row="4"
                    Text="{Binding CurrentColorLabel}"
                    FontSize="18"
                    FontWeight="Bold" />
+
+        <!-- 点灯/消灯 -->
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal">
+            <Button x:Name="BtnTurnOn"
+                    Content="Turn On"
+                    Command="{Binding TurnOnCommand}"
+                    MinWidth="140"
+                    MinHeight="56"
+                    Margin="0,0,10,0" />
+
+            <Button x:Name="BtnTurnOff"
+                    Content="Turn Off"
+                    Command="{Binding TurnOffCommand}"
+                    MinWidth="140"
+                    MinHeight="56" />
+        </StackPanel>
+
+        <!-- 状態表示 -->
+        <TextBlock Grid.Row="8"
+                   Text="{Binding StatusText}"
+                   FontSize="18"
+                   FontWeight="Bold" />
+
+        <!-- キュー表示 -->
+        <TextBlock Grid.Row="10"
+                   Text="{Binding QueueText}"
+                   FontSize="16" />
     </Grid>
 </UserControl>

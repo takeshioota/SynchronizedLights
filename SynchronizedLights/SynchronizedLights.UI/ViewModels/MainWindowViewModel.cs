@@ -7,6 +7,8 @@ using Lib.Domain.ValueObjects;
 using Lib.Protocol.Builders;
 using Lib.Transport.Transports;
 using Lib.Ui.Screens.ViewModels;
+using SynchronizedLights.UI.ViewModels;
+using Lib.Transport.Interfaces;
 
 namespace SynchronizedLights.UI.ViewModels
 {
@@ -105,6 +107,76 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [ObservableProperty]
         private string statusMessage = "Ready";
+
+        /// <summary>
+        /// Presetカテゴリが選択中かどうか
+        /// </summary>
+        public bool IsPresetSelected => CurrentCategory == UiCategory.Preset;
+
+        /// <summary>
+        /// Modeカテゴリが選択中かどうか
+        /// </summary>
+        public bool IsModeSelected => CurrentCategory == UiCategory.Mode;
+
+        /// <summary>
+        /// Animationカテゴリが選択中かどうか
+        /// </summary>
+        public bool IsAnimationSelected => CurrentCategory == UiCategory.Animation;
+
+        /// <summary>
+        /// Settingカテゴリが選択中かどうか
+        /// </summary>
+        public bool IsSettingSelected => CurrentCategory == UiCategory.Setting;
+
+        /// <summary>
+        /// ALLターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetAllSelected => AppState.SelectedTarget == Target.All;
+
+        /// <summary>
+        /// Group01ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup01Selected => AppState.SelectedTarget == Target.Group01;
+
+        /// <summary>
+        /// Group02ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup02Selected => AppState.SelectedTarget == Target.Group02;
+
+        /// <summary>
+        /// Group03ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup03Selected => AppState.SelectedTarget == Target.Group03;
+
+        /// <summary>
+        /// Group04ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup04Selected => AppState.SelectedTarget == Target.Group04;
+
+        /// <summary>
+        /// Group05ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup05Selected => AppState.SelectedTarget == Target.Group05;
+
+        /// <summary>
+        /// Speed01が選択中かどうか
+        /// </summary>
+        public bool IsSpeed01Selected => AppState.SpeedValueMs == 250;
+
+        /// <summary>
+        /// Speed02が選択中かどうか
+        /// </summary>
+        public bool IsSpeed02Selected => AppState.SpeedValueMs == 500;
+
+        /// <summary>
+        /// Speed03が選択中かどうか
+        /// </summary>
+        public bool IsSpeed03Selected => AppState.SpeedValueMs == 1000;
+
+        /// <summary>
+        /// Speed04が選択中かどうか
+        /// </summary>
+        public bool IsSpeed04Selected => AppState.SpeedValueMs == 2000;
         #endregion プロパティ
 
         #region コンストラクタ
@@ -120,6 +192,9 @@ namespace SynchronizedLights.UI.ViewModels
             _presetUseCase = new PresetUseCase(_commandBuilder, _transport);
 
             UpdateCurrentViewModel();
+            RefreshCategorySelection();
+            RefreshTargetSelection();
+            RefreshSpeedSelection();
         }
         #endregion コンストラクタ
 
@@ -132,6 +207,7 @@ namespace SynchronizedLights.UI.ViewModels
         partial void OnCurrentCategoryChanged(UiCategory value)
         {
             UpdateCurrentViewModel();
+            RefreshCategorySelection();
         }
         #endregion OnCurrentCategoryChanged
 
@@ -149,7 +225,7 @@ namespace SynchronizedLights.UI.ViewModels
                 UiCategory.Mode => new ModeViewModel(),
                 UiCategory.Animation => new AnimationViewModel(),
                 UiCategory.Sequence => new SequenceViewModel(),
-                UiCategory.Setting => new SettingViewModel(),
+                UiCategory.Setting => new SettingViewModel(_transport),
                 _ => CreatePresetViewModel()
             };
         }
@@ -159,14 +235,16 @@ namespace SynchronizedLights.UI.ViewModels
         /// <summary>
         /// Preset画面用ViewModelを生成する。
         /// 概要：PresetViewModel生成時に色変更イベントを購読し、
-        /// AppState.SelectedColor と同期する。
+        /// AppStateの対象・色と同期する。
         /// </summary>
         private PresetViewModel CreatePresetViewModel()
         {
-            var vm = new PresetViewModel(_presetUseCase, _transport);
-            vm.ColorChanged += OnPresetColorChanged;
-            return vm;
+            var viewModel = new PresetViewModel(_presetUseCase, _transport);
+            viewModel.ColorChanged += OnPresetColorChanged;
+            viewModel.ApplyState(AppState.SelectedTarget, AppState.SelectedColor);
+            return viewModel;
         }
+
         /// <summary>
         /// Preset画面の色変更通知を処理する。
         /// 概要：PresetViewModelで選択された色をAppStateへ反映し、
@@ -177,6 +255,54 @@ namespace SynchronizedLights.UI.ViewModels
             AppState.SelectedColor = color;
             OnPropertyChanged(nameof(CurrentColorLabel));
             StatusMessage = $"Color changed : {CurrentColorLabel}";
+            SyncPresetStateIfActive();
+        }
+
+        /// <summary>
+        /// Preset画面表示中の状態同期を行う。
+        /// 概要：現在表示中の画面がPresetViewModelの場合、
+        /// AppStateの対象・色をPresetViewModelへ反映する。
+        /// </summary>
+        private void SyncPresetStateIfActive()
+        {
+            if (CurrentViewModel is PresetViewModel presetViewModel)
+            {
+                presetViewModel.ApplyState(AppState.SelectedTarget, AppState.SelectedColor);
+            }
+        }
+        /// <summary>
+        /// カテゴリ選択状態表示を更新する。
+        /// </summary>
+        private void RefreshCategorySelection()
+        {
+            OnPropertyChanged(nameof(IsPresetSelected));
+            OnPropertyChanged(nameof(IsModeSelected));
+            OnPropertyChanged(nameof(IsAnimationSelected));
+            OnPropertyChanged(nameof(IsSettingSelected));
+        }
+
+        /// <summary>
+        /// ターゲット選択状態表示を更新する。
+        /// </summary>
+        private void RefreshTargetSelection()
+        {
+            OnPropertyChanged(nameof(IsTargetAllSelected));
+            OnPropertyChanged(nameof(IsTargetGroup01Selected));
+            OnPropertyChanged(nameof(IsTargetGroup02Selected));
+            OnPropertyChanged(nameof(IsTargetGroup03Selected));
+            OnPropertyChanged(nameof(IsTargetGroup04Selected));
+            OnPropertyChanged(nameof(IsTargetGroup05Selected));
+        }
+
+        /// <summary>
+        /// 速度選択状態表示を更新する。
+        /// </summary>
+        private void RefreshSpeedSelection()
+        {
+            OnPropertyChanged(nameof(IsSpeed01Selected));
+            OnPropertyChanged(nameof(IsSpeed02Selected));
+            OnPropertyChanged(nameof(IsSpeed03Selected));
+            OnPropertyChanged(nameof(IsSpeed04Selected));
         }
         #endregion メソッド
 
@@ -239,6 +365,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.All;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
 
         /// <summary>
@@ -250,6 +378,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.Group01;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
 
         /// <summary>
@@ -261,6 +391,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.Group02;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
 
         /// <summary>
@@ -272,6 +404,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.Group03;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
 
         /// <summary>
@@ -283,6 +417,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.Group04;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
 
         /// <summary>
@@ -294,6 +430,8 @@ namespace SynchronizedLights.UI.ViewModels
         {
             AppState.SelectedTarget = Target.Group05;
             OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
         }
         /// <summary>
         /// Flash実行コマンド
@@ -377,6 +515,7 @@ namespace SynchronizedLights.UI.ViewModels
             AppState.SpeedValueMs = 250;
             StatusMessage = $"Speed01 applied : {CurrentSpeedLabel}";
             OnPropertyChanged(nameof(CurrentSpeedLabel));
+            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -389,6 +528,7 @@ namespace SynchronizedLights.UI.ViewModels
             AppState.SpeedValueMs = 500;
             StatusMessage = $"Speed02 applied : {CurrentSpeedLabel}";
             OnPropertyChanged(nameof(CurrentSpeedLabel));
+            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -401,6 +541,7 @@ namespace SynchronizedLights.UI.ViewModels
             AppState.SpeedValueMs = 1000;
             StatusMessage = $"Speed03 applied : {CurrentSpeedLabel}";
             OnPropertyChanged(nameof(CurrentSpeedLabel));
+            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -413,6 +554,61 @@ namespace SynchronizedLights.UI.ViewModels
             AppState.SpeedValueMs = 2000;
             StatusMessage = $"Speed04 applied : {CurrentSpeedLabel}";
             OnPropertyChanged(nameof(CurrentSpeedLabel));
+            RefreshSpeedSelection();
+        }
+        /// <summary>
+        /// Sequence01実行コマンド
+        /// 概要：Sequence01ボタン押下時に状態表示を更新する。
+        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence01()
+        {
+            StatusMessage = "Sequence executed : Sequence01";
+        }
+
+        /// <summary>
+        /// Sequence02実行コマンド
+        /// 概要：Sequence02ボタン押下時に状態表示を更新する。
+        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence02()
+        {
+            StatusMessage = "Sequence executed : Sequence02";
+        }
+
+        /// <summary>
+        /// Sequence03実行コマンド
+        /// 概要：Sequence03ボタン押下時に状態表示を更新する。
+        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence03()
+        {
+            StatusMessage = "Sequence executed : Sequence03";
+        }
+
+        /// <summary>
+        /// Sequence04実行コマンド
+        /// 概要：Sequence04ボタン押下時に状態表示を更新する。
+        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence04()
+        {
+            StatusMessage = "Sequence executed : Sequence04";
+        }
+
+        /// <summary>
+        /// Sequence停止コマンド
+        /// 概要：Stopボタン押下時に状態表示を更新する。
+        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// </summary>
+        [RelayCommand]
+        private void StopSequence()
+        {
+            StatusMessage = "Sequence stopped";
         }
         #endregion コマンド
 

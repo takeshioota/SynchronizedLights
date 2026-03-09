@@ -5,6 +5,94 @@
              xmlns:viewModels="clr-namespace:Lib.Ui.Screens.ViewModels;assembly=Lib.Ui.Screens"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+
+        <!-- 基本色 -->
+        <SolidColorBrush x:Key="AppBgBrush" Color="#111111"/>
+        <SolidColorBrush x:Key="PanelBgBrush" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="PanelBgBrush2" Color="#202020"/>
+        <SolidColorBrush x:Key="BorderBrushAmber" Color="#D6A100"/>
+        <SolidColorBrush x:Key="ButtonBgBrush" Color="#181818"/>
+        <SolidColorBrush x:Key="ButtonHoverBrush" Color="#252525"/>
+        <SolidColorBrush x:Key="ButtonPressedBrush" Color="#3A2E00"/>
+        <SolidColorBrush x:Key="ButtonSelectedBrush" Color="#0D2BD6"/>
+        <SolidColorBrush x:Key="TextBrushMain" Color="#F2F2F2"/>
+        <SolidColorBrush x:Key="TextBrushSub" Color="#D0D0D0"/>
+
+        <!-- TextBlock -->
+        <Style x:Key="GrandMaTextBlockStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrushMain}" />
+        </Style>
+
+        <!-- セクション見出し -->
+        <Style x:Key="GrandMaSectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource GrandMaTextBlockStyle}">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- 共通ボタン -->
+        <Style x:Key="GrandMaButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextBrushMain}" />
+            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushAmber}" />
+            <Setter Property="BorderThickness" Value="1.2" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="MinWidth" Value="100" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource ButtonHoverBrush}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#FFD84A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{StaticResource ButtonPressedBrush}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="#FFE27A" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 選択中ボタン -->
+        <Style x:Key="GrandMaSelectableButtonStyle"
+            TargetType="Button"
+            BasedOn="{StaticResource GrandMaButtonStyle}">
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ButtonSelectedBrush}" />
+                    <Setter Property="BorderBrush" Value="#6FA8FF" />
+                    <Setter Property="Foreground" Value="White" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>        
+
+        <!-- パネルBorder -->
+        <Style x:Key="GrandMaPanelBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBgBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushAmber}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+
         <DataTemplate DataType="{x:Type viewModels:PresetViewModel}">
             <views:PresetView />
         </DataTemplate>
@@ -15,10 +103,6 @@
 
         <DataTemplate DataType="{x:Type viewModels:AnimationViewModel}">
             <views:AnimationView />
-        </DataTemplate>
-
-        <DataTemplate DataType="{x:Type viewModels:SequenceViewModel}">
-            <views:SequenceView />
         </DataTemplate>
 
         <DataTemplate DataType="{x:Type viewModels:SettingViewModel}">
