@@ -1,0 +1,28 @@
+﻿<Application x:Class="SynchronizedLights.UI.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Lib.Ui.Screens.Views;assembly=Lib.Ui.Screens"
+             xmlns:viewModels="clr-namespace:Lib.Ui.Screens.ViewModels;assembly=Lib.Ui.Screens"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <DataTemplate DataType="{x:Type viewModels:PresetViewModel}">
+            <views:PresetView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type viewModels:ModeViewModel}">
+            <views:ModeView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type viewModels:AnimationViewModel}">
+            <views:AnimationView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type viewModels:SequenceViewModel}">
+            <views:SequenceView />
+        </DataTemplate>
+
+        <DataTemplate DataType="{x:Type viewModels:SettingViewModel}">
+            <views:SettingView />
+        </DataTemplate>
+    </Application.Resources>
+</Application>
