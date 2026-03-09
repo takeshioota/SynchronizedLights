@@ -45,6 +45,9 @@
                     <ColumnDefinition Width="30"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>              
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
@@ -125,12 +128,24 @@
                         FontWeight="Bold"
                         Margin="8,0,0,0" />
 
-                <TextBlock Grid.Column="14"
+                <TextBlock Grid.Column="15"
+                        Text="Conn:"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0" />
+
+                <TextBlock Grid.Column="16"
+                        Text="{Binding ConnectionStatusLabel}"
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Margin="8,0,0,0" />
+
+                <TextBlock Grid.Column="17"
                         Text="{Binding StatusMessage}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         FontWeight="Bold"
                         Margin="20,0,10,0" />
+
             </Grid>
         </Border>
 
@@ -284,6 +299,7 @@
                         Grid.Column="1"
                         Content="Flash"
                         Command="{Binding ExecuteFlashCommand}"
+                        IsEnabled="{Binding IsTransportConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
@@ -293,6 +309,7 @@
                         Grid.Column="2"
                         Content="FadeIn"
                         Command="{Binding ExecuteFadeInCommand}"
+                        IsEnabled="{Binding IsTransportConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
@@ -302,6 +319,7 @@
                         Grid.Column="3"
                         Content="FadeOut"
                         Command="{Binding ExecuteFadeOutCommand}"
+                        IsEnabled="{Binding IsTransportConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"
@@ -311,6 +329,7 @@
                         Grid.Column="4"
                         Content="StrobeOff"
                         Command="{Binding ExecuteStrobeOffCommand}"
+                        IsEnabled="{Binding IsTransportConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="120"
                         MinHeight="48"
@@ -342,6 +361,7 @@
                         Grid.Column="1"
                         Content="Sequence01"
                         Command="{Binding ExecuteSequence01Command}"
+                        IsEnabled="{Binding IsSequence01Defined}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
@@ -351,6 +371,7 @@
                         Grid.Column="2"
                         Content="Sequence02"
                         Command="{Binding ExecuteSequence02Command}"
+                        IsEnabled="{Binding IsSequence02Defined}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
@@ -360,6 +381,7 @@
                         Grid.Column="3"
                         Content="Sequence03"
                         Command="{Binding ExecuteSequence03Command}"
+                        IsEnabled="{Binding IsSequence01Defined}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
@@ -369,6 +391,7 @@
                         Grid.Column="4"
                         Content="Sequence04"
                         Command="{Binding ExecuteSequence04Command}"
+                        IsEnabled="{Binding IsSequence01Defined}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="48"
@@ -378,6 +401,7 @@
                         Grid.Column="5"
                         Content="Stop"
                         Command="{Binding StopSequenceCommand}"
+                        IsEnabled="{Binding IsSequence01Defined}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="48"

@@ -108,6 +108,7 @@ namespace SynchronizedLights.UI.ViewModels
         [ObservableProperty]
         private string statusMessage = "Ready";
 
+        #region カテゴリ
         /// <summary>
         /// Presetカテゴリが選択中かどうか
         /// </summary>
@@ -127,7 +128,9 @@ namespace SynchronizedLights.UI.ViewModels
         /// Settingカテゴリが選択中かどうか
         /// </summary>
         public bool IsSettingSelected => CurrentCategory == UiCategory.Setting;
+        #endregion カテゴリ
 
+        #region ターゲット
         /// <summary>
         /// ALLターゲットが選択中かどうか
         /// </summary>
@@ -157,7 +160,9 @@ namespace SynchronizedLights.UI.ViewModels
         /// Group05ターゲットが選択中かどうか
         /// </summary>
         public bool IsTargetGroup05Selected => AppState.SelectedTarget == Target.Group05;
+        #endregion ターゲット
 
+        #region スプレッド
         /// <summary>
         /// Speed01が選択中かどうか
         /// </summary>
@@ -177,6 +182,52 @@ namespace SynchronizedLights.UI.ViewModels
         /// Speed04が選択中かどうか
         /// </summary>
         public bool IsSpeed04Selected => AppState.SpeedValueMs == 2000;
+        #endregion スプレッド
+
+        /// <summary>
+        /// 接続状態表示文字列
+        /// 概要：Transportの接続状態を画面表示用に返す。
+        /// </summary>
+        public string ConnectionStatusLabel => IsTransportConnected ? "Connected" : "Disconnected";
+
+        /// <summary>
+        /// Transport接続中かどうか
+        /// 概要：Effect有効/無効の判定に使用する。
+        /// </summary>
+        [ObservableProperty]
+        private bool isTransportConnected;
+
+        /// <summary>
+        /// エラー表示文字列
+        /// 概要：Transportの最終エラーを画面表示する。
+        /// エラーがない場合は "-" を表示する。
+        /// </summary>
+        [ObservableProperty]
+        private string errorMessage = "-";
+
+        /// <summary>
+        /// Sequence01が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence01Defined = true;
+
+        /// <summary>
+        /// Sequence02が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence02Defined = true;
+
+        /// <summary>
+        /// Sequence03が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence03Defined = false;
+
+        /// <summary>
+        /// Sequence04が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence04Defined = false;
         #endregion プロパティ
 
         #region コンストラクタ
@@ -195,6 +246,7 @@ namespace SynchronizedLights.UI.ViewModels
             RefreshCategorySelection();
             RefreshTargetSelection();
             RefreshSpeedSelection();
+            RefreshTransportState();
         }
         #endregion コンストラクタ
 
@@ -303,6 +355,20 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(IsSpeed02Selected));
             OnPropertyChanged(nameof(IsSpeed03Selected));
             OnPropertyChanged(nameof(IsSpeed04Selected));
+        }
+
+        /// <summary>
+        /// Transport状態を画面へ反映する。
+        /// 概要：接続状態と最終エラーを取得し、画面表示・無効化判定へ反映する。
+        /// </summary>
+        private void RefreshTransportState()
+        {
+            var status = _transport.GetStatus();
+
+            IsTransportConnected = status.IsConnected;
+            ErrorMessage = string.IsNullOrWhiteSpace(status.LastError) ? "-" : status.LastError;
+
+            OnPropertyChanged(nameof(ConnectionStatusLabel));
         }
         #endregion メソッド
 
@@ -440,6 +506,14 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteFlash()
         {
+            RefreshTransportState();
+
+            if (!IsTransportConnected)
+            {
+                StatusMessage = "Flash skipped : transport disconnected";
+                return;
+            }
+
             try
             {
                 await _presetUseCase.ExecuteFlashAsync(
@@ -452,7 +526,10 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Flash failed: {ex.Message}";
+                ErrorMessage = ex.Message;
             }
+
+            RefreshTransportState();
         }
         /// <summary>
         /// FadeIn実行コマンド
@@ -461,6 +538,14 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteFadeIn()
         {
+            RefreshTransportState();
+
+            if (!IsTransportConnected)
+            {
+                StatusMessage = "FadeIn skipped : transport disconnected";
+                return;
+            }
+
             try
             {
                 await _presetUseCase.ExecuteFadeInAsync(
@@ -473,8 +558,12 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"FadeIn failed: {ex.Message}";
+                ErrorMessage = ex.Message;
             }
+
+            RefreshTransportState();
         }
+
         /// <summary>
         /// FadeOut実行コマンド
         /// 概要：現在対象に対してFadeOut操作を実行する。
@@ -482,6 +571,14 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteFadeOut()
         {
+            RefreshTransportState();
+
+            if (!IsTransportConnected)
+            {
+                StatusMessage = "FadeOut skipped : transport disconnected";
+                return;
+            }
+
             try
             {
                 await _presetUseCase.ExecuteFadeOutAsync(
@@ -494,8 +591,12 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"FadeOut failed: {ex.Message}";
+                ErrorMessage = ex.Message;
             }
+
+            RefreshTransportState();
         }
+
         /// <summary>
         /// StrobeOff実行コマンド
         /// 概要：現在対象に対してStrobeOff操作を実行する。
@@ -503,8 +604,18 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ExecuteStrobeOff()
         {
+            RefreshTransportState();
+
+            if (!IsTransportConnected)
+            {
+                StatusMessage = "StrobeOff skipped : transport disconnected";
+                return;
+            }
+
             StatusMessage = $"StrobeOff executed for {CurrentTargetLabel}";
+            RefreshTransportState();
         }
+
         /// <summary>
         /// Speed01適用コマンド
         /// 概要：速度プリセット1を適用し、現在速度を更新する。
@@ -564,6 +675,12 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ExecuteSequence01()
         {
+            if (!IsSequence01Defined)
+            {
+                StatusMessage = "Sequence01 is undefined";
+                return;
+            }
+
             StatusMessage = "Sequence executed : Sequence01";
         }
 
@@ -575,6 +692,12 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ExecuteSequence02()
         {
+            if (!IsSequence02Defined)
+            {
+                StatusMessage = "Sequence02 is undefined";
+                return;
+            }
+
             StatusMessage = "Sequence executed : Sequence02";
         }
 
@@ -586,6 +709,12 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ExecuteSequence03()
         {
+            if (!IsSequence03Defined)
+            {
+                StatusMessage = "Sequence03 is undefined";
+                return;
+            }
+
             StatusMessage = "Sequence executed : Sequence03";
         }
 
@@ -597,6 +726,12 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ExecuteSequence04()
         {
+            if (!IsSequence04Defined)
+            {
+                StatusMessage = "Sequence04 is undefined";
+                return;
+            }
+
             StatusMessage = "Sequence executed : Sequence04";
         }
 
