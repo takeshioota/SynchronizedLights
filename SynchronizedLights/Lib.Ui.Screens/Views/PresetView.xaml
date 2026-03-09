@@ -1,59 +1,58 @@
-﻿    <UserControl x:Class="Lib.Ui.Screens.Views.PresetView"
+﻿<UserControl x:Class="Lib.Ui.Screens.Views.PresetView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             mc:Ignorable="d"
-             d:DesignHeight="450"
-             d:DesignWidth="800">
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Preset"
+        <TextBlock Grid.Row="0"
+                   Text="Preset"
                    FontSize="28"
-                   FontWeight="Bold"
-                   Margin="0,0,0,20"/>
+                   FontWeight="Bold" />
 
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    Margin="0,0,0,20">
-            <Button Content="Red"
-                    Command="{Binding SetRedCommand}"
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal">
+            <Button x:Name="BtnColorRed"
+                    Content="Red"
+                    Command="{Binding SelectRedCommand}"
                     MinWidth="120"
-                    MinHeight="60"
-                    Margin="0,0,10,0"/>
-            <Button Content="Green"
-                    Command="{Binding SetGreenCommand}"
+                    MinHeight="56"
+                    Margin="0,0,10,0" />
+
+            <Button x:Name="BtnColorGreen"
+                    Content="Green"
+                    Command="{Binding SelectGreenCommand}"
                     MinWidth="120"
-                    MinHeight="60"
-                    Margin="0,0,10,0"/>
-            <Button Content="Blue"
-                    Command="{Binding SetBlueCommand}"
+                    MinHeight="56"
+                    Margin="0,0,10,0" />
+
+            <Button x:Name="BtnColorBlue"
+                    Content="Blue"
+                    Command="{Binding SelectBlueCommand}"
                     MinWidth="120"
-                    MinHeight="60"
-                    Margin="0,0,10,0"/>
-            <Button Content="On"
-                    Command="{Binding TurnOnCommand}"
+                    MinHeight="56"
+                    Margin="0,0,10,0" />
+
+            <Button x:Name="BtnColorWhite"
+                    Content="White"
+                    Command="{Binding SelectWhiteCommand}"
                     MinWidth="120"
-                    MinHeight="60"
-                    Margin="0,0,10,0"/>
-            <Button Content="Off"
-                    Command="{Binding TurnOffCommand}"
-                    MinWidth="120"
-                    MinHeight="60"/>
+                    MinHeight="56" />
         </StackPanel>
 
-        <StackPanel Grid.Row="2">
-            <TextBlock Text="{Binding StatusText}"
-                       FontSize="18"
-                       Margin="0,0,0,10"/>
-            <TextBlock Text="{Binding QueueText}"
-                       FontSize="18"/>
-        </StackPanel>
+        <TextBlock Grid.Row="4"
+                   Text="{Binding CurrentColorLabel}"
+                   FontSize="18"
+                   FontWeight="Bold" />
     </Grid>
 </UserControl>

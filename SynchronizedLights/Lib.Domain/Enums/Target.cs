@@ -13,10 +13,12 @@ namespace Lib.Domain.Enums
     /// </summary>
     public enum Target
     {
-        All = 0,
-        Group1 = 1,
-        Group2 = 2,
-        Group3 = 3,
-        Group4 = 4
+        All,
+        Group01,
+        Group02,
+        Group03,
+        Group04,
+        Group05,
+        Group06
     }
 }

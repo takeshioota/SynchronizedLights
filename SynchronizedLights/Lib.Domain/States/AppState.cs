@@ -29,7 +29,7 @@ namespace Lib.Domain.States
         /// <summary>
         /// 現在選択中の色
         /// </summary>
-        public Rgb SelectedColor { get; set; } = Rgb.White;
+        public Rgb SelectedColor { get; set; } = new(255, 255, 255);
 
         /// <summary>
         /// 現在選択中の速度値（ミリ秒）

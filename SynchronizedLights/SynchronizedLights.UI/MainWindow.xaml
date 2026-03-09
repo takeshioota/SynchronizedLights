@@ -7,99 +7,178 @@
         Title="{Binding WindowTitle}"
         WindowState="Maximized"
         ResizeMode="NoResize">
+
     <Grid>
-
         <Grid.RowDefinitions>
-            <RowDefinition Height="70"/>
-            <!-- Menu -->
-
+            <RowDefinition Height="80"/>
             <RowDefinition Height="*"/>
-            <!-- Main Area -->
-
+            <RowDefinition Height="110"/>
+            <RowDefinition Height="110"/>
             <RowDefinition Height="120"/>
-            <!-- Common -->
-
-            <RowDefinition Height="100"/>
-            <!-- Speed -->
-
-            <RowDefinition Height="120"/>
-            <!-- Sequence -->
         </Grid.RowDefinitions>
 
-        <!-- Menu -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="220"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- TopBar -->
         <Border Grid.Row="0"
+                Grid.ColumnSpan="2"
                 BorderBrush="Gray"
                 BorderThickness="1"
                 Padding="10">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="30"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0"
-                        Content="Preset"
-                        Command="{Binding ShowPresetCommand}"
-                        MinWidth="120"
-                        MinHeight="48"
-                        Margin="0,0,10,0" />
+                <TextBlock Grid.Column="0"
+                        Text="TOP"
+                        VerticalAlignment="Center"
+                        FontSize="18"
+                        FontWeight="Bold" />
 
-                <Button Grid.Column="1"
-                        Content="Mode"
-                        Command="{Binding ShowModeCommand}"
-                        MinWidth="120"
-                        MinHeight="48"
-                        Margin="0,0,10,0" />
+                <Button x:Name="BtnSpeed01"
+                        Grid.Column="1"
+                        Content="Speed01"
+                        Command="{Binding ApplySpeed01Command}"
+                        MinWidth="110"
+                        MinHeight="44"
+                        Margin="10,0,0,0" />
 
-                <Button Grid.Column="2"
-                        Content="Animation"
-                        Command="{Binding ShowAnimationCommand}"
-                        MinWidth="120"
-                        MinHeight="48"
-                        Margin="0,0,10,0" />
+                <Button x:Name="BtnSpeed02"
+                        Grid.Column="2"
+                        Content="Speed02"
+                        Command="{Binding ApplySpeed02Command}"
+                        MinWidth="110"
+                        MinHeight="44"
+                        Margin="10,0,0,0" />
 
-                <Button Grid.Column="3"
-                        Content="Sequence"
-                        Command="{Binding ShowSequenceCommand}"
-                        MinWidth="120"
-                        MinHeight="48"
-                        Margin="0,0,10,0" />
+                <Button x:Name="BtnSpeed03"
+                        Grid.Column="3"
+                        Content="Speed03"
+                        Command="{Binding ApplySpeed03Command}"
+                        MinWidth="110"
+                        MinHeight="44"
+                        Margin="10,0,0,0" />
 
-                <Button Grid.Column="4"
-                        Content="Setting"
-                        Command="{Binding ShowSettingCommand}"
-                        MinWidth="120"
-                        MinHeight="48"
-                        Margin="0,0,10,0" />
+                <Button x:Name="BtnSpeed04"
+                        Grid.Column="4"
+                        Content="Speed04"
+                        Command="{Binding ApplySpeed04Command}"
+                        MinWidth="110"
+                        MinHeight="44"
+                        Margin="10,0,0,0" />
 
-                <TextBlock Grid.Column="5"
+                <TextBlock Grid.Column="6"
+                        Text="Target:"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0" />
+
+                <TextBlock Grid.Column="7"
+                        Text="{Binding CurrentTargetLabel}"
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Margin="8,0,0,0" />
+
+                <TextBlock Grid.Column="9"
+                        Text="Mode:"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0" />
+
+                <TextBlock Grid.Column="10"
                         Text="{Binding CurrentCategory}"
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Margin="8,0,0,0" />
+
+                <TextBlock Grid.Column="12"
+                        Text="Color:"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0" />
+
+                <TextBlock Grid.Column="13"
+                        Text="{Binding CurrentColorLabel}"
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Margin="8,0,0,0" />
+
+                <TextBlock Grid.Column="14"
+                        Text="{Binding StatusMessage}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
-                        FontSize="18"
-                        FontWeight="Bold" />
+                        FontWeight="Bold"
+                        Margin="20,0,10,0" />
             </Grid>
         </Border>
 
-        <!-- Main Area -->
+        <!-- MainPanelHost -->
         <Border Grid.Row="1"
-            BorderBrush="Gray"
-            BorderThickness="1">
-            <ContentControl Content="{Binding CurrentViewModel}"/>
+                Grid.Column="0"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Margin="0">
+            <ContentControl Content="{Binding CurrentViewModel}" />
         </Border>
 
-        <!-- Common -->
+        <!-- CategoryMenu -->
+        <Border Grid.Row="1"
+                Grid.Column="1"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Padding="10">
+            <StackPanel VerticalAlignment="Stretch">
+                <TextBlock Text="CATEGORY"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Margin="0,0,0,10"/>
+
+                <Button Content="Preset"
+                        Command="{Binding ShowPresetCommand}"
+                        MinHeight="56"
+                        Margin="0,0,0,10" />
+
+                <Button Content="Mode"
+                        Command="{Binding ShowModeCommand}"
+                        MinHeight="56"
+                        Margin="0,0,0,10" />
+
+                <Button Content="Animation"
+                        Command="{Binding ShowAnimationCommand}"
+                        MinHeight="56"
+                        Margin="0,0,0,10" />
+
+                <Button Content="Setting"
+                        Command="{Binding ShowSettingCommand}"
+                        MinHeight="56"
+                        Margin="0,0,0,10" />
+            </StackPanel>
+        </Border>
+
+        <!-- TargetBar -->
         <Border Grid.Row="2"
+                Grid.ColumnSpan="2"
                 BorderBrush="Gray"
                 BorderThickness="1"
                 Padding="10">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="140"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -110,98 +189,64 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
-                        Text="COMMON"
-                        VerticalAlignment="Center"
-                        FontSize="18"
-                        FontWeight="Bold" />
+                           Text="TARGET"
+                           VerticalAlignment="Center"
+                           FontSize="18"
+                           FontWeight="Bold" />
 
-                <Button Grid.Column="1"
+                <Button x:Name="BtnTargetAll"
+                        Grid.Column="1"
                         Content="ALL"
+                        Command="{Binding SelectTargetAllCommand}"
+                        MinWidth="100"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />                        
+
+                <Button x:Name="BtnTargetGroup01"
+                        Grid.Column="2"
+                        Content="Group01"
+                        Command="{Binding SelectTargetGroup01Command}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="2"
-                        Content="Group"
+                <Button x:Name="BtnTargetGroup02"
+                        Grid.Column="3"
+                        Content="Group02"
+                        Command="{Binding SelectTargetGroup02Command}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="3"
-                        Content="Flash"
+                <Button x:Name="BtnTargetGroup03"
+                        Grid.Column="4"
+                        Content="Group03"
+                        Command="{Binding SelectTargetGroup03Command}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="4"
-                        Content="Fade"
+                <Button x:Name="BtnTargetGroup04"
+                        Grid.Column="5"
+                        Content="Group04"
+                        Command="{Binding SelectTargetGroup04Command}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="5"
-                        Content="On"
-                        MinWidth="100"
-                        MinHeight="48"
-                        Margin="10,0,0,0" />
-
-                <Button Grid.Column="6"
-                        Content="Off"
+                <Button x:Name="BtnTargetGroup05"
+                        Grid.Column="6"
+                        Content="Group05"
+                        Command="{Binding SelectTargetGroup05Command}"
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
             </Grid>
         </Border>
 
-        <!-- Speed -->
+        <!-- EffectBar -->
         <Border Grid.Row="3"
-                BorderBrush="Gray"
-                BorderThickness="1"
-                Padding="10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Column="0"
-                        Text="SPEED"
-                        VerticalAlignment="Center"
-                        FontSize="18"
-                        FontWeight="Bold" />
-
-                <Button Grid.Column="1"
-                        Content="Speed01"
-                        MinWidth="110"
-                        MinHeight="44"
-                        Margin="10,0,0,0" />
-
-                <Button Grid.Column="2"
-                        Content="Speed02"
-                        MinWidth="110"
-                        MinHeight="44"
-                        Margin="10,0,0,0" />
-
-                <Button Grid.Column="3"
-                        Content="Speed03"
-                        MinWidth="110"
-                        MinHeight="44"
-                        Margin="10,0,0,0" />
-
-                <Button Grid.Column="4"
-                        Content="Edit"
-                        MinWidth="110"
-                        MinHeight="44"
-                        Margin="10,0,0,0" />
-            </Grid>
-        </Border>
-
-        <!-- Sequence -->
-        <Border Grid.Row="4"
+                Grid.ColumnSpan="2"
                 BorderBrush="Gray"
                 BorderThickness="1"
                 Padding="10">
@@ -216,30 +261,99 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
-                        Text="SEQUENCE"
-                        VerticalAlignment="Center"
-                        FontSize="18"
-                        FontWeight="Bold" />
+                           Text="EFFECT"
+                           VerticalAlignment="Center"
+                           FontSize="18"
+                           FontWeight="Bold" />
 
-                <Button Grid.Column="1"
+                <Button x:Name="BtnFxFlash"
+                        Grid.Column="1"
+                        Content="Flash"
+                        Command="{Binding ExecuteFlashCommand}"
+                        MinWidth="110"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+
+                <Button x:Name="BtnFxFadeIn"
+                        Grid.Column="2"
+                        Content="FadeIn"
+                        Command="{Binding ExecuteFadeInCommand}"
+                        MinWidth="110"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+
+                <Button x:Name="BtnFxFadeOut"
+                        Grid.Column="3"
+                        Content="FadeOut"
+                        Command="{Binding ExecuteFadeOutCommand}"
+                        MinWidth="110"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+
+                <Button x:Name="BtnFxStrobeOff"
+                        Grid.Column="4"
+                        Content="StrobeOff"
+                        Command="{Binding ExecuteStrobeOffCommand}"
+                        MinWidth="120"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+
+            </Grid>
+        </Border>
+
+        <!-- SequenceBar -->
+        <Border Grid.Row="4"
+                Grid.ColumnSpan="2"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="SEQUENCE"
+                           VerticalAlignment="Center"
+                           FontSize="18"
+                           FontWeight="Bold" />
+
+                <Button x:Name="BtnSeq01"
+                        Grid.Column="1"
                         Content="Sequence01"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="2"
+                <Button x:Name="BtnSeq02"
+                        Grid.Column="2"
                         Content="Sequence02"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="3"
+                <Button x:Name="BtnSeq03"
+                        Grid.Column="3"
                         Content="Sequence03"
                         MinWidth="130"
                         MinHeight="48"
                         Margin="10,0,0,0" />
 
-                <Button Grid.Column="4"
+                <Button x:Name="BtnSeq04"
+                        Grid.Column="4"
+                        Content="Sequence04"
+                        MinWidth="130"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+
+                <Button x:Name="BtnSeqStop"
+                        Grid.Column="5"
                         Content="Stop"
                         MinWidth="110"
                         MinHeight="48"

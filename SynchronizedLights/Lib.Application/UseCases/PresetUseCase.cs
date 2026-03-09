@@ -14,7 +14,7 @@ namespace Lib.Application.UseCases
 {
     /// <summary>
     /// Preset制御機能
-    /// 概要：シンクロライトの基本操作（色変更、点灯、消灯など）を実行するUseCase。
+    /// 概要：シンクロライトの基本操作（色変更、点灯、消灯、点滅、フェードなど）を実行するUseCase。
     /// UIからの操作要求を受け取り、Protocolで制御コマンドを生成し、
     /// Transportを通じてシンクロライトへ送信する。
     /// </summary>
@@ -59,6 +59,8 @@ namespace Lib.Application.UseCases
 
         /// <summary>
         /// 指定ターゲットのライトを点灯させる。
+        /// 概要：指定されたターゲットと色をもとに点灯コマンドを生成し、
+        /// Transportへ送信キューとして登録する。
         /// </summary>
         public async Task TurnOnAsync(Target target, Rgb color)
         {
@@ -68,10 +70,45 @@ namespace Lib.Application.UseCases
 
         /// <summary>
         /// 指定ターゲットのライトを消灯する。
+        /// 概要：指定されたターゲットをもとに消灯コマンドを生成し、
+        /// Transportへ送信キューとして登録する。
         /// </summary>
         public async Task TurnOffAsync(Target target)
         {
             var packet = _commandBuilder.BuildTurnOff(target);
+            await _transport.EnqueueAsync(packet, new SendOptions());
+        }
+
+        /// <summary>
+        /// 指定ターゲットに点滅演出を実行する。
+        /// 概要：指定されたターゲットに対して点滅（Flash）コマンドを生成し、
+        /// Transportへ送信キューとして登録する。
+        /// </summary>
+        public async Task ExecuteFlashAsync(Target target, Rgb color, int speedMs)
+        {
+            var packet = _commandBuilder.BuildFlash(target, color, speedMs);
+            await _transport.EnqueueAsync(packet, new SendOptions());
+        }
+
+        /// <summary>
+        /// 指定ターゲットにフェードイン演出を実行する。
+        /// 概要：指定されたターゲットに対してフェードイン（FadeIn）コマンドを生成し、
+        /// Transportへ送信キューとして登録する。
+        /// </summary>
+        public async Task ExecuteFadeInAsync(Target target, Rgb color, int speedMs)
+        {
+            var packet = _commandBuilder.BuildFadeIn(target, color, speedMs);
+            await _transport.EnqueueAsync(packet, new SendOptions());
+        }
+
+        /// <summary>
+        /// 指定ターゲットにフェードアウト演出を実行する。
+        /// 概要：指定されたターゲットに対してフェードアウト（FadeOut）コマンドを生成し、
+        /// Transportへ送信キューとして登録する。
+        /// </summary>
+        public async Task ExecuteFadeOutAsync(Target target, Rgb color, int speedMs)
+        {
+            var packet = _commandBuilder.BuildFadeOut(target, color, speedMs);
             await _transport.EnqueueAsync(packet, new SendOptions());
         }
         #endregion メソッド

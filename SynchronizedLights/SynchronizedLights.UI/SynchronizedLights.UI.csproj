@@ -9,6 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="MainWindow_step0_backup.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="MainWindow_step0_backup.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
   </ItemGroup>
 

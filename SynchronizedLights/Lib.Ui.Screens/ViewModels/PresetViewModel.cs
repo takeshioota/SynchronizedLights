@@ -43,13 +43,31 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         [ObservableProperty]
         private string queueText = "Queue: 0";
+
+        /// <summary>
+        /// 現在色
+        /// 概要：Preset画面で現在選択中の色を保持する。
+        /// </summary>
+        [ObservableProperty]
+        private Rgb currentColor = new(255, 255, 255);
+
+        /// <summary>
+        /// 現在色表示文字列
+        /// 概要：画面に表示する現在色の文字列表現を返す。
+        /// </summary>
+        public string CurrentColorLabel => $"Color : R={CurrentColor.R}, G={CurrentColor.G}, B={CurrentColor.B}";
+
+        /// <summary>
+        /// 色変更通知イベント
+        /// 概要：Preset画面で選択した色を親画面へ通知する。
+        /// </summary>
+        public event Action<Rgb>? ColorChanged;
         #endregion プロパティ
 
         #region コンストラクタ
         /// <summary>
-        /// PresetViewModelを生成する
-        /// 概要：Preset操作用UseCaseとTransportを受け取り、
-        /// 初期状態の表示内容を設定する。
+        /// Preset画面用ViewModelを生成する。
+        /// 概要：UseCaseとTransportの依存を受け取り初期化する。
         /// </summary>
         public PresetViewModel(IPresetUseCase presetUseCase, ITransport transport)
         {
@@ -57,42 +75,54 @@ namespace Lib.Ui.Screens.ViewModels
             _transport = transport;
             RefreshStatus();
         }
+
+        partial void OnCurrentColorChanged(Rgb value)
+        {
+            OnPropertyChanged(nameof(CurrentColorLabel));
+            ColorChanged?.Invoke(value);
+        }
         #endregion コンストラクタ
 
         #region コマンド
         /// <summary>
-        /// 赤色設定コマンド
-        /// 概要：全体ターゲットに対して赤色変更を実行し、状態表示を更新する。
+        /// 赤色選択コマンド
+        /// 概要：現在色を赤に設定する。
         /// </summary>
         [RelayCommand]
-        private async Task SetRedAsync()
+        private void SelectRed()
         {
-            await _presetUseCase.SetColorAsync(Target.All, Rgb.Red);
-            RefreshStatus("Red sent");
+            CurrentColor = new Rgb(255, 0, 0);
         }
 
         /// <summary>
-        /// 緑色設定コマンド
-        /// 概要：全体ターゲットに対して緑色変更を実行し、状態表示を更新する。
+        /// 緑色選択コマンド
+        /// 概要：現在色を緑に設定する。
         /// </summary>
         [RelayCommand]
-        private async Task SetGreenAsync()
+        private void SelectGreen()
         {
-            await _presetUseCase.SetColorAsync(Target.All, Rgb.Green);
-            RefreshStatus("Green sent");
+            CurrentColor = new Rgb(0, 255, 0);
         }
 
         /// <summary>
-        /// 青色設定コマンド
-        /// 概要：全体ターゲットに対して青色変更を実行し、状態表示を更新する。
+        /// 青色選択コマンド
+        /// 概要：現在色を青に設定する。
         /// </summary>
         [RelayCommand]
-        private async Task SetBlueAsync()
+        private void SelectBlue()
         {
-            await _presetUseCase.SetColorAsync(Target.All, Rgb.Blue);
-            RefreshStatus("Blue sent");
+            CurrentColor = new Rgb(0, 0, 255);
         }
 
+        /// <summary>
+        /// 白色選択コマンド
+        /// 概要：現在色を白に設定する。
+        /// </summary>
+        [RelayCommand]
+        private void SelectWhite()
+        {
+            CurrentColor = new Rgb(255, 255, 255);
+        }
         /// <summary>
         /// 点灯コマンド
         /// 概要：全体ターゲットに対して点灯操作を実行し、状態表示を更新する。
