@@ -29,7 +29,8 @@
             <TextBlock Grid.Row="0"
                        Text="Preset"
                        FontSize="28"
-                       FontWeight="Bold" />
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextBrushMain}" />
 
             <!-- 色選択（4色固定パレット + カスタムピッカー起動） -->
             <StackPanel Grid.Row="2"
@@ -37,24 +38,28 @@
                 <Button x:Name="BtnColorRed"
                         Content="Red"
                         Command="{Binding SelectRedCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorGreen"
                         Content="Green"
                         Command="{Binding SelectGreenCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorBlue"
                         Content="Blue"
                         Command="{Binding SelectBlueCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorWhite"
                         Content="White"
                         Command="{Binding SelectWhiteCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,20,0" />
@@ -62,6 +67,7 @@
                         Content="Custom..."
                         Command="{Binding DataContext.OpenColorPickerCommand,
                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="56" />
             </StackPanel>
@@ -70,13 +76,15 @@
             <TextBlock Grid.Row="4"
                        Text="{Binding CurrentColorLabel}"
                        FontSize="18"
-                       FontWeight="Bold" />
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextBrushMain}" />
 
             <!-- 速度スライダー + 数値入力 -->
             <StackPanel Grid.Row="6" Orientation="Vertical">
                 <TextBlock Text="Speed (ms)  範囲: 0 – 10000"
                            FontSize="14"
                            FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrushMain}"
                            Margin="0,0,0,6"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -130,8 +138,8 @@
                         <TextBlock Grid.Column="0"
                                    Text="命令名 / Command Name"
                                    FontSize="14"
-                                   FontWeight="SemiBold"/>
-                        <!-- 文字数カウンタ：超過時に赤色表示（設計書9章） -->
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextBrushMain}"/>
                         <TextBlock Grid.Column="1"
                                    FontSize="13"
                                    FontWeight="SemiBold"
@@ -181,16 +189,17 @@
                     <TextBlock Text="送信先 / Port"
                                FontSize="14"
                                FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrushMain}"
                                Margin="0,0,0,6"/>
                     <ComboBox x:Name="CmbPortSelect"
-                              FontSize="14"
-                              Padding="6,4"
-                              MinHeight="30"
-                              ItemsSource="{Binding DataContext.PortOptions,
-                                            RelativeSource={RelativeSource AncestorType=Window}}"
-                              SelectedItem="{Binding DataContext.SelectedPort,
-                                            RelativeSource={RelativeSource AncestorType=Window},
-                                            Mode=TwoWay}" />
+				              Style="{StaticResource GrandMaComboBoxStyle}"
+				              FontSize="14"
+				              MinHeight="36"
+				              ItemsSource="{Binding DataContext.PortOptions,
+				                            RelativeSource={RelativeSource AncestorType=Window}}"
+				              SelectedItem="{Binding DataContext.SelectedPort,
+				                            RelativeSource={RelativeSource AncestorType=Window},
+				                            Mode=TwoWay}" />
                 </StackPanel>
             </Grid>
 
@@ -200,12 +209,14 @@
                 <Button x:Name="BtnTurnOn"
                         Content="Turn On"
                         Command="{Binding TurnOnCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnTurnOff"
                         Content="Turn Off"
                         Command="{Binding TurnOffCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="56"
                         Margin="0,0,20,0" />
@@ -213,6 +224,7 @@
                         Content="実行 / Execute"
                         Command="{Binding DataContext.ExecuteCurrentSettingsCommand,
                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="150"
                         MinHeight="56"
                         Margin="0,0,10,0" />
@@ -220,6 +232,7 @@
                         Content="終了 / Exit"
                         Command="{Binding DataContext.PowerExitCommand,
                                  RelativeSource={RelativeSource AncestorType=Window}}"
+                        Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="130"
                         MinHeight="56" />
             </StackPanel>
@@ -228,12 +241,14 @@
             <TextBlock Grid.Row="12"
                        Text="{Binding StatusText}"
                        FontSize="18"
-                       FontWeight="Bold" />
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextBrushMain}" />
 
             <!-- キュー表示 -->
             <TextBlock Grid.Row="14"
                        Text="{Binding QueueText}"
-                       FontSize="16" />
+                       FontSize="16"
+                       Foreground="{StaticResource TextBrushMain}" />
         </Grid>
     </ScrollViewer>
 </UserControl>
