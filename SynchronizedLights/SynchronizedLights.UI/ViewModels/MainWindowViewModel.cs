@@ -9,6 +9,7 @@ using Lib.Domain.ValueObjects;
 using Lib.Ui.Screens.ViewModels;
 using Lib.Ui.Screens.Views;
 using System.Windows;
+using Lib.Application.Models;
 namespace SynchronizedLights.UI.ViewModels
 {
     /// <summary>
@@ -291,6 +292,20 @@ namespace SynchronizedLights.UI.ViewModels
         private bool isStrobeOffActive;
 
         /// <summary>
+        /// 送信機チャネル値（最後に Initialize 実行時の値）
+        /// 概要：SettingViewModel で設定された Channel を記録。UserState 永続化用。
+        /// </summary>
+        [ObservableProperty]
+        private byte lastTransmitterChannel = 1;
+
+        /// <summary>
+        /// 送信機電力値（最後に Initialize 実行時の値）
+        /// 概要：SettingViewModel で設定された Power を記録。UserState 永続化用。
+        /// </summary>
+        [ObservableProperty]
+        private byte lastTransmitterPower = 3;
+
+        /// <summary>
         /// 命令名
         /// 概要：ログ用の命令名。0〜32文字まで許容。空文字も許容。
         /// </summary>
@@ -461,7 +476,7 @@ namespace SynchronizedLights.UI.ViewModels
                 UiCategory.Mode => new ModeViewModel(),
                 UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
-                UiCategory.Setting => new SettingViewModel(_lighting),
+                UiCategory.Setting => CreateSettingViewModel(),
                 _ => CreatePresetViewModel()
             };
         }
@@ -479,6 +494,32 @@ namespace SynchronizedLights.UI.ViewModels
             viewModel.ColorChanged += OnPresetColorChanged;
             viewModel.ApplyState(AppState.SelectedTarget, AppState.SelectedColor);
             return viewModel;
+        }
+
+        /// <summary>
+        /// Setting画面用ViewModelを生成する（UserState復元対応）
+        /// 概要：初期値として LastTransmitterChannel / Power を渡し、
+        ///       SettingViewModel での変更を追跡する。
+        /// </summary>
+        private SettingViewModel CreateSettingViewModel()
+        {
+            var vm = new SettingViewModel(_lighting);
+            // 前回値を反映
+            vm.ChannelValue = LastTransmitterChannel;
+            vm.PowerValue = LastTransmitterPower;
+            // 変更追跡
+            vm.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SettingViewModel.ChannelValue))
+                {
+                    LastTransmitterChannel = vm.ChannelValue;
+                }
+                else if (e.PropertyName == nameof(SettingViewModel.PowerValue))
+                {
+                    LastTransmitterPower = vm.PowerValue;
+                }
+            };
+            return vm;
         }
 
         /// <summary>
@@ -542,6 +583,61 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(IsSpeed02Selected));
             OnPropertyChanged(nameof(IsSpeed03Selected));
             OnPropertyChanged(nameof(IsSpeed04Selected));
+        }
+
+        /// <summary>
+        /// UserState を現在の画面状態に反映する（起動時に呼ばれる）
+        /// 概要：永続化された値を復元。設計書 Phase 2 §4.2 に対応。
+        /// </summary>
+        public void ApplyUserState(UserState state)
+        {
+            if (state == null) return;
+
+            // AppState 復元
+            AppState.SpeedValueMs = state.SpeedValueMs;
+            AppState.SelectedColor = new Rgb(state.ColorR, state.ColorG, state.ColorB);
+
+            // Target 復元（文字列→Enum変換）
+            if (Enum.TryParse<Target>(state.SelectedTarget, out var target))
+            {
+                AppState.SelectedTarget = target;
+            }
+
+            // Main画面のフィールド復元
+            CommandName = state.CommandName ?? "";
+            SelectedPort = state.SelectedPort ?? "ALL";
+            LastTransmitterChannel = state.TransmitterChannel;
+            LastTransmitterPower = state.TransmitterPower;
+
+            // 画面表示を更新
+            OnPropertyChanged(nameof(CurrentTargetLabel));
+            OnPropertyChanged(nameof(CurrentColorLabel));
+            OnPropertyChanged(nameof(CurrentSpeedLabel));
+            RefreshTargetSelection();
+            RefreshSpeedSelection();
+
+            // Preset画面が開いている場合、色・対象を反映
+            SyncPresetStateIfActive();
+        }
+
+        /// <summary>
+        /// 現在の画面状態から UserState を生成する（終了時に呼ばれる）
+        /// 概要：永続化すべき全フィールドを収集。設計書 Phase 2 §4.2 に対応。
+        /// </summary>
+        public UserState CaptureUserState()
+        {
+            return new UserState
+            {
+                SpeedValueMs = AppState.SpeedValueMs,
+                ColorR = AppState.SelectedColor.R,
+                ColorG = AppState.SelectedColor.G,
+                ColorB = AppState.SelectedColor.B,
+                SelectedTarget = AppState.SelectedTarget.ToString(),
+                CommandName = CommandName ?? "",
+                SelectedPort = SelectedPort ?? "ALL",
+                TransmitterChannel = LastTransmitterChannel,
+                TransmitterPower = LastTransmitterPower
+            };
         }
 
         /// <summary>
