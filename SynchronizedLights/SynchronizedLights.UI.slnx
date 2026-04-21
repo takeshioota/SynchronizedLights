@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="../../SynchrolightAPI/SynchrolightAPI.Core/SynchrolightAPI.Core.csproj" />
   <Project Path="Lib.Application/Lib.Application.csproj" />
   <Project Path="Lib.Domain/Lib.Domain.csproj" />
   <Project Path="Lib.Infrastructure/Lib.Infrastructure.csproj" />

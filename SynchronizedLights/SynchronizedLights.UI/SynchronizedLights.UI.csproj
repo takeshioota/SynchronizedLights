@@ -28,4 +28,14 @@
     <ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+      <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+      <None Update="appsettings.json">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+  </ItemGroup>
+
 </Project>
