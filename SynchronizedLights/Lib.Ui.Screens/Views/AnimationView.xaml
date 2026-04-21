@@ -44,7 +44,6 @@
                         <Button Command="{Binding DataContext.SelectAnimationCommand,
                                         RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                 CommandParameter="{Binding}"
-                                Style="{StaticResource GrandMaSelectableButtonStyle}"
                                 Tag="{Binding IsSelected}"
                                 FocusVisualStyle="{x:Null}"
                                 Width="170"
@@ -53,13 +52,23 @@
                                 Padding="0"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource GrandMaSelectableButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsDefined}" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <!-- 内部コンテンツ：アイコン（上）+ タイル名（下） -->
                             <Grid Margin="8">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*"/>
                                     <RowDefinition Height="6"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
-                                <!-- アイコン（常に中央上部） -->
+                                <!-- アイコン（色付き角丸四角、IconBrush でバインド） -->
                                 <Rectangle Grid.Row="0"
                                            Width="44"
                                            Height="44"
@@ -70,7 +79,7 @@
                                            StrokeThickness="1"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
-                                <!-- 名前（常にタイル下部） -->
+                                <!-- タイル名（Name でバインド、例：Animation 01） -->
                                 <TextBlock Grid.Row="2"
                                            Text="{Binding Name}"
                                            FontSize="13"
@@ -89,14 +98,38 @@
                     BorderBrush="{StaticResource AccentAmberBrush}"
                     BorderThickness="1"
                     Padding="15"
-                    Margin="0,0,0,10">
+                    Margin="0,0,0,10"
+                    MinHeight="180">
                 <Grid>
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="180"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0"
-                                VerticalAlignment="Center">
+
+                    <!-- プレビュー光可視化 -->
+                    <Grid Grid.Column="0"
+                          Width="160" Height="160"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Center">
+                        <Ellipse Width="160" Height="160"
+                                 Fill="#0A0A0A"
+                                 Stroke="{StaticResource BorderBrushAmber}"
+                                 StrokeThickness="1"/>
+                        <Ellipse Width="{Binding PreviewLightSize}"
+                                 Height="{Binding PreviewLightSize}"
+                                 Fill="{Binding PreviewLightBrush}"
+                                 Opacity="{Binding PreviewLightOpacity}">
+                            <Ellipse.Effect>
+                                <BlurEffect Radius="8"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+                    </Grid>
+
+                    <!-- 説明テキスト -->
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Margin="20,0,0,0">
                         <TextBlock Text="プレビュー / Preview"
                                    FontSize="14"
                                    FontWeight="SemiBold"
@@ -108,17 +141,18 @@
                                    Opacity="0.85"
                                    Margin="0,6,0,0"/>
                     </StackPanel>
-                    <Button Grid.Column="1"
-				            Content="実行 / Execute"
-				            Command="{Binding ExecuteAnimationCommand}"
-				            IsEnabled="{Binding HasSelection}"
-				            Style="{StaticResource GrandMaButtonStyle}"
-				            MinWidth="200"
-				            MinHeight="48"
-				            VerticalAlignment="Center"/>
+
+                    <!-- 実行ボタン -->
+                    <Button Grid.Column="2"
+                            Content="実行 / Execute"
+                            Command="{Binding ExecuteAnimationCommand}"
+                            IsEnabled="{Binding HasSelection}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinWidth="200"
+                            MinHeight="48"
+                            VerticalAlignment="Center"/>
                 </Grid>
             </Border>
-
         </Grid>
     </ScrollViewer>
 </UserControl>

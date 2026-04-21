@@ -6,40 +6,42 @@ namespace Lib.Ui.Screens.ViewModels
     /// <summary>
     /// Animationアイテム1件分のViewModel
     /// 概要：Animationパネルのグリッドに並ぶタイル1つの情報を保持する。
-    /// Id / Name / IconBrush / IsSelected を持つ。
+    ///       未登録（IsDefined=false）の場合は薄く表示され、クリック時にエラーを発火する。
     /// </summary>
     public partial class AnimationItemViewModel : ObservableObject
     {
-        /// <summary>アニメID（1〜12）</summary>
+        /// <summary>アニメID</summary>
         public int Id { get; }
 
-        /// <summary>表示名（例：Animation 01）</summary>
+        /// <summary>表示名</summary>
         public string Name { get; }
 
         /// <summary>
         /// アイコン色ブラシ
-        /// 概要：タイル上部の小さな色見本。
-        /// 実アニメアイコン差し替え前の仮表示として使う。
         /// </summary>
         public Brush IconBrush { get; }
 
         /// <summary>
         /// 選択中かどうか
-        /// 概要：タイルの GrandMaSelectableButtonStyle の Tag にバインドされ、
-        /// アンバー枠のハイライト表示を切り替える。
         /// </summary>
         [ObservableProperty]
         private bool isSelected;
 
         /// <summary>
+        /// 定義済みかどうか
+        /// </summary>
+        public bool IsDefined { get; }
+
+        /// <summary>
         /// AnimationItemViewModelを生成する。
         /// </summary>
-        public AnimationItemViewModel(int id, string name, string iconColorHex)
+        public AnimationItemViewModel(int id, string name, string iconColorHex, bool isDefined = true)
         {
             Id = id;
             Name = name;
             var color = (Color)ColorConverter.ConvertFromString(iconColorHex);
             IconBrush = new SolidColorBrush(color);
+            IsDefined = isDefined;
         }
     }
 }

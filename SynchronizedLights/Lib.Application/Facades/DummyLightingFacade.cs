@@ -1,7 +1,9 @@
-﻿using System.Diagnostics;
-using Lib.Application.Interfaces;
+﻿using Lib.Application.Interfaces;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
+using Serilog;
+using System.Diagnostics;
+using static SynchrolightAPI.Domain.Target;
 
 namespace Lib.Application.Facades;
 
@@ -28,7 +30,8 @@ public class DummyLightingFacade : ILightingFacade
     public Task<IReadOnlyList<string>> GetAvailablePortsAsync()
     {
         IReadOnlyList<string> ports = new[] { "COM3 (Dummy)", "COM4 (Dummy)", "COM5 (Dummy)" };
-        Debug.WriteLine($"[Dummy] GetAvailablePorts: {string.Join(", ", ports)}");
+        Log.Information("[Dummy] GetAvailablePorts: {Ports}", string.Join(", ", ports));
+
         return Task.FromResult(ports);
     }
 
@@ -37,7 +40,7 @@ public class DummyLightingFacade : ILightingFacade
         _connectedPorts.Clear();
         _connectedPorts.AddRange(portNames);
         _lastError = null;
-        Debug.WriteLine($"[Dummy] Connect: {string.Join(", ", _connectedPorts)}");
+        Log.Information("[Dummy] Connect: {Ports}", string.Join(", ", _connectedPorts));
         RaiseStatusChanged();
         return Task.CompletedTask;
     }
@@ -45,7 +48,8 @@ public class DummyLightingFacade : ILightingFacade
     public Task DisconnectAsync()
     {
         _connectedPorts.Clear();
-        Debug.WriteLine("[Dummy] Disconnect: all ports closed");
+        Log.Information("[Dummy] Disconnect: all ports closed");
+
         RaiseStatusChanged();
         return Task.CompletedTask;
     }
@@ -56,12 +60,12 @@ public class DummyLightingFacade : ILightingFacade
         if (!IsConnected)
         {
             _lastError = "発信機未接続 (ポートが接続されていません)";
-            Debug.WriteLine($"[Dummy] InitializeTransmitter failed: {_lastError}");
+            Log.Error("[Dummy] InitializeTransmitter failed: {Error}", _lastError);
             RaiseStatusChanged();
             throw new InvalidOperationException(_lastError);
         }
 
-        Debug.WriteLine($"[Dummy] InitializeTransmitter: channel={channel}, power={power}");
+        Log.Information("[Dummy] InitializeTransmitter: channel={Channel}, power={Power}", channel, power);
         _lastError = null;
         RaiseStatusChanged();
         return Task.CompletedTask;
@@ -87,7 +91,7 @@ public class DummyLightingFacade : ILightingFacade
             RaiseStatusChanged();
             throw new InvalidOperationException(_lastError);
         }
-        Debug.WriteLine($"[Dummy] SetColor target={target} color=({color.R},{color.G},{color.B})");
+        Log.Information("[Dummy] SetColor target={Target} color=({R},{G},{B})", target, color.R, color.G, color.B);
         SimulateSend();
         return Task.CompletedTask;
     }
@@ -103,7 +107,7 @@ public class DummyLightingFacade : ILightingFacade
             RaiseStatusChanged();
             throw new InvalidOperationException(_lastError);
         }
-        Debug.WriteLine($"[Dummy] Flash target={target} speed={speedMs}ms color=({color.R},{color.G},{color.B})");
+        Log.Information("[Dummy] Flash target={Target} speed={Speed}ms color=({R},{G},{B})", target, speedMs, color.R, color.G, color.B);
         SimulateSend();
         return Task.CompletedTask;
     }
@@ -116,7 +120,7 @@ public class DummyLightingFacade : ILightingFacade
             RaiseStatusChanged();
             throw new InvalidOperationException(_lastError);
         }
-        Debug.WriteLine($"[Dummy] FadeIn target={target} time={timeMs}ms color=({color.R},{color.G},{color.B})");
+        Log.Information("[Dummy] FadeIn target={Target} time={Time}ms color=({R},{G},{B})", target, timeMs, color.R, color.G, color.B);
         SimulateSend();
         return Task.CompletedTask;
     }
@@ -129,7 +133,7 @@ public class DummyLightingFacade : ILightingFacade
             RaiseStatusChanged();
             throw new InvalidOperationException(_lastError);
         }
-        Debug.WriteLine($"[Dummy] FadeOut target={target} time={timeMs}ms color=({color.R},{color.G},{color.B})");
+        Log.Information("[Dummy] FadeOut target={Target} time={Time}ms color=({R},{G},{B})", target, timeMs, color.R, color.G, color.B);
         SimulateSend();
         return Task.CompletedTask;
     }
@@ -139,7 +143,7 @@ public class DummyLightingFacade : ILightingFacade
     #region シーケンス
     public Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default)
     {
-        Debug.WriteLine($"[Dummy] Sequence target={target} id={sequenceId}");
+        Log.Information("[Dummy] Sequence target={Target} id={Id}", target, sequenceId);
         SimulateSend();
         return Task.CompletedTask;
     }
