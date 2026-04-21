@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Lib.Application.Interfaces;
@@ -7,7 +8,7 @@ using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
 
-// API側型のエイリアス：UI側と名前が衝突するので明示的に分離
+// API側型のエイリアス
 using ApiRgb = SynchrolightAPI.Domain.Rgb;
 using ApiCommandBuilder = SynchrolightAPI.Protocol.CommandBuilder;
 using ApiLightingService = SynchrolightAPI.Services.LightingService;
@@ -33,6 +34,11 @@ namespace Lib.Application.Facades
         private readonly ApiLightingService _lightingService;
         private readonly ApiTxWorkerService _worker;
         private readonly CancellationTokenSource _workerCts;
+
+        /// <summary>本来接続しておくべきポート一覧</summary>
+        private readonly List<string> _intendedPorts = new();
+        private readonly object _intendedLock = new();
+
         private string? _lastError;
         private bool _disposed;
 
@@ -47,6 +53,7 @@ namespace Lib.Application.Facades
 
         /// <summary>累積ドロップ回数</summary>
         private long _droppedCount;
+        private long _reconnectCount;
 
         /// <summary>遅延計測（nullable：注入されなければ計測しない）</summary>
         private readonly LatencyTracker? _latency;
@@ -72,10 +79,25 @@ namespace Lib.Application.Facades
             => _lastError ?? _transport.GetStatus().LastError;
 
         /// <summary>累積ドロップ回数（KPI 用）</summary>
-        public long DroppedCount => _droppedCount;
+        public long DroppedCount => Interlocked.Read(ref _droppedCount);
+
+        /// <summary>累積自動再接続成功回数（KPI 用）</summary>
+        public long ReconnectCount => Interlocked.Read(ref _reconnectCount);
 
         /// <summary>遅延トラッカー</summary>
         public LatencyTracker? Latency => _latency;
+
+        /// <summary>本来接続しておくべきポート一覧（デバッグ表示用）</summary>
+        public IReadOnlyList<string> IntendedPorts
+        {
+            get
+            {
+                lock (_intendedLock)
+                {
+                    return _intendedPorts.ToList().AsReadOnly();
+                }
+            }
+        }
 
         public event EventHandler? StatusChanged;
 
@@ -166,7 +188,7 @@ namespace Lib.Application.Facades
             var current = _transport.GetStatus().QueueLength;
             if (current >= threshold)
             {
-                System.Threading.Interlocked.Increment(ref _droppedCount);
+                Interlocked.Increment(ref _droppedCount);
                 Log.Warning(
                     "[Api] Queue full ({Length}/{Capacity}), dropping {Command}. TotalDropped={Total}",
                     current, _queueCapacity, commandName, _droppedCount);
@@ -191,10 +213,21 @@ namespace Lib.Application.Facades
 
         public async Task ConnectAsync(IEnumerable<string> portNames, CancellationToken ct = default)
         {
+            var ports = portNames.ToList();
+
+            lock (_intendedLock)
+            {
+                _intendedPorts.Clear();
+                _intendedPorts.AddRange(ports);
+            }
+
             try
             {
                 _lastError = null;
-                await _transport.ConnectAsync(portNames, ct);
+                await _transport.ConnectAsync(ports, ct);
+                Log.Information(
+                    "[Api] Connect: {Ports} (intended saved for auto-reconnect)",
+                    string.Join(", ", ports));
             }
             catch (Exception ex)
             {
@@ -209,7 +242,13 @@ namespace Lib.Application.Facades
 
         public async Task DisconnectAsync()
         {
+            lock (_intendedLock)
+            {
+                _intendedPorts.Clear();
+            }
+
             await _transport.DisconnectAsync();
+            Log.Information("[Api] Disconnect: all ports closed, intended cleared");
             RaiseStatusChanged();
         }
 
@@ -238,6 +277,79 @@ namespace Lib.Application.Facades
         }
 
         #endregion 接続管理
+
+        #region 自動再接続
+
+        /// <summary>
+        /// intended だが現在 connected でないポートを再接続試行する
+        /// 概要：MultiPortTransport.ListPorts() で現在の接続状態を取得し、
+        ///       intended に含まれるが IsConnected=false または存在しないポートを
+        ///       _transport.ConnectAsync() で再接続する。
+        /// 戻り値：再接続に成功したポート数（失敗時 0）
+        /// </summary>
+        public async Task<int> TryReconnectMissingPortsAsync(CancellationToken ct = default)
+        {
+            List<string> intendedSnapshot;
+            lock (_intendedLock)
+            {
+                if (_intendedPorts.Count == 0) return 0;
+                intendedSnapshot = _intendedPorts.ToList();
+            }
+
+            // 現在の接続状態を取得（IsConnected=true のものだけ生きてると判定）
+            var liveConnected = _transport.ListPorts()
+                .Where(p => p.IsConnected)
+                .Select(p => p.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var missing = intendedSnapshot
+                .Where(p => !liveConnected.Contains(p))
+                .ToList();
+
+            if (missing.Count == 0) return 0;
+
+            Log.Warning(
+                "[Api] Missing ports detected: {Ports}. Attempting reconnect...",
+                string.Join(", ", missing));
+
+            try
+            {
+                await _transport.ConnectAsync(missing, ct);
+
+                // 再接続後にもう一度状態を確認
+                var afterLive = _transport.ListPorts()
+                    .Where(p => p.IsConnected)
+                    .Select(p => p.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var reconnected = missing.Count(p => afterLive.Contains(p));
+                if (reconnected > 0)
+                {
+                    Interlocked.Add(ref _reconnectCount, reconnected);
+                    _lastError = null;
+                    Log.Information(
+                        "[Api] Reconnected {Count} port(s). TotalReconnect={Total}",
+                        reconnected, ReconnectCount);
+                    RaiseStatusChanged();
+                }
+                else
+                {
+                    Log.Warning(
+                        "[Api] Reconnect attempt returned but no ports came back online");
+                }
+
+                return reconnected;
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"再接続失敗: {ex.Message}";
+                Log.Warning("[Api] Reconnect failed: {Err}", ex.Message);
+                RaiseStatusChanged();
+                return 0;
+            }
+        }
+
+        #endregion 自動再接続
 
         #region 制御 (ILightingFacade)
 

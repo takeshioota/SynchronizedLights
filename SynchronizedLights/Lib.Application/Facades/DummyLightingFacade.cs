@@ -1,9 +1,10 @@
-﻿using Lib.Application.Interfaces;
+﻿using System.Diagnostics;
+using System.Threading;
+using Lib.Application.Interfaces;
 using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
-using System.Diagnostics;
 
 namespace Lib.Application.Facades
 {
@@ -18,11 +19,17 @@ namespace Lib.Application.Facades
         #region フィールド
 
         private readonly List<string> _connectedPorts = new();
+
+        /// <summary>本来接続しておくべきポート一覧</summary>
+        private readonly List<string> _intendedPorts = new();
+
         private string? _lastError;
         private int _queueLength;
         private long _droppedCount;
 
-        /// <summary>送信遅延（ms）シミュレート用。大きくするとキュー肥大観察可能</summary>
+        /// <summary>累積再接続成功回数（KPI）</summary>
+        private long _reconnectCount;
+
         private readonly int _sendDelayMs;
 
         /// <summary>最大キュー容量</summary>
@@ -49,8 +56,14 @@ namespace Lib.Application.Facades
         /// <summary>累積ドロップ回数</summary>
         public long DroppedCount => _droppedCount;
 
-        /// <summary>遅延トラッカー</summary>
+        /// <summary>累積自動再接続成功回数（KPI 用）</summary>
+        public long ReconnectCount => Interlocked.Read(ref _reconnectCount);
+
+        /// <summary>遅延トラッカー（外部からスナップショットを取るため公開）</summary>
         public LatencyTracker? Latency => _latency;
+
+        /// <summary>本来接続しておくべきポート一覧（デバッグ表示用）</summary>
+        public IReadOnlyList<string> IntendedPorts => _intendedPorts.AsReadOnly();
 
         public event EventHandler? StatusChanged;
 
@@ -125,10 +138,18 @@ namespace Lib.Application.Facades
 
         public Task ConnectAsync(IEnumerable<string> portNames, CancellationToken ct = default)
         {
+            var ports = portNames.ToList();
+
+            // intended と connected を更新
+            _intendedPorts.Clear();
+            _intendedPorts.AddRange(ports);
             _connectedPorts.Clear();
-            _connectedPorts.AddRange(portNames);
+            _connectedPorts.AddRange(ports);
+
             _lastError = null;
-            Log.Information("[Dummy] Connect: {Ports}", string.Join(", ", _connectedPorts));
+            Log.Information(
+                "[Dummy] Connect: {Ports} (intended saved for auto-reconnect)",
+                string.Join(", ", _connectedPorts));
             RaiseStatusChanged();
             return Task.CompletedTask;
         }
@@ -136,7 +157,8 @@ namespace Lib.Application.Facades
         public Task DisconnectAsync()
         {
             _connectedPorts.Clear();
-            Log.Information("[Dummy] Disconnect: all ports closed");
+            _intendedPorts.Clear();
+            Log.Information("[Dummy] Disconnect: all ports closed, intended cleared");
             RaiseStatusChanged();
             return Task.CompletedTask;
         }
@@ -164,6 +186,65 @@ namespace Lib.Application.Facades
         }
 
         #endregion 接続管理
+
+        #region 自動再接続
+
+        /// <summary>
+        /// 物理切断を擬似的に発生させる（Dummy モード専用、自動再接続の試験用）
+        /// 概要：_connectedPorts のみクリアし、_intendedPorts は保持する。
+        ///       次回の TryReconnectMissingPortsAsync 呼び出しで復旧する。
+        /// </summary>
+        public void SimulateDisconnect()
+        {
+            if (_intendedPorts.Count == 0)
+            {
+                Log.Information("[Dummy] SimulateDisconnect: no intended ports (no-op)");
+                return;
+            }
+
+            var lost = string.Join(", ", _connectedPorts);
+            _connectedPorts.Clear();
+            _lastError = "ポート切断を検知（Dummy シミュレート）";
+            Log.Warning("[Dummy] SimulateDisconnect: ports lost [{Ports}]", lost);
+            RaiseStatusChanged();
+        }
+
+        /// <summary>
+        /// intended だが現在 connected でないポートを再接続試行する
+        /// 戻り値：再接続に成功したポート数
+        /// </summary>
+        public Task<int> TryReconnectMissingPortsAsync(CancellationToken ct = default)
+        {
+            var missing = _intendedPorts
+                .Where(p => !_connectedPorts.Contains(p))
+                .ToList();
+
+            if (missing.Count == 0)
+            {
+                return Task.FromResult(0);
+            }
+
+            Log.Warning(
+                "[Dummy] Missing ports detected: {Ports}. Attempting reconnect...",
+                string.Join(", ", missing));
+
+            // Dummy なので必ず成功
+            foreach (var p in missing)
+            {
+                _connectedPorts.Add(p);
+            }
+
+            Interlocked.Add(ref _reconnectCount, missing.Count);
+            _lastError = null;
+            Log.Information(
+                "[Dummy] Reconnected {Count} port(s): {Ports}. TotalReconnect={Total}",
+                missing.Count, string.Join(", ", missing), ReconnectCount);
+            RaiseStatusChanged();
+
+            return Task.FromResult(missing.Count);
+        }
+
+        #endregion 自動再接続
 
         #region 即時制御
 

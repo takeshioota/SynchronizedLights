@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +42,12 @@ namespace SynchronizedLights.UI
         /// <summary>KPI 定期ログ出力タイマー</summary>
         private DispatcherTimer? _kpiTimer;
 
+        /// <summary>自動再接続タイマー</summary>
+        private DispatcherTimer? _reconnectTimer;
+
+        /// <summary>再接続試行中の重複防止フラグ</summary>
+        private bool _reconnectInFlight;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // ----- Serilog 初期化 -----
@@ -72,8 +79,6 @@ namespace SynchronizedLights.UI
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out var th) ? th : 0.95;
-
-            // Dummy 用シミュレート送信遅延
             var dummySendDelayMs = int.TryParse(
                 config["Lighting:DummySendDelayMs"], out var d) ? d : 100;
 
@@ -85,16 +90,24 @@ namespace SynchronizedLights.UI
             var latencyEnabled = !string.Equals(
                 config["Lighting:LatencyEnabled"], "false", StringComparison.OrdinalIgnoreCase);
 
+            // 自動再接続
+            var autoReconnectEnabled = !string.Equals(
+                config["Lighting:AutoReconnectEnabled"], "false", StringComparison.OrdinalIgnoreCase);
+            var reconnectIntervalSec = int.TryParse(
+                config["Lighting:ReconnectIntervalSec"], out var rs) ? rs : 5;
+
             // 循環バッファを設定値のサイズで再作成
             LatencyTracker = new LatencyTracker(windowSize: latencyWindow);
 
             Log.Information(
                 "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
                 "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}, " +
-                "LatencyEnabled={LatEn}, LatencyWindow={LatWin}, LatencyLogIntervalSec={LatInt}",
+                "LatencyEnabled={LatEn}, LatencyWindow={LatWin}, LatencyLogIntervalSec={LatInt}, " +
+                "AutoReconnectEnabled={RcEn}, ReconnectIntervalSec={RcInt}",
                 LightingMode, queueCapacity, sendIntervalMs,
                 queuePolicy, dropThreshold, dummySendDelayMs,
-                latencyEnabled, latencyWindow, latencyLogSec);
+                latencyEnabled, latencyWindow, latencyLogSec,
+                autoReconnectEnabled, reconnectIntervalSec);
 
             // ----- UserState 読込 -----
             LoadedUserState = UserStateService.Load();
@@ -135,6 +148,17 @@ namespace SynchronizedLights.UI
                 _kpiTimer.Start();
             }
 
+            // ----- 自動再接続タイマー-----
+            if (autoReconnectEnabled && reconnectIntervalSec > 0)
+            {
+                _reconnectTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(reconnectIntervalSec)
+                };
+                _reconnectTimer.Tick += ReconnectTimer_Tick;
+                _reconnectTimer.Start();
+            }
+
             // ----- セッション終了時の保険 -----
             SessionEnding += (sender, args) =>
             {
@@ -149,14 +173,16 @@ namespace SynchronizedLights.UI
         {
             Log.Information("OnExit called");
 
-            // KPI タイマー停止
+            // タイマー停止
             try { _kpiTimer?.Stop(); } catch { /* ignore */ }
+            try { _reconnectTimer?.Stop(); } catch { /* ignore */ }
 
             // UserState 保存
             SaveUserStateSafely();
 
-            // KPI 最終出力（ドロップ・遅延）
+            // KPI 最終出力
             LogDroppedCount();
+            LogReconnectCount();
             LogLatencyStats(final: true);
 
             // Facade 破棄
@@ -180,18 +206,49 @@ namespace SynchronizedLights.UI
             base.OnExit(e);
         }
 
-        /// <summary>
-        /// 定期 KPI ログ出力タイマーのハンドラ
-        /// </summary>
+        #region タイマーハンドラ
+
         private void KpiTimer_Tick(object? sender, EventArgs e)
         {
             LogLatencyStats(final: false);
         }
 
         /// <summary>
-        /// 遅延統計をログに出力する
+        /// 再接続タイマー発火ハンドラ
+        /// 概要：重複実行を防ぐため _reconnectInFlight フラグで排他制御。
+        ///       dynamic で TryReconnectMissingPortsAsync を呼び出す（ILightingFacade 外メソッド）。
         /// </summary>
-        /// <param name="final">true: 終了時（必ず出す）、false: 定期（サンプル無ければ出さない）</param>
+        private async void ReconnectTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_reconnectInFlight) return;
+            _reconnectInFlight = true;
+
+            try
+            {
+                dynamic? facade = LightingFacade;
+                if (facade == null) return;
+
+                // 動的ディスパッチで Dummy / Api 両対応
+                int reconnected = await facade.TryReconnectMissingPortsAsync();
+                if (reconnected > 0)
+                {
+                    Log.Information("KPI: Auto-reconnect succeeded ({N} port(s))", reconnected);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Auto-reconnect error");
+            }
+            finally
+            {
+                _reconnectInFlight = false;
+            }
+        }
+
+        #endregion タイマーハンドラ
+
+        #region KPI ログ出力
+
         private static void LogLatencyStats(bool final)
         {
             try
@@ -230,13 +287,29 @@ namespace SynchronizedLights.UI
             }
             catch
             {
-                // DroppedCount プロパティが無い実装でも無視
+                // DroppedCount プロパティが無い実装では無視
             }
         }
 
-        /// <summary>
-        /// UserState を安全に保存する
-        /// </summary>
+        private static void LogReconnectCount()
+        {
+            try
+            {
+                dynamic? facade = LightingFacade;
+                if (facade == null) return;
+                long rc = facade.ReconnectCount;
+                Log.Information("KPI: TotalReconnect={Reconnect}", rc);
+            }
+            catch
+            {
+                // ReconnectCount プロパティが無い実装では無視
+            }
+        }
+
+        #endregion KPI ログ出力
+
+        #region UserState / Config
+
         private static void SaveUserStateSafely()
         {
             try
@@ -272,5 +345,7 @@ namespace SynchronizedLights.UI
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
             return builder.Build();
         }
+
+        #endregion UserState / Config
     }
 }

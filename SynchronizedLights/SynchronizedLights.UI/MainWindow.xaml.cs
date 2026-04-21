@@ -28,7 +28,7 @@ namespace SynchronizedLights.UI
         {
             InitializeComponent();
 
-            // ViewModel を取得（DataContext が既に設定されている想定、なければ生成）
+            // ViewModel 取得
             if (DataContext is not SynchronizedLights.UI.ViewModels.MainWindowViewModel vm)
             {
                 vm = new SynchronizedLights.UI.ViewModels.MainWindowViewModel();
@@ -47,6 +47,9 @@ namespace SynchronizedLights.UI
 
             // Window Closing イベントで保存
             this.Closing += OnWindowClosing;
+
+            // 動作確認用：Ctrl+Shift+D で擬似切断（Dummy モードのみ有効）
+            this.KeyDown += OnKeyDown_DebugShortcut;
         }
 
         /// <summary>
@@ -66,6 +69,27 @@ namespace SynchronizedLights.UI
             catch (System.Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MainWindow] UserState save failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// デバッグ用ショートカット：Ctrl+Shift+D で Dummy 擬似切断
+        /// </summary>
+        private void OnKeyDown_DebugShortcut(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.D
+                && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                if (App.LightingFacade is Lib.Application.Facades.DummyLightingFacade dummy)
+                {
+                    dummy.SimulateDisconnect();
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Ctrl+Shift+D: SimulateDisconnect invoked.");
+                    e.Handled = true;
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[MainWindow] Ctrl+Shift+D ignored (not Dummy mode).");
+                }
             }
         }
     }
