@@ -4,142 +4,236 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="15"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="15"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="8"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="20"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+            <!-- タイトル -->
+            <TextBlock Grid.Row="0"
+                       Text="Preset"
+                       FontSize="28"
+                       FontWeight="Bold" />
 
-        <!-- タイトル -->
-        <TextBlock Grid.Row="0"
-                   Text="Preset"
-                   FontSize="28"
-                   FontWeight="Bold" />
+            <!-- 色選択（4色固定パレット + カスタムピッカー起動） -->
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal">
+                <Button x:Name="BtnColorRed"
+                        Content="Red"
+                        Command="{Binding SelectRedCommand}"
+                        MinWidth="110"
+                        MinHeight="56"
+                        Margin="0,0,10,0" />
+                <Button x:Name="BtnColorGreen"
+                        Content="Green"
+                        Command="{Binding SelectGreenCommand}"
+                        MinWidth="110"
+                        MinHeight="56"
+                        Margin="0,0,10,0" />
+                <Button x:Name="BtnColorBlue"
+                        Content="Blue"
+                        Command="{Binding SelectBlueCommand}"
+                        MinWidth="110"
+                        MinHeight="56"
+                        Margin="0,0,10,0" />
+                <Button x:Name="BtnColorWhite"
+                        Content="White"
+                        Command="{Binding SelectWhiteCommand}"
+                        MinWidth="110"
+                        MinHeight="56"
+                        Margin="0,0,20,0" />
+                <Button x:Name="BtnColorSwatch"
+                        Content="Custom..."
+                        Command="{Binding DataContext.OpenColorPickerCommand,
+                                 RelativeSource={RelativeSource AncestorType=Window}}"
+                        MinWidth="130"
+                        MinHeight="56" />
+            </StackPanel>
 
-        <!-- 色選択 -->
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal">
-            <Button x:Name="BtnColorRed"
-                    Content="Red"
-                    Command="{Binding SelectRedCommand}"
-                    MinWidth="110"
-                    MinHeight="56"
-                    Margin="0,0,10,0" />
+            <!-- 現在色表示 -->
+            <TextBlock Grid.Row="4"
+                       Text="{Binding CurrentColorLabel}"
+                       FontSize="18"
+                       FontWeight="Bold" />
 
-            <Button x:Name="BtnColorGreen"
-                    Content="Green"
-                    Command="{Binding SelectGreenCommand}"
-                    MinWidth="110"
-                    MinHeight="56"
-                    Margin="0,0,10,0" />
+            <!-- 速度スライダー + 数値入力 -->
+            <StackPanel Grid.Row="6" Orientation="Vertical">
+                <TextBlock Text="Speed (ms)  範囲: 0 – 10000"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,6"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="110"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider x:Name="SldSpeed"
+                            Grid.Column="0"
+                            Minimum="0"
+                            Maximum="10000"
+                            SmallChange="50"
+                            LargeChange="500"
+                            TickFrequency="1000"
+                            TickPlacement="BottomRight"
+                            IsSnapToTickEnabled="False"
+                            VerticalAlignment="Center"
+                            MinHeight="36"
+                            Value="{Binding DataContext.EditableSpeedValueMs,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox x:Name="NumSpeed"
+                             Grid.Column="1"
+                             FontSize="14"
+                             Padding="6,4"
+                             MinHeight="30"
+                             Margin="10,0,0,0"
+                             VerticalContentAlignment="Center"
+                             HorizontalContentAlignment="Right"
+                             Text="{Binding DataContext.EditableSpeedValueMs,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=LostFocus}" />
+                </Grid>
+            </StackPanel>
 
-            <Button x:Name="BtnColorBlue"
-                    Content="Blue"
-                    Command="{Binding SelectBlueCommand}"
-                    MinWidth="110"
-                    MinHeight="56"
-                    Margin="0,0,10,0" />
-
-            <Button x:Name="BtnColorWhite"
-                    Content="White"
-                    Command="{Binding SelectWhiteCommand}"
-                    MinWidth="110"
-                    MinHeight="56"
-                    Margin="0,0,20,0" />
-            <!-- カスタム色ピッカー起動 -->
-            <Button x:Name="BtnColorSwatch"
-                    Content="Custom..."
-                    Command="{Binding DataContext.OpenColorPickerCommand,
-                             RelativeSource={RelativeSource AncestorType=Window}}"
-                    MinWidth="130"
-                    MinHeight="56" />
-        </StackPanel>
-
-        <!-- 現在色表示 -->
-        <TextBlock Grid.Row="4"
-                   Text="{Binding CurrentColorLabel}"
-                   FontSize="18"
-                   FontWeight="Bold" />
-
-        <!-- 速度スライダー + 数値入力 -->
-        <StackPanel Grid.Row="6" Orientation="Vertical">
-            <TextBlock Text="Speed (ms)  範囲: 0 – 10000"
-                       FontSize="14"
-                       FontWeight="SemiBold"
-                       Margin="0,0,0,6"/>
-            <Grid>
+            <!-- 命令名 + ポート選択 -->
+            <Grid Grid.Row="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="110"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="240"/>
                 </Grid.ColumnDefinitions>
-                <Slider x:Name="SldSpeed"
-                        Grid.Column="0"
-                        Minimum="0"
-                        Maximum="10000"
-                        SmallChange="50"
-                        LargeChange="500"
-                        TickFrequency="1000"
-                        TickPlacement="BottomRight"
-                        IsSnapToTickEnabled="False"
-                        VerticalAlignment="Center"
-                        MinHeight="36"
-                        Value="{Binding DataContext.EditableSpeedValueMs,
-                                RelativeSource={RelativeSource AncestorType=Window},
-                                Mode=TwoWay,
-                                UpdateSourceTrigger=PropertyChanged}" />
-                <TextBox x:Name="NumSpeed"
-                         Grid.Column="1"
-                         FontSize="14"
-                         Padding="6,4"
-                         MinHeight="30"
-                         Margin="10,0,0,0"
-                         VerticalContentAlignment="Center"
-                         HorizontalContentAlignment="Right"
-                         Text="{Binding DataContext.EditableSpeedValueMs,
-                                RelativeSource={RelativeSource AncestorType=Window},
-                                Mode=TwoWay,
-                                UpdateSourceTrigger=LostFocus}" />
+                <!-- 命令名（TxtCommandName） -->
+                <StackPanel Grid.Column="0">
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="命令名 / Command Name"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"/>
+                        <!-- 文字数カウンタ：超過時に赤色表示（設計書9章） -->
+                        <TextBlock Grid.Column="1"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding DataContext.CommandNameCountText,
+                                          RelativeSource={RelativeSource AncestorType=Window}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrushMain}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsCommandNameValid,
+                                                                RelativeSource={RelativeSource AncestorType=Window}}"
+                                                     Value="False">
+                                            <Setter Property="Foreground" Value="#DC3545"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                    <TextBox x:Name="TxtCommandName"
+                             FontSize="14"
+                             Padding="6,4"
+                             MinHeight="30"
+                             VerticalContentAlignment="Center"
+                             Text="{Binding DataContext.CommandName,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}">
+                        <!-- 入力バリデーション：32文字超なら赤枠 -->
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsCommandNameValid,
+                                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                                                 Value="False">
+                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
+                                        <Setter Property="ToolTip" Value="命令名は32文字以内で入力してください。"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </StackPanel>
+                <!-- ポート選択（CmbPortSelect） -->
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="送信先 / Port"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,6"/>
+                    <ComboBox x:Name="CmbPortSelect"
+                              FontSize="14"
+                              Padding="6,4"
+                              MinHeight="30"
+                              ItemsSource="{Binding DataContext.PortOptions,
+                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                              SelectedItem="{Binding DataContext.SelectedPort,
+                                            RelativeSource={RelativeSource AncestorType=Window},
+                                            Mode=TwoWay}" />
+                </StackPanel>
             </Grid>
-        </StackPanel>
-        <!-- 点灯/消灯 -->
-        <StackPanel Grid.Row="8"
-                    Orientation="Horizontal">
-            <Button x:Name="BtnTurnOn"
-                    Content="Turn On"
-                    Command="{Binding TurnOnCommand}"
-                    MinWidth="140"
-                    MinHeight="56"
-                    Margin="0,0,10,0" />
 
-            <Button x:Name="BtnTurnOff"
-                    Content="Turn Off"
-                    Command="{Binding TurnOffCommand}"
-                    MinWidth="140"
-                    MinHeight="56" />
-        </StackPanel>
+            <!-- アクション：点灯/消灯/実行/終了 -->
+            <StackPanel Grid.Row="10"
+                        Orientation="Horizontal">
+                <Button x:Name="BtnTurnOn"
+                        Content="Turn On"
+                        Command="{Binding TurnOnCommand}"
+                        MinWidth="130"
+                        MinHeight="56"
+                        Margin="0,0,10,0" />
+                <Button x:Name="BtnTurnOff"
+                        Content="Turn Off"
+                        Command="{Binding TurnOffCommand}"
+                        MinWidth="130"
+                        MinHeight="56"
+                        Margin="0,0,20,0" />
+                <Button x:Name="BtnExecute"
+                        Content="実行 / Execute"
+                        Command="{Binding DataContext.ExecuteCurrentSettingsCommand,
+                                 RelativeSource={RelativeSource AncestorType=Window}}"
+                        MinWidth="150"
+                        MinHeight="56"
+                        Margin="0,0,10,0" />
+                <Button x:Name="BtnPower"
+                        Content="終了 / Exit"
+                        Command="{Binding DataContext.PowerExitCommand,
+                                 RelativeSource={RelativeSource AncestorType=Window}}"
+                        MinWidth="130"
+                        MinHeight="56" />
+            </StackPanel>
 
-        <!-- 状態表示 -->
-        <TextBlock Grid.Row="10"
-                   Text="{Binding StatusText}"
-                   FontSize="18"
-                   FontWeight="Bold" />
+            <!-- 状態表示 -->
+            <TextBlock Grid.Row="12"
+                       Text="{Binding StatusText}"
+                       FontSize="18"
+                       FontWeight="Bold" />
 
-        <!-- キュー表示 -->
-        <TextBlock Grid.Row="12"
-                   Text="{Binding QueueText}"
-                   FontSize="16" />
-    </Grid>
+            <!-- キュー表示 -->
+            <TextBlock Grid.Row="14"
+                       Text="{Binding QueueText}"
+                       FontSize="16" />
+        </Grid>
+    </ScrollViewer>
 </UserControl>

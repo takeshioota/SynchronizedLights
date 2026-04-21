@@ -12,7 +12,7 @@ using Lib.Transport.Interfaces;
 using Lib.Transport.Transports;
 using Lib.Ui.Screens.ViewModels;
 using Lib.Ui.Screens.Views;
-
+using System.Windows;
 namespace SynchronizedLights.UI.ViewModels
 {
     /// <summary>
@@ -48,7 +48,7 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         private readonly ILightingFacade _lighting = new DummyLightingFacade();
         /// <summary>
-        /// エラートースト自動消去タイマー（STEP6-B）
+        /// エラートースト自動消去タイマー
         /// 概要：ErrorMessageが設定されてから一定時間経過で自動消去するタイマー。
         /// </summary>
         private DispatcherTimer? _errorDismissTimer;
@@ -300,6 +300,41 @@ namespace SynchronizedLights.UI.ViewModels
         private bool isStrobeOffActive;
 
         /// <summary>
+        /// 命令名
+        /// 概要：ログ用の命令名。0〜32文字まで許容。空文字も許容。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsCommandNameValid))]
+        [NotifyPropertyChangedFor(nameof(CommandNameCountText))]
+        private string commandName = "";
+
+        /// <summary>
+        /// 命令名が有効かどうか
+        /// 概要：32文字以内なら true。XAML側の DataTrigger で赤枠表示に使う。
+        /// </summary>
+        public bool IsCommandNameValid => (CommandName?.Length ?? 0) <= 32;
+
+        /// <summary>
+        /// 命令名の文字数カウンタ表示
+        /// 概要：「文字数超過でカウンタ赤」
+        /// XAML側のDataTriggerでForegroundを赤に切り替える。
+        /// </summary>
+        public string CommandNameCountText
+            => $"{(CommandName?.Length ?? 0)} / 32";
+
+        /// <summary>
+        /// 送信先ポート
+        /// 概要：ALL / PortA / PortB のいずれか。
+        /// </summary>
+        [ObservableProperty]
+        private string selectedPort = "ALL";
+
+        /// <summary>
+        /// ポート選択肢
+        /// </summary>
+        public IReadOnlyList<string> PortOptions { get; } = new[] { "ALL", "PortA", "PortB" };
+
+        /// <summary>
         /// PortA状態表示
         /// 概要：TopBarに表示するPortAの接続状態。
         /// ファセードの接続ポートリストのうち、接続順で先頭のものを割り当てる。
@@ -404,7 +439,7 @@ namespace SynchronizedLights.UI.ViewModels
         #region OnErrorMessageChanged
 
         /// <summary>
-        /// ErrorMessage変更時の処理（STEP6-B）
+        /// ErrorMessage変更時の処理
         /// 概要：エラーが設定されたら自動消去タイマーを起動する。
         /// </summary>
         partial void OnErrorMessageChanged(string value)
@@ -526,6 +561,51 @@ namespace SynchronizedLights.UI.ViewModels
         }
 
         /// <summary>
+        /// シーケンス実行ダイアログを開いて実行する
+        /// 概要：DlgSequence を表示し、
+        /// OK時に開始番号/終了番号/遅延時間/色 のパラメータでシーケンスを送信する。
+        /// </summary>
+        private async Task RunSequenceWithDialogAsync(int seqId, string seqName)
+        {
+            var dlg = new Lib.Ui.Screens.Views.DlgSequence
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            dlg.SetSequence(seqId, seqName);
+
+            if (dlg.ShowDialog() != true)
+            {
+                StatusMessage = $"Sequence cancelled : {seqName}";
+                return;
+            }
+
+            try
+            {
+                if (!_lighting.IsConnected)
+                {
+                    StatusMessage = $"Sequence skipped : transport disconnected";
+                    return;
+                }
+
+                // 任意色指定ありなら先に色を設定
+                if (dlg.UseColor)
+                {
+                    var rgb = new Lib.Domain.ValueObjects.Rgb(dlg.ColorR, dlg.ColorG, dlg.ColorB);
+                    await _lighting.SetColorAsync(AppState.SelectedTarget, rgb);
+                }
+
+                await _lighting.ExecuteSequenceAsync(AppState.SelectedTarget, seqId);
+                StatusMessage =
+                    $"Sequence executed : {seqName} " +
+                    $"(開始={dlg.StartNumber}, 終了={dlg.EndNumber}, 遅延={dlg.DelayMs}ms)";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Sequence failed : {ex.Message}";
+            }
+        }
+
+        /// <summary>
         /// PortA/PortB 表示文字列を更新する
         /// 概要：ファセードの接続ポートリストを参照し、
         /// 接続順で先頭をPortA、2番目をPortBとして表示する。
@@ -556,7 +636,7 @@ namespace SynchronizedLights.UI.ViewModels
             });
         }
         /// <summary>
-        /// エラートースト自動消去タイマーを起動する（STEP6-B）
+        /// エラートースト自動消去タイマーを起動する
         /// 概要：ErrorToastDurationSeconds秒経過後にエラーを自動消去する。
         /// 既存タイマーがあれば停止してから再起動する。
         /// </summary>
@@ -810,8 +890,63 @@ namespace SynchronizedLights.UI.ViewModels
             IsStrobeOffActive = !IsStrobeOffActive;
         }
 
+
         /// <summary>
-        /// エラートースト手動消去コマンド（STEP6-B）
+        /// 現在設定で送信コマンド
+        /// 概要：現在の色・速度・対象・命令名・ポートで送信を実行する。
+        /// 命令名が不正な場合はエラーメッセージを表示。
+        /// </summary>
+        [RelayCommand]
+        private async Task ExecuteCurrentSettingsAsync()
+        {
+            if (!IsCommandNameValid)
+            {
+                StatusMessage = "命令名は32文字以内で入力してください。";
+                return;
+            }
+
+            try
+            {
+                if (!_lighting.IsConnected)
+                {
+                    StatusMessage = "Execute skipped : transport disconnected";
+                    return;
+                }
+
+                await _lighting.SetColorAsync(AppState.SelectedTarget, AppState.SelectedColor);
+                StatusMessage =
+                    $"Execute : {CurrentTargetLabel} / " +
+                    $"R={AppState.SelectedColor.R},G={AppState.SelectedColor.G},B={AppState.SelectedColor.B} / " +
+                    $"{AppState.SpeedValueMs}ms / Port={SelectedPort}" +
+                    (string.IsNullOrEmpty(CommandName) ? "" : $" / name={CommandName}");
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Execute failed : {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// アプリ終了コマンド
+        /// 概要：確認ダイアログを表示し、OK時にアプリケーションを終了する。
+        /// </summary>
+        [RelayCommand]
+        private void PowerExit()
+        {
+            var result = MessageBox.Show(
+                "シンクロライト制御アプリを終了しますか？",
+                "終了確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                System.Windows.Application.Current?.Shutdown();
+            }
+        }
+
+        /// <summary>
+        /// エラートースト手動消去コマンド
         /// 概要：トーストの×ボタン押下時に、ファセードのエラーと自動消去タイマーをクリアする。
         /// </summary>
         [RelayCommand]
@@ -870,21 +1005,20 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：Sequence01ボタン押下時に状態表示を更新する。
         /// </summary>
         [RelayCommand]
-        private void ExecuteSequence01()
+        private async Task ExecuteSequence01()
         {
             if (!IsSequence01Defined) { StatusMessage = "Sequence01 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence01";
+            await RunSequenceWithDialogAsync(1, "Sequence01");
         }
-
         /// <summary>
         /// Sequence02実行コマンド
         /// 概要：Sequence02ボタン押下時に状態表示を更新する。
         /// </summary>
         [RelayCommand]
-        private void ExecuteSequence02()
+        private async Task ExecuteSequence02()
         {
             if (!IsSequence02Defined) { StatusMessage = "Sequence02 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence02";
+            await RunSequenceWithDialogAsync(2, "Sequence02");
         }
 
         /// <summary>
@@ -892,50 +1026,55 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：Sequence03ボタン押下時に状態表示を更新する。
         /// </summary>
         [RelayCommand]
-        private void ExecuteSequence03()
+        private async Task ExecuteSequence03()
         {
             if (!IsSequence03Defined) { StatusMessage = "Sequence03 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence03";
+            await RunSequenceWithDialogAsync(3, "Sequence03");
         }
 
+        /// <summary>
+        /// Sequence04実行コマンド
+        /// </summary>
         [RelayCommand]
-        private void ExecuteSequence04()
+        private async Task ExecuteSequence04()
         {
             if (!IsSequence04Defined) { StatusMessage = "Sequence04 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence04";
+            await RunSequenceWithDialogAsync(4, "Sequence04");
         }
 
         /// <summary>
         /// Sequence05実行コマンド
         /// </summary>
-
         [RelayCommand]
-        private void ExecuteSequence05()
+        private async Task ExecuteSequence05()
         {
             if (!IsSequence05Defined) { StatusMessage = "Sequence05 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence05";
+            await RunSequenceWithDialogAsync(5, "Sequence05");
         }
 
         /// <summary>
         /// Sequence06実行コマンド
         /// </summary>
         [RelayCommand]
-        private void ExecuteSequence06()
+        private async Task ExecuteSequence06()
         {
             if (!IsSequence06Defined) { StatusMessage = "Sequence06 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence06";
+            await RunSequenceWithDialogAsync(6, "Sequence06");
         }
 
         /// <summary>
         /// Sequence07実行コマンド
         /// </summary>
         [RelayCommand]
-        private void ExecuteSequence07()
+        private async Task ExecuteSequence07()
         {
             if (!IsSequence07Defined) { StatusMessage = "Sequence07 is undefined"; return; }
-            StatusMessage = "Sequence executed : Sequence07";
+            await RunSequenceWithDialogAsync(7, "Sequence07");
         }
 
+    /// <summary>
+    /// Stops the current sequence and updates the status message to indicate that the sequence has been stopped.
+    /// </summary>
         [RelayCommand]
         private void StopSequence()
         {
