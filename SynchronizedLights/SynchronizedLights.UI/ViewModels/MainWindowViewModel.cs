@@ -10,6 +10,7 @@ using Lib.Ui.Screens.ViewModels;
 using Lib.Ui.Screens.Views;
 using System.Windows;
 using Lib.Application.Models;
+using Lib.Application.Services;
 namespace SynchronizedLights.UI.ViewModels
 {
     /// <summary>
@@ -396,6 +397,10 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [ObservableProperty]
         private bool isSequence07Defined = false;
+        /// <summary>
+        /// KPI バー用 ViewModel
+        /// </summary>
+        public KpiViewModel Kpi { get; } = new KpiViewModel();
         #endregion プロパティ
 
         #region コンストラクタ

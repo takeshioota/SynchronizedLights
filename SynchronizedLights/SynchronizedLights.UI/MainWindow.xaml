@@ -17,6 +17,7 @@
             <RowDefinition Height="110"/>
             <RowDefinition Height="110"/>
             <RowDefinition Height="120"/>
+            <RowDefinition Height="44"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -486,6 +487,91 @@
                         Height="28"
                         Margin="12,0,0,0"/>
             </Grid>
+        </Border>
+        <Border Grid.Row="5"
+                Grid.ColumnSpan="2"
+                Style="{StaticResource GrandMaPanelBorderStyle}"
+                Padding="10,4">
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        DataContext="{Binding Kpi}">
+                <TextBlock Text="KPI"
+                           FontWeight="Bold"
+                           Foreground="#FFC107"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Queue -->
+                <TextBlock Text="Queue:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding QueueText}"
+                           Foreground="{Binding QueueBrush}"
+                           FontWeight="Bold"
+                           MinWidth="32"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Dropped -->
+                <TextBlock Text="Dropped:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding DroppedText}"
+                           Foreground="{Binding DroppedBrush}"
+                           FontWeight="Bold"
+                           MinWidth="32"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Reconnect -->
+                <TextBlock Text="Reconnect:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding ReconnectText}"
+                           Foreground="{Binding ReconnectBrush}"
+                           FontWeight="Bold"
+                           MinWidth="32"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Latency (P95) -->
+                <TextBlock Text="Latency:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding LatencyText}"
+                           Foreground="{Binding LatencyBrush}"
+                           FontWeight="Bold"
+                           MinWidth="96"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Success Rate -->
+                <TextBlock Text="Success:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding SuccessRateText}"
+                           Foreground="{Binding SuccessRateBrush}"
+                           FontWeight="Bold"
+                           MinWidth="72"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
+
+                <!-- Total Sent -->
+                <TextBlock Text="TotalSent:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding TotalSentText}"
+                           Foreground="#EEE"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
         </Border>
     </Grid>
 </Window>
