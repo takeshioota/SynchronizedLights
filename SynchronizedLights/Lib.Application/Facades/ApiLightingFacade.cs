@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Lib.Application.Interfaces;
+using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
@@ -41,11 +42,14 @@ namespace Lib.Application.Facades
         /// <summary>キュー満杯ポリシー ("Wait" or "DropNewest")</summary>
         private readonly string _queuePolicy;
 
-        /// <summary>ドロップ判定しきい値（0.0〜1.0、0.95 なら 95% で Drop）</summary>
+        /// <summary>ドロップ判定しきい値（0.0〜1.0）</summary>
         private readonly double _dropThreshold;
 
         /// <summary>累積ドロップ回数</summary>
         private long _droppedCount;
+
+        /// <summary>遅延計測（nullable：注入されなければ計測しない）</summary>
+        private readonly LatencyTracker? _latency;
 
         #endregion フィールド
 
@@ -70,6 +74,9 @@ namespace Lib.Application.Facades
         /// <summary>累積ドロップ回数（KPI 用）</summary>
         public long DroppedCount => _droppedCount;
 
+        /// <summary>遅延トラッカー</summary>
+        public LatencyTracker? Latency => _latency;
+
         public event EventHandler? StatusChanged;
 
         #endregion プロパティ
@@ -83,15 +90,18 @@ namespace Lib.Application.Facades
         /// <param name="sendIntervalMs">送信間隔 ms（既定 5）</param>
         /// <param name="queuePolicy">"Wait" or "DropNewest"（既定 Wait）</param>
         /// <param name="dropThreshold">ドロップ判定の使用率閾値（既定 0.95）</param>
+        /// <param name="latency">遅延計測トラッカー（任意）</param>
         public ApiLightingFacade(
             int queueCapacity = 256,
             int sendIntervalMs = 5,
             string queuePolicy = "Wait",
-            double dropThreshold = 0.95)
+            double dropThreshold = 0.95,
+            LatencyTracker? latency = null)
         {
             _queueCapacity = queueCapacity;
             _queuePolicy = queuePolicy;
             _dropThreshold = dropThreshold;
+            _latency = latency;
 
             // Logger
             _loggerFactory = LoggerFactory.Create(builder =>
@@ -114,8 +124,7 @@ namespace Lib.Application.Facades
                 _transport,
                 _loggerFactory.CreateLogger<ApiLightingService>());
 
-            // TxWorkerService は IConfiguration を要求するので、
-            // SerialPort:SendIntervalMs を含むインメモリ設定を渡す
+            // TxWorkerService
             var workerConfig = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -133,8 +142,8 @@ namespace Lib.Application.Facades
             _ = _worker.StartAsync(_workerCts.Token);
 
             Log.Information(
-                "[Api] ApiLightingFacade initialized (queue={Queue}, interval={Interval}ms, policy={Policy}, threshold={Thr})",
-                queueCapacity, sendIntervalMs, queuePolicy, dropThreshold);
+                "[Api] ApiLightingFacade initialized (queue={Queue}, interval={Interval}ms, policy={Policy}, threshold={Thr}, latency={HasLat})",
+                queueCapacity, sendIntervalMs, queuePolicy, dropThreshold, _latency != null);
         }
 
         #endregion コンストラクタ
@@ -236,6 +245,7 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("SetColor")) return;
 
+            var startTs = Stopwatch.GetTimestamp();
             try
             {
                 await InternalSetColorAsync(target, color, ct);
@@ -247,6 +257,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                RecordLatency(startTs);
                 RaiseStatusChanged();
             }
         }
@@ -255,10 +266,10 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("Flash")) return;
 
-            // クライアント側実装（API未対応）：1サイクル on/off
             var halfMs = Math.Max(50, speedMs / 2);
             var black = new Rgb(0, 0, 0);
 
+            var startTs = Stopwatch.GetTimestamp();
             try
             {
                 await InternalSetColorAsync(target, color, ct);
@@ -267,6 +278,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                RecordLatency(startTs);
                 RaiseStatusChanged();
             }
         }
@@ -275,10 +287,10 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("FadeIn")) return;
 
-            // クライアント側実装：10ステップで段階補間
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
 
+            var startTs = Stopwatch.GetTimestamp();
             try
             {
                 for (var i = 1; i <= steps; i++)
@@ -298,6 +310,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                RecordLatency(startTs);
                 RaiseStatusChanged();
             }
         }
@@ -306,10 +319,10 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("FadeOut")) return;
 
-            // クライアント側実装：10ステップで段階補間（減衰）
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
 
+            var startTs = Stopwatch.GetTimestamp();
             try
             {
                 for (var i = steps - 1; i >= 0; i--)
@@ -329,6 +342,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                RecordLatency(startTs);
                 RaiseStatusChanged();
             }
         }
@@ -337,11 +351,19 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("Sequence")) return;
 
-            Log.Information(
-                "[Api] Sequence execution pending API support. target={Target}, id={Id}",
-                target, sequenceId);
-            await Task.CompletedTask;
-            RaiseStatusChanged();
+            var startTs = Stopwatch.GetTimestamp();
+            try
+            {
+                Log.Information(
+                    "[Api] Sequence execution pending API support. target={Target}, id={Id}",
+                    target, sequenceId);
+                await Task.CompletedTask;
+            }
+            finally
+            {
+                RecordLatency(startTs);
+                RaiseStatusChanged();
+            }
         }
 
         #endregion 制御
@@ -374,13 +396,17 @@ namespace Lib.Application.Facades
         }
 
         /// <summary>
-        /// UI Rgb → API Rgb 変換
+        /// 遅延を LatencyTracker に記録する
         /// </summary>
+        private void RecordLatency(long startTimestamp)
+        {
+            if (_latency == null) return;
+            var elapsedMs = (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+            _latency.Record(elapsedMs);
+        }
+
         private static ApiRgb ToApiRgb(Rgb color) => new(color.R, color.G, color.B);
 
-        /// <summary>
-        /// UI Group → (startRow, len) マッピング（25台×8グループ＝200台）
-        /// </summary>
         private static (ushort startRow, byte len) GroupToRowRange(Target group)
         {
             return group switch

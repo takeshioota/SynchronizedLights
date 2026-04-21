@@ -1,10 +1,11 @@
-﻿using Lib.Application.Facades;
-using Lib.Application.Interfaces;
-using Microsoft.Extensions.Configuration;
-using Serilog;
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+using Lib.Application.Facades;
+using Lib.Application.Interfaces;
 using Lib.Application.Models;
 using Lib.Application.Services;
 using SynchronizedLights.UI.ViewModels;
@@ -25,23 +26,20 @@ namespace SynchronizedLights.UI
         /// <summary>現在の動作モード（"Dummy" or "Real"）</summary>
         public static string LightingMode { get; private set; } = "Dummy";
 
-        /// <summary>
-        /// UserState 管理サービス
-        /// </summary>
+        /// <summary>UserState 管理サービス</summary>
         public static UserStateService UserStateService { get; private set; } = new UserStateService();
 
-        /// <summary>
-        /// 起動時に読み込んだ UserState
-        /// </summary>
+        /// <summary>起動時に読み込んだ UserState</summary>
         public static UserState? LoadedUserState { get; private set; }
 
-        /// <summary>
-        /// MainWindowViewModel への参照
-        /// 概要：OnExit 時に MainWindow が破棄されていても確実に CaptureUserState を
-        /// 呼び出せるよう、静的プロパティとして保持する。
-        /// MainWindow コンストラクタから設定される。
-        /// </summary>
+        /// <summary>MainWindowViewModel への静的参照</summary>
         public static MainWindowViewModel? MainVm { get; set; }
+
+        /// <summary>アプリ全体で共有する遅延計測トラッカー</summary>
+        public static LatencyTracker LatencyTracker { get; private set; } = new LatencyTracker(windowSize: 1000);
+
+        /// <summary>KPI 定期ログ出力タイマー</summary>
+        private DispatcherTimer? _kpiTimer;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -79,11 +77,24 @@ namespace SynchronizedLights.UI
             var dummySendDelayMs = int.TryParse(
                 config["Lighting:DummySendDelayMs"], out var d) ? d : 100;
 
+            // 遅延計測
+            var latencyWindow = int.TryParse(
+                config["Lighting:LatencyWindowSize"], out var lw) ? lw : 1000;
+            var latencyLogSec = int.TryParse(
+                config["Lighting:LatencyLogIntervalSec"], out var li) ? li : 30;
+            var latencyEnabled = !string.Equals(
+                config["Lighting:LatencyEnabled"], "false", StringComparison.OrdinalIgnoreCase);
+
+            // 循環バッファを設定値のサイズで再作成
+            LatencyTracker = new LatencyTracker(windowSize: latencyWindow);
+
             Log.Information(
                 "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
-                "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}",
+                "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}, " +
+                "LatencyEnabled={LatEn}, LatencyWindow={LatWin}, LatencyLogIntervalSec={LatInt}",
                 LightingMode, queueCapacity, sendIntervalMs,
-                queuePolicy, dropThreshold, dummySendDelayMs);
+                queuePolicy, dropThreshold, dummySendDelayMs,
+                latencyEnabled, latencyWindow, latencyLogSec);
 
             // ----- UserState 読込 -----
             LoadedUserState = UserStateService.Load();
@@ -95,28 +106,42 @@ namespace SynchronizedLights.UI
                 LoadedUserState.TransmitterChannel, LoadedUserState.TransmitterPower);
 
             // ----- Facade 生成 -----
+            var latencyInjected = latencyEnabled ? LatencyTracker : null;
+
             LightingFacade = LightingMode switch
             {
                 "Real" => new ApiLightingFacade(
                     queueCapacity: queueCapacity,
                     sendIntervalMs: sendIntervalMs,
                     queuePolicy: queuePolicy,
-                    dropThreshold: dropThreshold),
+                    dropThreshold: dropThreshold,
+                    latency: latencyInjected),
                 _ => new DummyLightingFacade(
                     sendDelayMs: dummySendDelayMs,
                     queueCapacity: queueCapacity,
                     queuePolicy: queuePolicy,
-                    dropThreshold: dropThreshold)
+                    dropThreshold: dropThreshold,
+                    latency: latencyInjected)
             };
 
-            // ----- セッション終了時-----
+            // ----- KPI 定期ログ -----
+            if (latencyEnabled && latencyLogSec > 0)
+            {
+                _kpiTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(latencyLogSec)
+                };
+                _kpiTimer.Tick += KpiTimer_Tick;
+                _kpiTimer.Start();
+            }
+
+            // ----- セッション終了時の保険 -----
             SessionEnding += (sender, args) =>
             {
                 Log.Information("SessionEnding detected: {Reason}", args.ReasonSessionEnding);
                 SaveUserStateSafely();
             };
 
-            // ----- ベース処理（MainWindow 起動） -----
             base.OnStartup(e);
         }
 
@@ -124,13 +149,17 @@ namespace SynchronizedLights.UI
         {
             Log.Information("OnExit called");
 
-            // ----- UserState 保存 -----
+            // KPI タイマー停止
+            try { _kpiTimer?.Stop(); } catch { /* ignore */ }
+
+            // UserState 保存
             SaveUserStateSafely();
 
-            // ----- ドロップ累積の最終ログ出力-----
+            // KPI 最終出力（ドロップ・遅延）
             LogDroppedCount();
+            LogLatencyStats(final: true);
 
-            // ----- Facade 破棄 -----
+            // Facade 破棄
             if (LightingFacade is IDisposable disposable)
             {
                 try
@@ -152,9 +181,43 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
+        /// 定期 KPI ログ出力タイマーのハンドラ
+        /// </summary>
+        private void KpiTimer_Tick(object? sender, EventArgs e)
+        {
+            LogLatencyStats(final: false);
+        }
+
+        /// <summary>
+        /// 遅延統計をログに出力する
+        /// </summary>
+        /// <param name="final">true: 終了時（必ず出す）、false: 定期（サンプル無ければ出さない）</param>
+        private static void LogLatencyStats(bool final)
+        {
+            try
+            {
+                var snap = LatencyTracker.Snapshot();
+                if (!final && snap.Count == 0) return;
+
+                if (final)
+                {
+                    Log.Information(
+                        "KPI Final: Latency {Stats}, TotalSamples={Total}, MaxEver={MaxEver}ms",
+                        snap, LatencyTracker.TotalCount, LatencyTracker.MaxEverMs);
+                }
+                else
+                {
+                    Log.Information("KPI: Latency {Stats}", snap);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "LatencyStats log failed");
+            }
+        }
+
+        /// <summary>
         /// ドロップ累計をログに出力する
-        /// 概要：Dummy / Api どちらの実装でも DroppedCount プロパティがあれば値を出力する。
-        ///       ILightingFacade のインタフェース追加を避けるため dynamic で参照。
         /// </summary>
         private static void LogDroppedCount()
         {
@@ -178,10 +241,7 @@ namespace SynchronizedLights.UI
         {
             try
             {
-                // 優先：静的参照の MainVm
                 var mvm = MainVm;
-
-                // フォールバック：MainWindow の DataContext
                 if (mvm == null)
                 {
                     mvm = Current?.MainWindow?.DataContext as MainWindowViewModel;

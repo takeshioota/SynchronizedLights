@@ -1,8 +1,9 @@
-﻿using System.Diagnostics;
-using Lib.Application.Interfaces;
+﻿using Lib.Application.Interfaces;
+using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
+using System.Diagnostics;
 
 namespace Lib.Application.Facades
 {
@@ -33,6 +34,9 @@ namespace Lib.Application.Facades
         /// <summary>ドロップ判定しきい値（0.0〜1.0、0.95 なら 95% で Drop）</summary>
         private readonly double _dropThreshold;
 
+        /// <summary>遅延計測（nullable：注入されなければ計測しない）</summary>
+        private readonly LatencyTracker? _latency;
+
         #endregion フィールド
 
         #region プロパティ (ILightingFacade)
@@ -42,8 +46,11 @@ namespace Lib.Application.Facades
         public int QueueLength => _queueLength;
         public string? LastError => _lastError;
 
-        /// <summary>累積ドロップ回数（デバッグ・KPI 用、ILightingFacade 外の追加プロパティ）</summary>
+        /// <summary>累積ドロップ回数</summary>
         public long DroppedCount => _droppedCount;
+
+        /// <summary>遅延トラッカー</summary>
+        public LatencyTracker? Latency => _latency;
 
         public event EventHandler? StatusChanged;
 
@@ -58,20 +65,23 @@ namespace Lib.Application.Facades
         /// <param name="queueCapacity">シミュレートキュー容量（既定 256）</param>
         /// <param name="queuePolicy">"Wait" or "DropNewest"（既定 Wait）</param>
         /// <param name="dropThreshold">ドロップ判定の使用率閾値（既定 0.95）</param>
+        /// <param name="latency">遅延計測トラッカー（任意）</param>
         public DummyLightingFacade(
             int sendDelayMs = 100,
             int queueCapacity = 256,
             string queuePolicy = "Wait",
-            double dropThreshold = 0.95)
+            double dropThreshold = 0.95,
+            LatencyTracker? latency = null)
         {
             _sendDelayMs = sendDelayMs;
             _queueCapacity = queueCapacity;
             _queuePolicy = queuePolicy;
             _dropThreshold = dropThreshold;
+            _latency = latency;
 
             Log.Information(
-                "[Dummy] DummyLightingFacade initialized (delay={Delay}ms, capacity={Cap}, policy={Policy}, threshold={Thr})",
-                _sendDelayMs, _queueCapacity, _queuePolicy, _dropThreshold);
+                "[Dummy] DummyLightingFacade initialized (delay={Delay}ms, capacity={Cap}, policy={Policy}, threshold={Thr}, latency={HasLat})",
+                _sendDelayMs, _queueCapacity, _queuePolicy, _dropThreshold, _latency != null);
         }
 
         #endregion コンストラクタ
@@ -243,12 +253,22 @@ namespace Lib.Application.Facades
         /// </summary>
         private void SimulateSend()
         {
+            var startTs = Stopwatch.GetTimestamp();
             _queueLength++;
             RaiseStatusChanged();
+
             Task.Run(async () =>
             {
                 await Task.Delay(_sendDelayMs);
                 _queueLength = Math.Max(0, _queueLength - 1);
+
+                // 遅延計測（注入時のみ）
+                if (_latency != null)
+                {
+                    var elapsedMs = (long)Stopwatch.GetElapsedTime(startTs).TotalMilliseconds;
+                    _latency.Record(elapsedMs);
+                }
+
                 RaiseStatusChanged();
             });
         }
