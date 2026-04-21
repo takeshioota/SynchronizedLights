@@ -3,13 +3,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lib.Application.Facades;
 using Lib.Application.Interfaces;
-using Lib.Application.UseCases;
 using Lib.Domain.Enums;
 using Lib.Domain.States;
 using Lib.Domain.ValueObjects;
-using Lib.Protocol.Builders;
-using Lib.Transport.Interfaces;
-using Lib.Transport.Transports;
 using Lib.Ui.Screens.ViewModels;
 using Lib.Ui.Screens.Views;
 using System.Windows;
@@ -23,23 +19,6 @@ namespace SynchronizedLights.UI.ViewModels
     public partial class MainWindowViewModel : ViewModelBase
     {
         #region フィールド
-        /// <summary>
-        /// ダミーコマンド生成処理
-        /// 概要：Preset機能の試験用として使用するコマンド生成クラス。
-        /// </summary>
-        private readonly DummyCommandBuilder _commandBuilder;
-
-        /// <summary>
-        /// ダミー送信処理
-        /// 概要：Preset機能の試験用として使用する送信処理クラス。
-        /// </summary>
-        private readonly DummyTransport _transport;
-
-        /// <summary>
-        /// Preset制御UseCase
-        /// 概要：Preset画面からの基本操作（色変更、点灯、消灯）を実行するUseCase。
-        /// </summary>
-        private readonly PresetUseCase _presetUseCase;
 
         /// <summary>
         /// ライティング制御ファセード
@@ -407,14 +386,18 @@ namespace SynchronizedLights.UI.ViewModels
         #region コンストラクタ
         /// <summary>
         /// MainWindowViewModelを生成する
-        /// 概要：画面切替に必要なUseCaseやダミー通信機能を初期化し、
-        /// 初期カテゴリに応じた画面ViewModelを設定する。
         /// </summary>
         public MainWindowViewModel()
+            : this(App.LightingFacade ?? new DummyLightingFacade())
         {
-            _commandBuilder = new DummyCommandBuilder();
-            _transport = new DummyTransport();
-            _presetUseCase = new PresetUseCase(_commandBuilder, _transport);
+        }
+
+        /// <summary>
+        /// MainWindowViewModelを生成する
+        /// </summary>
+        public MainWindowViewModel(ILightingFacade lighting)
+        {
+            _lighting = lighting;
             _lighting.StatusChanged += OnFacadeStatusChanged;
             UpdateCurrentViewModel();
             RefreshCategorySelection();
@@ -492,7 +475,7 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         private PresetViewModel CreatePresetViewModel()
         {
-            var viewModel = new PresetViewModel(_presetUseCase, _transport);
+            var viewModel = new PresetViewModel(_lighting);
             viewModel.ColorChanged += OnPresetColorChanged;
             viewModel.ApplyState(AppState.SelectedTarget, AppState.SelectedColor);
             return viewModel;

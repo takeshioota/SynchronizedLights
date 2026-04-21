@@ -2,9 +2,6 @@
   <Project Path="../../SynchrolightAPI/SynchrolightAPI.Core/SynchrolightAPI.Core.csproj" />
   <Project Path="Lib.Application/Lib.Application.csproj" />
   <Project Path="Lib.Domain/Lib.Domain.csproj" />
-  <Project Path="Lib.Infrastructure/Lib.Infrastructure.csproj" />
-  <Project Path="Lib.Protocol/Lib.Protocol.csproj" Id="f81e8dc6-96d5-414e-bdd5-02102ce064e6" />
-  <Project Path="Lib.Transport/Lib.Transport.csproj" Id="e8945920-d70e-4823-ba97-3fd34a2f1e1f" />
   <Project Path="Lib.Ui.Screens/Lib.Ui.Screens.csproj" />
   <Project Path="Lib.UiFramework/Lib.UiFramework.csproj" />
   <Project Path="SynchronizedLights.UI/SynchronizedLights.UI.csproj" />

@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using Lib.Application.Interfaces;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
-using Lib.Transport.Interfaces;
 
 namespace Lib.Ui.Screens.ViewModels
 {
@@ -11,22 +10,18 @@ namespace Lib.Ui.Screens.ViewModels
     /// Preset画面用ViewModel
     /// 概要：Preset画面における基本操作（色変更、点灯、消灯）の状態管理と
     /// コマンド実行を担当するViewModel。
-    /// UseCaseを通じて制御コマンド送信を行い、画面表示用の状態も保持する。
+    /// ILightingFacade 経由でファセードを呼び出し、
+    /// 画面表示用の状態も保持する。
     /// </summary>
     public partial class PresetViewModel : ObservableObject
     {
         #region フィールド
         /// <summary>
-        /// Preset制御UseCase
-        /// 概要：色変更、点灯、消灯などのPreset操作を実行するためのUseCase。
+        /// ライティング制御ファセード
+        /// 概要：UIと通信層の境界。Dummy / Real API を差し替えるための統一インターフェース。
         /// </summary>
-        private readonly IPresetUseCase _presetUseCase;
+        private readonly ILightingFacade _lighting;
 
-        /// <summary>
-        /// 送信処理インターフェース
-        /// 概要：送信状態やキュー件数を取得するために使用するTransport。
-        /// </summary>
-        private readonly ITransport _transport;
         #endregion フィールド
 
         #region プロパティ
@@ -75,12 +70,11 @@ namespace Lib.Ui.Screens.ViewModels
         #region コンストラクタ
         /// <summary>
         /// Preset画面用ViewModelを生成する。
-        /// 概要：UseCaseとTransportの依存を受け取り初期化する。
+        /// 概要：ILightingFacadeを受け取り初期化する。
         /// </summary>
-        public PresetViewModel(IPresetUseCase presetUseCase, ITransport transport)
+        public PresetViewModel(ILightingFacade lighting)
         {
-            _presetUseCase = presetUseCase;
-            _transport = transport;
+            _lighting = lighting;
             RefreshStatus();
         }
 
@@ -139,45 +133,57 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>
         /// 点灯コマンド
         /// 概要：現在選択中の対象と色を使用して点灯操作を実行し、状態表示を更新する。
-        /// STEP⑨対応：固定値ではなく、現在の SelectedTarget / CurrentColor と連動して送信・表示する。
+        /// ILightingFacade.SetColorAsync 経由で送信。
         /// </summary>
         [RelayCommand]
         private async Task TurnOnAsync()
         {
-            await _presetUseCase.TurnOnAsync(SelectedTarget, CurrentColor);
-            RefreshStatus($"TurnOn sent : {SelectedTarget} / {CurrentColorLabel}");
+            try
+            {
+                await _lighting.SetColorAsync(SelectedTarget, CurrentColor);
+                RefreshStatus($"TurnOn sent : {SelectedTarget} / {CurrentColorLabel}");
+            }
+            catch (Exception ex)
+            {
+                RefreshStatus($"TurnOn failed : {ex.Message}");
+            }
         }
 
         /// <summary>
         /// 消灯コマンド
-        /// 概要：現在選択中の対象を使用して消灯操作を実行し、状態表示を更新する。
-        /// STEP⑨対応：固定値ではなく、現在の SelectedTarget と連動して送信・表示する。
+        /// 概要：現在選択中の対象に対して黒(0,0,0)色を設定することで消灯する。
+        /// ILightingFacade.SetColorAsync 経由で送信。
         /// </summary>
         [RelayCommand]
         private async Task TurnOffAsync()
         {
-            await _presetUseCase.TurnOffAsync(SelectedTarget);
-            RefreshStatus($"TurnOff sent : {SelectedTarget}");
+            try
+            {
+                await _lighting.SetColorAsync(SelectedTarget, new Rgb(0, 0, 0));
+                RefreshStatus($"TurnOff sent : {SelectedTarget}");
+            }
+            catch (Exception ex)
+            {
+                RefreshStatus($"TurnOff failed : {ex.Message}");
+            }
         }
         #endregion コマンド
 
         #region メソッド
         /// <summary>
         /// 状態表示を更新する
-        /// 概要：Transportから現在のキュー件数を取得し、
+        /// 概要：ファセードから現在のキュー件数を取得し、
         /// 状態メッセージとキュー表示を最新化する。
         /// </summary>
         private void RefreshStatus(string? message = null)
         {
-            var status = _transport.GetStatus();
             StatusText = message ?? "Preset ready";
-            QueueText = $"Queue: {status.QueueLength}";
+            QueueText = $"Queue: {_lighting.QueueLength}";
         }
 
         /// <summary>
         /// 外部状態をPreset画面へ反映する
         /// 概要：MainWindow 側で保持している対象・色の状態をPreset画面へ同期する。
-        /// STEP⑨ではこのメソッド経由で Target / Color を連動させる。
         /// </summary>
         public void ApplyState(Target target, Rgb color)
         {
