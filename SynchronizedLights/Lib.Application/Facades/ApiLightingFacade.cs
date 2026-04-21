@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Lib.Application.Interfaces;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
+using Serilog;
 
 // API側型のエイリアス：UI側と名前が衝突するので明示的に分離
 using ApiRgb = SynchrolightAPI.Domain.Rgb;
@@ -17,8 +18,10 @@ namespace Lib.Application.Facades
     /// <summary>
     /// 実API実装
     /// 概要：SynchrolightAPI.Core の LightingService / MultiPortTransport / TxWorkerService を
-    /// 統合し、ILightingFacade を提供する。実機2.4GHz発信機制御時に使用。
-    /// appsettings.json の Lighting:Mode = "Real" で有効化される。
+    ///       統合し、ILightingFacade を提供する。実機2.4GHz発信機制御時に使用。
+    ///       QueuePolicy=DropNewest 指定時は、MultiPortTransport の QueueLength が
+    ///       閾値を超えた段階で、Transport に送り込む前に Drop する（API 側 BoundedChannel
+    ///       に負荷をかけないための前段フィルタ）。
     /// </summary>
     public class ApiLightingFacade : ILightingFacade, IDisposable
     {
@@ -31,6 +34,18 @@ namespace Lib.Application.Facades
         private readonly CancellationTokenSource _workerCts;
         private string? _lastError;
         private bool _disposed;
+
+        /// <summary>キュー容量（Drop 判定用に保持）</summary>
+        private readonly int _queueCapacity;
+
+        /// <summary>キュー満杯ポリシー ("Wait" or "DropNewest")</summary>
+        private readonly string _queuePolicy;
+
+        /// <summary>ドロップ判定しきい値（0.0〜1.0、0.95 なら 95% で Drop）</summary>
+        private readonly double _dropThreshold;
+
+        /// <summary>累積ドロップ回数</summary>
+        private long _droppedCount;
 
         #endregion フィールド
 
@@ -52,6 +67,9 @@ namespace Lib.Application.Facades
         public string? LastError
             => _lastError ?? _transport.GetStatus().LastError;
 
+        /// <summary>累積ドロップ回数（KPI 用）</summary>
+        public long DroppedCount => _droppedCount;
+
         public event EventHandler? StatusChanged;
 
         #endregion プロパティ
@@ -59,12 +77,22 @@ namespace Lib.Application.Facades
         #region コンストラクタ
 
         /// <summary>
-        /// ApiLightingFacade を生成する。
+        /// ApiLightingFacade を生成する
         /// </summary>
         /// <param name="queueCapacity">送信キュー容量（既定 256）</param>
         /// <param name="sendIntervalMs">送信間隔 ms（既定 5）</param>
-        public ApiLightingFacade(int queueCapacity = 256, int sendIntervalMs = 5)
+        /// <param name="queuePolicy">"Wait" or "DropNewest"（既定 Wait）</param>
+        /// <param name="dropThreshold">ドロップ判定の使用率閾値（既定 0.95）</param>
+        public ApiLightingFacade(
+            int queueCapacity = 256,
+            int sendIntervalMs = 5,
+            string queuePolicy = "Wait",
+            double dropThreshold = 0.95)
         {
+            _queueCapacity = queueCapacity;
+            _queuePolicy = queuePolicy;
+            _dropThreshold = dropThreshold;
+
             // Logger
             _loggerFactory = LoggerFactory.Create(builder =>
             {
@@ -104,11 +132,43 @@ namespace Lib.Application.Facades
             _workerCts = new CancellationTokenSource();
             _ = _worker.StartAsync(_workerCts.Token);
 
-            Debug.WriteLine(
-                $"[Api] ApiLightingFacade initialized (queue={queueCapacity}, interval={sendIntervalMs}ms)");
+            Log.Information(
+                "[Api] ApiLightingFacade initialized (queue={Queue}, interval={Interval}ms, policy={Policy}, threshold={Thr})",
+                queueCapacity, sendIntervalMs, queuePolicy, dropThreshold);
         }
 
         #endregion コンストラクタ
+
+        #region ポリシー判定
+
+        /// <summary>
+        /// 現在のキュー状況とポリシーから、コマンドをドロップすべきか判定する
+        /// 概要：QueuePolicy が "DropNewest" のときだけ有効。
+        ///       Transport の QueueLength が容量 × 閾値を超えていたら Drop して true を返す。
+        /// </summary>
+        private bool ShouldDropCommand(string commandName)
+        {
+            if (!string.Equals(_queuePolicy, "DropNewest", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var threshold = (int)(_queueCapacity * _dropThreshold);
+            var current = _transport.GetStatus().QueueLength;
+            if (current >= threshold)
+            {
+                System.Threading.Interlocked.Increment(ref _droppedCount);
+                Log.Warning(
+                    "[Api] Queue full ({Length}/{Capacity}), dropping {Command}. TotalDropped={Total}",
+                    current, _queueCapacity, commandName, _droppedCount);
+                _lastError = $"送信キュー満杯：{commandName} コマンドをドロップ（累積 {_droppedCount} 件）";
+                RaiseStatusChanged();
+                return true;
+            }
+            return false;
+        }
+
+        #endregion ポリシー判定
 
         #region 接続管理 (ILightingFacade)
 
@@ -130,7 +190,7 @@ namespace Lib.Application.Facades
             catch (Exception ex)
             {
                 _lastError = ex.Message;
-                Debug.WriteLine($"[Api] Connect failed: {ex.Message}");
+                Log.Warning("[Api] Connect failed: {Err}", ex.Message);
             }
             finally
             {
@@ -174,6 +234,8 @@ namespace Lib.Application.Facades
 
         public async Task SetColorAsync(Target target, Rgb color, CancellationToken ct = default)
         {
+            if (ShouldDropCommand("SetColor")) return;
+
             try
             {
                 await InternalSetColorAsync(target, color, ct);
@@ -191,6 +253,8 @@ namespace Lib.Application.Facades
 
         public async Task FlashAsync(Target target, int speedMs, Rgb color, CancellationToken ct = default)
         {
+            if (ShouldDropCommand("Flash")) return;
+
             // クライアント側実装（API未対応）：1サイクル on/off
             var halfMs = Math.Max(50, speedMs / 2);
             var black = new Rgb(0, 0, 0);
@@ -209,6 +273,8 @@ namespace Lib.Application.Facades
 
         public async Task FadeInAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default)
         {
+            if (ShouldDropCommand("FadeIn")) return;
+
             // クライアント側実装：10ステップで段階補間
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
@@ -238,6 +304,8 @@ namespace Lib.Application.Facades
 
         public async Task FadeOutAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default)
         {
+            if (ShouldDropCommand("FadeOut")) return;
+
             // クライアント側実装：10ステップで段階補間（減衰）
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
@@ -267,10 +335,11 @@ namespace Lib.Application.Facades
 
         public async Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default)
         {
-            // Phase 1時点ではAPI側にシーケンス再生（A1コマンド）が未実装。
-            // 将来 LightingService に ExecuteSequenceAsync が追加されたら差し替える。
-            Debug.WriteLine(
-                $"[Api] Sequence execution pending API support. target={target}, id={sequenceId}");
+            if (ShouldDropCommand("Sequence")) return;
+
+            Log.Information(
+                "[Api] Sequence execution pending API support. target={Target}, id={Id}",
+                target, sequenceId);
             await Task.CompletedTask;
             RaiseStatusChanged();
         }

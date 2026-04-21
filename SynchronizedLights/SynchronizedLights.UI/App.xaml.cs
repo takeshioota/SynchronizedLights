@@ -31,7 +31,7 @@ namespace SynchronizedLights.UI
         public static UserStateService UserStateService { get; private set; } = new UserStateService();
 
         /// <summary>
-        /// 起動時に読み込んだ UserState（MainWindow に反映するために保持）
+        /// 起動時に読み込んだ UserState
         /// </summary>
         public static UserState? LoadedUserState { get; private set; }
 
@@ -67,9 +67,23 @@ namespace SynchronizedLights.UI
             var queueCapacity = int.TryParse(config["Lighting:SendQueueCapacity"], out var q) ? q : 256;
             var sendIntervalMs = int.TryParse(config["Lighting:SendIntervalMs"], out var s) ? s : 5;
 
+            // ----- キュー間引きポリシー-----
+            var queuePolicy = config["Lighting:QueuePolicy"] ?? "Wait";
+            var dropThreshold = double.TryParse(
+                config["Lighting:QueueDropThreshold"],
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var th) ? th : 0.95;
+
+            // Dummy 用シミュレート送信遅延
+            var dummySendDelayMs = int.TryParse(
+                config["Lighting:DummySendDelayMs"], out var d) ? d : 100;
+
             Log.Information(
-                "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}",
-                LightingMode, queueCapacity, sendIntervalMs);
+                "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
+                "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}",
+                LightingMode, queueCapacity, sendIntervalMs,
+                queuePolicy, dropThreshold, dummySendDelayMs);
 
             // ----- UserState 読込 -----
             LoadedUserState = UserStateService.Load();
@@ -83,12 +97,19 @@ namespace SynchronizedLights.UI
             // ----- Facade 生成 -----
             LightingFacade = LightingMode switch
             {
-                "Real" => new ApiLightingFacade(queueCapacity, sendIntervalMs),
-                _ => new DummyLightingFacade()
+                "Real" => new ApiLightingFacade(
+                    queueCapacity: queueCapacity,
+                    sendIntervalMs: sendIntervalMs,
+                    queuePolicy: queuePolicy,
+                    dropThreshold: dropThreshold),
+                _ => new DummyLightingFacade(
+                    sendDelayMs: dummySendDelayMs,
+                    queueCapacity: queueCapacity,
+                    queuePolicy: queuePolicy,
+                    dropThreshold: dropThreshold)
             };
 
             // ----- セッション終了時-----
-            // Windows ログオフ・シャットダウン時の保存保険
             SessionEnding += (sender, args) =>
             {
                 Log.Information("SessionEnding detected: {Reason}", args.ReasonSessionEnding);
@@ -105,6 +126,9 @@ namespace SynchronizedLights.UI
 
             // ----- UserState 保存 -----
             SaveUserStateSafely();
+
+            // ----- ドロップ累積の最終ログ出力-----
+            LogDroppedCount();
 
             // ----- Facade 破棄 -----
             if (LightingFacade is IDisposable disposable)
@@ -128,9 +152,27 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
+        /// ドロップ累計をログに出力する
+        /// 概要：Dummy / Api どちらの実装でも DroppedCount プロパティがあれば値を出力する。
+        ///       ILightingFacade のインタフェース追加を避けるため dynamic で参照。
+        /// </summary>
+        private static void LogDroppedCount()
+        {
+            try
+            {
+                dynamic? facade = LightingFacade;
+                if (facade == null) return;
+                long dropped = facade.DroppedCount;
+                Log.Information("KPI: TotalDropped={Dropped}", dropped);
+            }
+            catch
+            {
+                // DroppedCount プロパティが無い実装でも無視
+            }
+        }
+
+        /// <summary>
         /// UserState を安全に保存する
-        /// 概要：MainVm 参照を優先して使い、null の場合は MainWindow.DataContext をフォールバック。
-        /// OnExit / SessionEnding のどちらからでも呼び出せる。
         /// </summary>
         private static void SaveUserStateSafely()
         {
