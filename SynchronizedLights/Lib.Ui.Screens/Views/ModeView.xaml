@@ -46,34 +46,50 @@
                                 CommandParameter="{Binding}"
                                 Style="{StaticResource GrandMaSelectableButtonStyle}"
                                 Tag="{Binding IsSelected}"
-                                MinWidth="360"
-                                MinHeight="130"
+                                FocusVisualStyle="{x:Null}"
+                                Width="380"
+                                Height="130"
                                 Margin="8"
-                                Padding="0">
+                                Padding="0"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="14"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <!-- 左端のアクセント色バー -->
                                 <Rectangle Grid.Column="0"
                                            Fill="{Binding AccentBrush}"
-                                           HorizontalAlignment="Stretch"
-                                           VerticalAlignment="Stretch"/>
-                                <!-- モード名 + 説明 -->
-                                <StackPanel Grid.Column="1"
-                                            Orientation="Vertical"
-                                            VerticalAlignment="Center"
-                                            Margin="16,10,14,10">
-                                    <TextBlock Text="{Binding DisplayName}"
+                                           Width="6"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Stretch"
+                                           Margin="0,14,0,14"
+                                           RadiusX="3"
+                                           RadiusY="3"/>
+                                <Grid Grid.Column="1"
+                                      Margin="10,18,14,14">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="8"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    <!-- タイトル行：常にタイル上部 18px 位置 -->
+                                    <TextBlock Grid.Row="0"
+                                               Text="{Binding DisplayName}"
                                                FontSize="17"
                                                FontWeight="Bold"
-                                               Margin="0,0,0,6"/>
-                                    <TextBlock Text="{Binding Description}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <!-- 説明行：MaxHeight + TextTrimming で最大2行＋省略 -->
+                                    <TextBlock Grid.Row="2"
+                                               Text="{Binding Description}"
                                                FontSize="12"
                                                Opacity="0.85"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
+                                               TextWrapping="Wrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxHeight="40"
+                                               VerticalAlignment="Top"/>
+                                </Grid>
                             </Grid>
                         </Button>
                     </DataTemplate>

@@ -110,8 +110,8 @@ namespace Lib.Ui.Screens.ViewModels
                 id: 1,
                 nameJa: "点滅",
                 nameEn: "Flash",
-                description: "等間隔で繰り返し点滅します。速度は上部のSpeedプリセット、またはPresetパネルのスライダーで調整できます。",
-                accentColorHex: "#FFC107"));
+                description: "等間隔で繰り返し点滅します。速度はSpeedプリセットで調整できます。",
+                accentColorHex: "#FFEB3B"));
 
             Modes.Add(new ModeItemViewModel(
                 id: 2,

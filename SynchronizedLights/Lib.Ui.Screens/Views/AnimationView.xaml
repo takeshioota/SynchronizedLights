@@ -46,27 +46,39 @@
                                 CommandParameter="{Binding}"
                                 Style="{StaticResource GrandMaSelectableButtonStyle}"
                                 Tag="{Binding IsSelected}"
-                                MinWidth="170"
-                                MinHeight="100"
+                                FocusVisualStyle="{x:Null}"
+                                Width="170"
+                                Height="110"
                                 Margin="6"
-                                Padding="8">
-                            <StackPanel Orientation="Vertical"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center">
-                                <Rectangle Width="44"
+                                Padding="0"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="6"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <!-- アイコン（常に中央上部） -->
+                                <Rectangle Grid.Row="0"
+                                           Width="44"
                                            Height="44"
                                            RadiusX="10"
                                            RadiusY="10"
                                            Fill="{Binding IconBrush}"
                                            Stroke="White"
                                            StrokeThickness="1"
-                                           Margin="0,0,0,6"/>
-                                <TextBlock Text="{Binding Name}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                                <!-- 名前（常にタイル下部） -->
+                                <TextBlock Grid.Row="2"
+                                           Text="{Binding Name}"
                                            FontSize="13"
                                            FontWeight="SemiBold"
                                            TextAlignment="Center"
-                                           HorizontalAlignment="Center"/>
-                            </StackPanel>
+                                           HorizontalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </Grid>
                         </Button>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
