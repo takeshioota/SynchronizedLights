@@ -1,14 +1,17 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+﻿using System.Windows.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Lib.Application.Facades;
+using Lib.Application.Interfaces;
 using Lib.Application.UseCases;
 using Lib.Domain.Enums;
 using Lib.Domain.States;
 using Lib.Domain.ValueObjects;
 using Lib.Protocol.Builders;
+using Lib.Transport.Interfaces;
 using Lib.Transport.Transports;
 using Lib.Ui.Screens.ViewModels;
-using SynchronizedLights.UI.ViewModels;
-using Lib.Transport.Interfaces;
+using Lib.Ui.Screens.Views;
 
 namespace SynchronizedLights.UI.ViewModels
 {
@@ -37,6 +40,54 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：Preset画面からの基本操作（色変更、点灯、消灯）を実行するUseCase。
         /// </summary>
         private readonly PresetUseCase _presetUseCase;
+
+        /// <summary>
+        /// ライティング制御ファセード
+        /// 概要：UIと通信層の境界。現時点はDummy実装。
+        /// SynchrolightAPI.Core連携の実装に差し替える。
+        /// </summary>
+        private readonly ILightingFacade _lighting = new DummyLightingFacade();
+        /// <summary>
+        /// エラートースト自動消去タイマー（STEP6-B）
+        /// 概要：ErrorMessageが設定されてから一定時間経過で自動消去するタイマー。
+        /// </summary>
+        private DispatcherTimer? _errorDismissTimer;
+
+        /// <summary>
+        /// エラートースト表示時間（秒）
+        /// </summary>
+        private const int ErrorToastDurationSeconds = 5;
+
+        /// <summary>
+        /// カラーピッカー表示コマンド
+        /// 概要：DlgColorPicker をモーダル表示し、選択された色を
+        /// AppState.SelectedColor に反映する。
+        /// 起動時は現在のAppState.SelectedColorを初期色として渡す。
+        /// </summary>
+        [RelayCommand]
+        private void OpenColorPicker()
+        {
+            var dialog = new DlgColorPicker
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            dialog.SetInitialColor(
+                AppState.SelectedColor.R,
+                AppState.SelectedColor.G,
+                AppState.SelectedColor.B);
+
+            if (dialog.ShowDialog() == true)
+            {
+                AppState.SelectedColor = new Rgb(
+                    dialog.SelectedR,
+                    dialog.SelectedG,
+                    dialog.SelectedB);
+                OnPropertyChanged(nameof(CurrentColorLabel));
+                StatusMessage =
+                    $"Custom color : R={dialog.SelectedR}, G={dialog.SelectedG}, B={dialog.SelectedB}";
+                SyncPresetStateIfActive();
+            }
+        }
         #endregion フィールド
 
         #region プロパティ
@@ -93,6 +144,27 @@ namespace SynchronizedLights.UI.ViewModels
         /// AppStateの速度値を画面表示用に整形して返す。
         /// </summary>
         public string CurrentSpeedLabel => $"{AppState.SpeedValueMs} ms";
+
+        /// <summary>
+        /// 編集可能な速度値
+        /// 概要：Preset画面のスライダー・数値入力からの双方向バインド用プロパティ。
+        /// </summary>
+        public int EditableSpeedValueMs
+        {
+            get => AppState.SpeedValueMs;
+            set
+            {
+                var clamped = Math.Clamp(value, 0, 10000);
+                if (AppState.SpeedValueMs != clamped)
+                {
+                    AppState.SpeedValueMs = clamped;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CurrentSpeedLabel));
+                    RefreshSpeedSelection();
+                    StatusMessage = $"Speed set : {CurrentSpeedLabel}";
+                }
+            }
+        }
 
         /// <summary>
         /// 現在色表示文字列
@@ -160,6 +232,12 @@ namespace SynchronizedLights.UI.ViewModels
         /// Group05ターゲットが選択中かどうか
         /// </summary>
         public bool IsTargetGroup05Selected => AppState.SelectedTarget == Target.Group05;
+
+        /// <summary>
+        /// Group06ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup06Selected => AppState.SelectedTarget == Target.Group06;
+
         #endregion ターゲット
 
         #region スプレッド
@@ -203,7 +281,39 @@ namespace SynchronizedLights.UI.ViewModels
         /// エラーがない場合は "-" を表示する。
         /// </summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsErrorVisible))]
         private string errorMessage = "-";
+
+        /// <summary>
+        /// エラートースト表示可否
+        /// 概要：ErrorMessageが空・未設定以外の場合にtrue。
+        /// XAMLのDataTriggerで表示/非表示を切り替える。
+        /// </summary>
+        public bool IsErrorVisible
+            => !string.IsNullOrEmpty(ErrorMessage) && ErrorMessage != "-";
+
+        /// <summary>
+        /// ストロボ停止中かどうか
+        /// 概要：ONの間、ストロボ発光を停止する。
+        /// </summary>
+        [ObservableProperty]
+        private bool isStrobeOffActive;
+
+        /// <summary>
+        /// PortA状態表示
+        /// 概要：TopBarに表示するPortAの接続状態。
+        /// ファセードの接続ポートリストのうち、接続順で先頭のものを割り当てる。
+        /// </summary>
+        [ObservableProperty]
+        private string portAStatusLabel = "PortA : -";
+
+        /// <summary>
+        /// PortB状態表示
+        /// 概要：TopBarに表示するPortBの接続状態。
+        /// ファセードの接続ポートリストのうち、接続順で2番目のものを割り当てる。
+        /// </summary>
+        [ObservableProperty]
+        private string portBStatusLabel = "PortB : -";
 
         /// <summary>
         /// Sequence01が定義済みかどうか
@@ -228,6 +338,23 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [ObservableProperty]
         private bool isSequence04Defined = false;
+        /// <summary>
+        /// Sequence05が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence05Defined = false;
+
+        /// <summary>
+        /// Sequence06が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence06Defined = false;
+
+        /// <summary>
+        /// Sequence07が定義済みかどうか
+        /// </summary>
+        [ObservableProperty]
+        private bool isSequence07Defined = false;
         #endregion プロパティ
 
         #region コンストラクタ
@@ -241,7 +368,7 @@ namespace SynchronizedLights.UI.ViewModels
             _commandBuilder = new DummyCommandBuilder();
             _transport = new DummyTransport();
             _presetUseCase = new PresetUseCase(_commandBuilder, _transport);
-
+            _lighting.StatusChanged += OnFacadeStatusChanged;
             UpdateCurrentViewModel();
             RefreshCategorySelection();
             RefreshTargetSelection();
@@ -263,6 +390,33 @@ namespace SynchronizedLights.UI.ViewModels
         }
         #endregion OnCurrentCategoryChanged
 
+        #region OnIsStrobeOffActiveChanged
+        /// <summary>
+        /// ストロボ停止トグル変更時の処理
+        /// 概要：ストロボ停止状態が切り替わった際にステータス表示を更新する。
+        /// </summary>
+        partial void OnIsStrobeOffActiveChanged(bool value)
+        {
+            StatusMessage = value ? "Strobe stopped (保持)" : "Strobe normal";
+        }
+        #endregion OnIsStrobeOffActiveChanged
+
+        #region OnErrorMessageChanged
+
+        /// <summary>
+        /// ErrorMessage変更時の処理（STEP6-B）
+        /// 概要：エラーが設定されたら自動消去タイマーを起動する。
+        /// </summary>
+        partial void OnErrorMessageChanged(string value)
+        {
+            if (!string.IsNullOrEmpty(value) && value != "-")
+            {
+                StartErrorAutoDismissTimer();
+            }
+        }
+
+        #endregion OnErrorMessageChanged
+
         #region UpdateCurrentViewModel
         /// <summary>
         /// 表示中の画面ViewModelを更新する
@@ -275,9 +429,9 @@ namespace SynchronizedLights.UI.ViewModels
             {
                 UiCategory.Preset => CreatePresetViewModel(),
                 UiCategory.Mode => new ModeViewModel(),
-                UiCategory.Animation => new AnimationViewModel(),
+                UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
-                UiCategory.Setting => new SettingViewModel(_transport),
+                UiCategory.Setting => new SettingViewModel(_lighting),
                 _ => CreatePresetViewModel()
             };
         }
@@ -344,6 +498,7 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(IsTargetGroup03Selected));
             OnPropertyChanged(nameof(IsTargetGroup04Selected));
             OnPropertyChanged(nameof(IsTargetGroup05Selected));
+            OnPropertyChanged(nameof(IsTargetGroup06Selected));
         }
 
         /// <summary>
@@ -359,16 +514,68 @@ namespace SynchronizedLights.UI.ViewModels
 
         /// <summary>
         /// Transport状態を画面へ反映する。
-        /// 概要：接続状態と最終エラーを取得し、画面表示・無効化判定へ反映する。
+        /// 概要：ファセードの接続状態・エラーを取得し、
+        /// IsTransportConnected、ErrorMessage、PortA/PortB表示を更新する。
         /// </summary>
         private void RefreshTransportState()
         {
-            var status = _transport.GetStatus();
-
-            IsTransportConnected = status.IsConnected;
-            ErrorMessage = string.IsNullOrWhiteSpace(status.LastError) ? "-" : status.LastError;
-
+            IsTransportConnected = _lighting.IsConnected;
+            ErrorMessage = _lighting.LastError ?? "-";
+            UpdatePortStatusLabels();
             OnPropertyChanged(nameof(ConnectionStatusLabel));
+        }
+
+        /// <summary>
+        /// PortA/PortB 表示文字列を更新する
+        /// 概要：ファセードの接続ポートリストを参照し、
+        /// 接続順で先頭をPortA、2番目をPortBとして表示する。
+        /// </summary>
+        private void UpdatePortStatusLabels()
+        {
+            var connected = _lighting.ConnectedPorts;
+            PortAStatusLabel = connected.Count >= 1
+                ? $"PortA : {connected[0]} - Connected"
+                : "PortA : -";
+            PortBStatusLabel = connected.Count >= 2
+                ? $"PortB : {connected[1]} - Connected"
+                : "PortB : -";
+        }
+
+        /// <summary>
+        /// ファセードの状態変化通知ハンドラ
+        /// 概要：Setting画面でポート接続/切断が行われた際に発火する。
+        /// UIスレッドでRefreshTransportStateを実行し、TopBarの表示を即時反映する。
+        /// </summary>
+        private void OnFacadeStatusChanged(object? sender, EventArgs e)
+        {
+            // 注意: Application は System.Windows.Application のこと。
+            //       Lib.Application 名前空間との衝突を避けるため完全修飾で書く。
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                RefreshTransportState();
+            });
+        }
+        /// <summary>
+        /// エラートースト自動消去タイマーを起動する（STEP6-B）
+        /// 概要：ErrorToastDurationSeconds秒経過後にエラーを自動消去する。
+        /// 既存タイマーがあれば停止してから再起動する。
+        /// </summary>
+        private void StartErrorAutoDismissTimer()
+        {
+            if (_errorDismissTimer == null)
+            {
+                _errorDismissTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(ErrorToastDurationSeconds)
+                };
+                _errorDismissTimer.Tick += (s, e) =>
+                {
+                    _errorDismissTimer?.Stop();
+                    _lighting.ClearError();
+                };
+            }
+            _errorDismissTimer.Stop();
+            _errorDismissTimer.Start();
         }
         #endregion メソッド
 
@@ -378,50 +585,35 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：現在の画面カテゴリをPresetに切り替える。
         /// </summary>
         [RelayCommand]
-        private void ShowPreset()
-        {
-            CurrentCategory = UiCategory.Preset;
-        }
+        private void ShowPreset() => CurrentCategory = UiCategory.Preset;
 
         /// <summary>
         /// Mode画面表示コマンド
         /// 概要：現在の画面カテゴリをModeに切り替える。
         /// </summary>
         [RelayCommand]
-        private void ShowMode()
-        {
-            CurrentCategory = UiCategory.Mode;
-        }
+        private void ShowMode() => CurrentCategory = UiCategory.Mode;
 
         /// <summary>
         /// Animation画面表示コマンド
         /// 概要：現在の画面カテゴリをAnimationに切り替える。
         /// </summary>
         [RelayCommand]
-        private void ShowAnimation()
-        {
-            CurrentCategory = UiCategory.Animation;
-        }
+        private void ShowAnimation() => CurrentCategory = UiCategory.Animation;
 
         /// <summary>
         /// Sequence画面表示コマンド
         /// 概要：現在の画面カテゴリをSequenceに切り替える。
         /// </summary>
         [RelayCommand]
-        private void ShowSequence()
-        {
-            CurrentCategory = UiCategory.Sequence;
-        }
+        private void ShowSequence() => CurrentCategory = UiCategory.Sequence;
 
         /// <summary>
         /// Setting画面表示コマンド
         /// 概要：現在の画面カテゴリをSettingに切り替える。
         /// </summary>
         [RelayCommand]
-        private void ShowSetting()
-        {
-            CurrentCategory = UiCategory.Setting;
-        }
+        private void ShowSetting() => CurrentCategory = UiCategory.Setting;
         /// <summary>
         /// ALL選択コマンド
         /// 概要：現在の対象をALLに設定する。
@@ -499,6 +691,19 @@ namespace SynchronizedLights.UI.ViewModels
             RefreshTargetSelection();
             SyncPresetStateIfActive();
         }
+
+        /// <summary>
+        /// Group06選択コマンド
+        /// </summary>
+        [RelayCommand]
+        private void SelectTargetGroup06()
+        {
+            AppState.SelectedTarget = Target.Group06;
+            OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
+        }
+
         /// <summary>
         /// Flash実行コマンド
         /// 概要：現在対象に対してFlash操作を実行する。
@@ -516,10 +721,10 @@ namespace SynchronizedLights.UI.ViewModels
 
             try
             {
-                await _presetUseCase.ExecuteFlashAsync(
+                await _lighting.FlashAsync(
                     AppState.SelectedTarget,
-                    AppState.SelectedColor,
-                    AppState.SpeedValueMs);
+                    AppState.SpeedValueMs,
+                    AppState.SelectedColor);
 
                 StatusMessage = $"Flash executed for {CurrentTargetLabel}";
             }
@@ -531,6 +736,7 @@ namespace SynchronizedLights.UI.ViewModels
 
             RefreshTransportState();
         }
+
         /// <summary>
         /// FadeIn実行コマンド
         /// 概要：現在対象に対してFadeIn操作を実行する。
@@ -548,19 +754,17 @@ namespace SynchronizedLights.UI.ViewModels
 
             try
             {
-                await _presetUseCase.ExecuteFadeInAsync(
+                await _lighting.FadeInAsync(
                     AppState.SelectedTarget,
-                    AppState.SelectedColor,
-                    AppState.SpeedValueMs);
+                    AppState.SpeedValueMs,
+                    AppState.SelectedColor);
 
                 StatusMessage = $"FadeIn executed for {CurrentTargetLabel}";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"FadeIn failed: {ex.Message}";
-                ErrorMessage = ex.Message;
             }
-
             RefreshTransportState();
         }
 
@@ -581,39 +785,40 @@ namespace SynchronizedLights.UI.ViewModels
 
             try
             {
-                await _presetUseCase.ExecuteFadeOutAsync(
+                await _lighting.FadeOutAsync(
                     AppState.SelectedTarget,
-                    AppState.SelectedColor,
-                    AppState.SpeedValueMs);
+                    AppState.SpeedValueMs,
+                    AppState.SelectedColor);
 
                 StatusMessage = $"FadeOut executed for {CurrentTargetLabel}";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"FadeOut failed: {ex.Message}";
-                ErrorMessage = ex.Message;
             }
 
             RefreshTransportState();
         }
 
         /// <summary>
-        /// StrobeOff実行コマンド
-        /// 概要：現在対象に対してStrobeOff操作を実行する。
+        /// ストロボ停止トグルコマンド
+        /// 概要：ストロボ停止状態をトグル切替する。
         /// </summary>
         [RelayCommand]
-        private void ExecuteStrobeOff()
+        private void ToggleStrobeOff()
         {
-            RefreshTransportState();
+            IsStrobeOffActive = !IsStrobeOffActive;
+        }
 
-            if (!IsTransportConnected)
-            {
-                StatusMessage = "StrobeOff skipped : transport disconnected";
-                return;
-            }
-
-            StatusMessage = $"StrobeOff executed for {CurrentTargetLabel}";
-            RefreshTransportState();
+        /// <summary>
+        /// エラートースト手動消去コマンド（STEP6-B）
+        /// 概要：トーストの×ボタン押下時に、ファセードのエラーと自動消去タイマーをクリアする。
+        /// </summary>
+        [RelayCommand]
+        private void DismissError()
+        {
+            _errorDismissTimer?.Stop();
+            _lighting.ClearError();
         }
 
         /// <summary>
@@ -623,10 +828,8 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ApplySpeed01()
         {
-            AppState.SpeedValueMs = 250;
+            EditableSpeedValueMs = 250;
             StatusMessage = $"Speed01 applied : {CurrentSpeedLabel}";
-            OnPropertyChanged(nameof(CurrentSpeedLabel));
-            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -636,10 +839,8 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ApplySpeed02()
         {
-            AppState.SpeedValueMs = 500;
+            EditableSpeedValueMs = 500;
             StatusMessage = $"Speed02 applied : {CurrentSpeedLabel}";
-            OnPropertyChanged(nameof(CurrentSpeedLabel));
-            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -649,10 +850,8 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ApplySpeed03()
         {
-            AppState.SpeedValueMs = 1000;
+            EditableSpeedValueMs = 1000;
             StatusMessage = $"Speed03 applied : {CurrentSpeedLabel}";
-            OnPropertyChanged(nameof(CurrentSpeedLabel));
-            RefreshSpeedSelection();
         }
 
         /// <summary>
@@ -662,84 +861,81 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void ApplySpeed04()
         {
-            AppState.SpeedValueMs = 2000;
+            EditableSpeedValueMs = 2000;
             StatusMessage = $"Speed04 applied : {CurrentSpeedLabel}";
-            OnPropertyChanged(nameof(CurrentSpeedLabel));
-            RefreshSpeedSelection();
         }
+
         /// <summary>
         /// Sequence01実行コマンド
         /// 概要：Sequence01ボタン押下時に状態表示を更新する。
-        /// STEP⑩ではまずCommand接続の確認を行う。
         /// </summary>
         [RelayCommand]
         private void ExecuteSequence01()
         {
-            if (!IsSequence01Defined)
-            {
-                StatusMessage = "Sequence01 is undefined";
-                return;
-            }
-
+            if (!IsSequence01Defined) { StatusMessage = "Sequence01 is undefined"; return; }
             StatusMessage = "Sequence executed : Sequence01";
         }
 
         /// <summary>
         /// Sequence02実行コマンド
         /// 概要：Sequence02ボタン押下時に状態表示を更新する。
-        /// STEP⑩ではまずCommand接続の確認を行う。
         /// </summary>
         [RelayCommand]
         private void ExecuteSequence02()
         {
-            if (!IsSequence02Defined)
-            {
-                StatusMessage = "Sequence02 is undefined";
-                return;
-            }
-
+            if (!IsSequence02Defined) { StatusMessage = "Sequence02 is undefined"; return; }
             StatusMessage = "Sequence executed : Sequence02";
         }
 
         /// <summary>
         /// Sequence03実行コマンド
         /// 概要：Sequence03ボタン押下時に状態表示を更新する。
-        /// STEP⑩ではまずCommand接続の確認を行う。
         /// </summary>
         [RelayCommand]
         private void ExecuteSequence03()
         {
-            if (!IsSequence03Defined)
-            {
-                StatusMessage = "Sequence03 is undefined";
-                return;
-            }
-
+            if (!IsSequence03Defined) { StatusMessage = "Sequence03 is undefined"; return; }
             StatusMessage = "Sequence executed : Sequence03";
         }
 
-        /// <summary>
-        /// Sequence04実行コマンド
-        /// 概要：Sequence04ボタン押下時に状態表示を更新する。
-        /// STEP⑩ではまずCommand接続の確認を行う。
-        /// </summary>
         [RelayCommand]
         private void ExecuteSequence04()
         {
-            if (!IsSequence04Defined)
-            {
-                StatusMessage = "Sequence04 is undefined";
-                return;
-            }
-
+            if (!IsSequence04Defined) { StatusMessage = "Sequence04 is undefined"; return; }
             StatusMessage = "Sequence executed : Sequence04";
         }
 
         /// <summary>
-        /// Sequence停止コマンド
-        /// 概要：Stopボタン押下時に状態表示を更新する。
-        /// STEP⑩ではまずCommand接続の確認を行う。
+        /// Sequence05実行コマンド
         /// </summary>
+
+        [RelayCommand]
+        private void ExecuteSequence05()
+        {
+            if (!IsSequence05Defined) { StatusMessage = "Sequence05 is undefined"; return; }
+            StatusMessage = "Sequence executed : Sequence05";
+        }
+
+        /// <summary>
+        /// Sequence06実行コマンド
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence06()
+        {
+            if (!IsSequence06Defined) { StatusMessage = "Sequence06 is undefined"; return; }
+            StatusMessage = "Sequence executed : Sequence06";
+        }
+
+        /// <summary>
+        /// Sequence07実行コマンド
+        /// </summary>
+        [RelayCommand]
+        private void ExecuteSequence07()
+        {
+            if (!IsSequence07Defined) { StatusMessage = "Sequence07 is undefined"; return; }
+            StatusMessage = "Sequence executed : Sequence07";
+        }
+
         [RelayCommand]
         private void StopSequence()
         {

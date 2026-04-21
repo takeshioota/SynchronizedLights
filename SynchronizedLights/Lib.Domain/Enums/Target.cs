@@ -13,12 +13,19 @@ namespace Lib.Domain.Enums
     /// </summary>
     public enum Target
     {
+        /// <summary>全体</summary>
         All,
+        /// <summary>グループ01</summary>
         Group01,
+        /// <summary>グループ02</summary>
         Group02,
+        /// <summary>グループ03</summary>
         Group03,
+        /// <summary>グループ04</summary>
         Group04,
+        /// <summary>グループ05</summary>
         Group05,
+        /// <summary>グループ06</summary>
         Group06
     }
 }

@@ -11,6 +11,6 @@ namespace SynchronizedLights.UI
     /// </summary>
     public partial class App : Application
     {
+        // DIコンテナは（SynchrolightAPI.Core統合時）に導入予定
     }
-
 }

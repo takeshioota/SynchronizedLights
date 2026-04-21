@@ -108,5 +108,9 @@
         <DataTemplate DataType="{x:Type viewModels:SettingViewModel}">
             <views:SettingView />
         </DataTemplate>
+
+        <!--罫線枠：アンバー-->
+        <SolidColorBrush x:Key="AccentAmberBrush" Color="#E69F2C"/>
+        
     </Application.Resources>
 </Application>

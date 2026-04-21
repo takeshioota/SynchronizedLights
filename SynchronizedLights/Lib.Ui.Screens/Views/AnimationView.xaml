@@ -1,15 +1,111 @@
 ﻿<UserControl x:Class="Lib.Ui.Screens.Views.AnimationView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DesignHeight="450"
-             d:DesignWidth="800">
-    <Grid>
-        <TextBlock Text="Animation View"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   FontSize="24" />
-    </Grid>
+             Background="Transparent"
+             Foreground="{StaticResource TextBrushMain}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="15"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- タイトル -->
+            <TextBlock Grid.Row="0"
+                       Text="Animation"
+                       FontSize="28"
+                       FontWeight="Bold"/>
+
+            <!-- 説明 -->
+            <TextBlock Grid.Row="2"
+                       Text="Animation パターン一覧：タイルをタップして選択し、「実行」で送信します。"
+                       FontSize="13"
+                       Opacity="0.85"/>
+
+            <!-- アニメーション一覧 -->
+            <ItemsControl Grid.Row="4"
+                          ItemsSource="{Binding Animations}"
+                          HorizontalAlignment="Left">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="4" Rows="3"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Command="{Binding DataContext.SelectAnimationCommand,
+                                        RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}"
+                                Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                Tag="{Binding IsSelected}"
+                                MinWidth="170"
+                                MinHeight="100"
+                                Margin="6"
+                                Padding="8">
+                            <StackPanel Orientation="Vertical"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <Rectangle Width="44"
+                                           Height="44"
+                                           RadiusX="10"
+                                           RadiusY="10"
+                                           Fill="{Binding IconBrush}"
+                                           Stroke="White"
+                                           StrokeThickness="1"
+                                           Margin="0,0,0,6"/>
+                                <TextBlock Text="{Binding Name}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- プレビュー + 実行ボタン -->
+            <Border Grid.Row="6"
+                    BorderBrush="{StaticResource AccentAmberBrush}"
+                    BorderThickness="1"
+                    Padding="15"
+                    Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="プレビュー / Preview"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+                        <TextBlock Text="{Binding PreviewText}"
+                                   FontSize="14"/>
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   FontSize="13"
+                                   Opacity="0.85"
+                                   Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="実行 / Execute"
+                            Command="{Binding ExecuteAnimationCommand}"
+                            IsEnabled="{Binding HasSelection}"
+                            MinWidth="200"
+                            MinHeight="48"
+                            VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+        </Grid>
+    </ScrollViewer>
 </UserControl>
