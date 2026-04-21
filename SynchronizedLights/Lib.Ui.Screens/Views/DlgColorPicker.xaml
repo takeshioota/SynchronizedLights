@@ -147,16 +147,18 @@
                     HorizontalAlignment="Right"
                     Margin="0,15,0,0">
             <Button x:Name="BtnOK"
-                    Content="OK"
-                    Width="90"
-                    Height="34"
-                    Click="BtnOK_Click"
-                    Margin="0,0,10,0"/>
+		            Content="OK"
+		            Style="{StaticResource GrandMaButtonStyle}"
+		            Width="90"
+		            Height="34"
+		            Click="BtnOK_Click"
+		            Margin="0,0,10,0"/>
             <Button x:Name="BtnCancel"
-                    Content="Cancel"
-                    Width="90"
-                    Height="34"
-                    Click="BtnCancel_Click"/>
+		            Content="Cancel"
+		            Style="{StaticResource GrandMaButtonStyle}"
+		            Width="90"
+		            Height="34"
+		            Click="BtnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

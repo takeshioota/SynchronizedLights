@@ -107,17 +107,14 @@
                                     Mode=TwoWay,
                                     UpdateSourceTrigger=PropertyChanged}" />
                     <TextBox x:Name="NumSpeed"
-                             Grid.Column="1"
-                             FontSize="14"
-                             Padding="6,4"
-                             MinHeight="30"
-                             Margin="10,0,0,0"
-                             VerticalContentAlignment="Center"
-                             HorizontalContentAlignment="Right"
-                             Text="{Binding DataContext.EditableSpeedValueMs,
-                                    RelativeSource={RelativeSource AncestorType=Window},
-                                    Mode=TwoWay,
-                                    UpdateSourceTrigger=LostFocus}" />
+				             Grid.Column="1"
+				             Style="{StaticResource GrandMaTextBoxStyle}"
+				             Margin="10,0,0,0"
+				             HorizontalContentAlignment="Right"
+				             Text="{Binding DataContext.EditableSpeedValueMs,
+				                    RelativeSource={RelativeSource AncestorType=Window},
+				                    Mode=TwoWay,
+				                    UpdateSourceTrigger=LostFocus}" />
                 </Grid>
             </StackPanel>
 
@@ -160,21 +157,16 @@
                         </TextBlock>
                     </Grid>
                     <TextBox x:Name="TxtCommandName"
-                             FontSize="14"
-                             Padding="6,4"
-                             MinHeight="30"
-                             VerticalContentAlignment="Center"
-                             Text="{Binding DataContext.CommandName,
-                                    RelativeSource={RelativeSource AncestorType=Window},
-                                    Mode=TwoWay,
-                                    UpdateSourceTrigger=PropertyChanged}">
-                        <!-- 入力バリデーション：32文字超なら赤枠 -->
+				             Text="{Binding DataContext.CommandName,
+				                    RelativeSource={RelativeSource AncestorType=Window},
+				                    Mode=TwoWay,
+				                    UpdateSourceTrigger=PropertyChanged}">
                         <TextBox.Style>
-                            <Style TargetType="TextBox">
+                            <Style TargetType="TextBox" BasedOn="{StaticResource GrandMaTextBoxStyle}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding DataContext.IsCommandNameValid,
-                                                            RelativeSource={RelativeSource AncestorType=Window}}"
-                                                 Value="False">
+				                                            RelativeSource={RelativeSource AncestorType=Window}}"
+				                                 Value="False">
                                         <Setter Property="BorderBrush" Value="#DC3545"/>
                                         <Setter Property="BorderThickness" Value="2"/>
                                         <Setter Property="ToolTip" Value="命令名は32文字以内で入力してください。"/>

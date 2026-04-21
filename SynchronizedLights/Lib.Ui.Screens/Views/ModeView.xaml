@@ -122,12 +122,13 @@
                                    Margin="0,8,0,0"/>
                     </StackPanel>
                     <Button Grid.Column="1"
-                            Content="適用 / Apply"
-                            Command="{Binding ApplyModeCommand}"
-                            IsEnabled="{Binding HasSelection}"
-                            MinWidth="180"
-                            MinHeight="48"
-                            VerticalAlignment="Center"/>
+				            Content="適用 / Apply"
+				            Command="{Binding ApplyModeCommand}"
+				            IsEnabled="{Binding HasSelection}"
+				            Style="{StaticResource GrandMaButtonStyle}"
+				            MinWidth="180"
+				            MinHeight="48"
+				            VerticalAlignment="Center"/>
                 </Grid>
             </Border>
 

@@ -229,6 +229,114 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- TextBox スタイル -->
+        <Style x:Key="GrandMaTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrushMain}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushAmber}"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="CaretBrush" Value="{StaticResource TextBrushMain}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="SelectionBrush" Value="#3A2E00"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#FFD84A"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="#FFE27A"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- CheckBox スタイル ― grandMA2風アンバー -->
+        <Style x:Key="GrandMaCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextBrushMain}"/>
+            <Setter Property="Background" Value="{StaticResource ButtonBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushAmber}"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="6,0,0,0"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- チェック枠 -->
+                            <Border x:Name="CheckBorder"
+                                    Grid.Column="0"
+                                    Width="20" Height="20"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    SnapsToDevicePixels="True">
+                                <!-- チェックマーク（初期は非表示、IsChecked で表示） -->
+                                <Path x:Name="CheckMark"
+                                      Data="M 3 7 L 8 12 L 16 4"
+                                      Stroke="{StaticResource TextBrushMain}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Visibility="Collapsed"
+                                      SnapsToDevicePixels="True"/>
+                            </Border>
+
+                            <!-- ラベル -->
+                            <ContentPresenter Grid.Column="1"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckBorder" Property="Background" Value="#3A2E00"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBorder" Property="BorderBrush" Value="#FFD84A"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         
         <DataTemplate DataType="{x:Type viewModels:PresetViewModel}">
             <views:PresetView />

@@ -46,13 +46,10 @@
                        VerticalAlignment="Center"
                        FontSize="14"/>
             <TextBox x:Name="TxtStart"
-                     Grid.Column="1"
-                     Text="1"
-                     FontSize="14"
-                     Padding="6,4"
-                     MinHeight="30"
-                     VerticalContentAlignment="Center"
-                     TextChanged="Input_TextChanged"/>
+		             Grid.Column="1"
+		             Style="{StaticResource GrandMaTextBoxStyle}"
+		             Text="1"
+		             TextChanged="Input_TextChanged"/>
         </Grid>
 
         <!-- 終了番号 -->
@@ -66,13 +63,10 @@
                        VerticalAlignment="Center"
                        FontSize="14"/>
             <TextBox x:Name="TxtEnd"
-                     Grid.Column="1"
-                     Text="100"
-                     FontSize="14"
-                     Padding="6,4"
-                     MinHeight="30"
-                     VerticalContentAlignment="Center"
-                     TextChanged="Input_TextChanged"/>
+		             Grid.Column="1"
+		             Style="{StaticResource GrandMaTextBoxStyle}"
+		             Text="100"
+		             TextChanged="Input_TextChanged"/>
         </Grid>
 
         <!-- 遅延時間 -->
@@ -86,13 +80,10 @@
                        VerticalAlignment="Center"
                        FontSize="14"/>
             <TextBox x:Name="TxtDelay"
-                     Grid.Column="1"
-                     Text="100"
-                     FontSize="14"
-                     Padding="6,4"
-                     MinHeight="30"
-                     VerticalContentAlignment="Center"
-                     TextChanged="Input_TextChanged"/>
+		             Grid.Column="1"
+		             Style="{StaticResource GrandMaTextBoxStyle}"
+		             Text="100"
+		             TextChanged="Input_TextChanged"/>
         </Grid>
 
         <!-- 色選択（任意） -->
@@ -108,11 +99,11 @@
                        VerticalAlignment="Center"
                        FontSize="14"/>
             <CheckBox x:Name="ChkUseColor"
-                      Grid.Column="1"
-                      Content="使用"
-                      Foreground="{StaticResource TextBrushMain}"
-                      VerticalAlignment="Center"
-                      Margin="0,0,12,0"/>
+		              Grid.Column="1"
+		              Content="使用"
+		              Style="{StaticResource GrandMaCheckBoxStyle}"
+		              VerticalAlignment="Center"
+		              Margin="0,0,12,0"/>
             <Rectangle x:Name="ColorPreview"
                        Grid.Column="2"
                        Height="30"
@@ -121,12 +112,13 @@
                        StrokeThickness="1"
                        VerticalAlignment="Center"/>
             <Button x:Name="BtnPickColor"
-                    Grid.Column="3"
-                    Content="選択..."
-                    MinWidth="80"
-                    MinHeight="30"
-                    Margin="10,0,0,0"
-                    Click="BtnPickColor_Click"/>
+		            Grid.Column="3"
+		            Content="選択..."
+		            Style="{StaticResource GrandMaButtonStyle}"
+		            MinWidth="80"
+		            MinHeight="30"
+		            Margin="10,0,0,0"
+		            Click="BtnPickColor_Click"/>
         </Grid>
 
         <!-- バリデーションメッセージ -->
@@ -144,16 +136,18 @@
                     HorizontalAlignment="Right"
                     Margin="0,15,0,0">
             <Button x:Name="BtnOK"
-                    Content="OK / 実行"
-                    Width="110"
-                    Height="36"
-                    Click="BtnOK_Click"
-                    Margin="0,0,10,0"/>
+		            Content="OK / 実行"
+		            Style="{StaticResource GrandMaButtonStyle}"
+		            Width="110"
+		            Height="36"
+		            Click="BtnOK_Click"
+		            Margin="0,0,10,0"/>
             <Button x:Name="BtnCancel"
-                    Content="Cancel"
-                    Width="90"
-                    Height="36"
-                    Click="BtnCancel_Click"/>
+		            Content="Cancel"
+		            Style="{StaticResource GrandMaButtonStyle}"
+		            Width="90"
+		            Height="36"
+		            Click="BtnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

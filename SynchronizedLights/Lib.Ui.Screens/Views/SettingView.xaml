@@ -34,11 +34,10 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <CheckBox Grid.Column="0"
-                                          Content="{Binding PortName}"
-                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                          Foreground="{StaticResource TextBrushMain}"
-                                          VerticalAlignment="Center"
-                                          FontSize="14" />
+							              Content="{Binding PortName}"
+							              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+							              Style="{StaticResource GrandMaCheckBoxStyle}"
+							              VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding ConnectionStatusLabel}"
                                            VerticalAlignment="Center"
@@ -122,10 +121,8 @@
                                    VerticalAlignment="Center"
                                    FontSize="14" />
                         <TextBox Grid.Column="1"
-                                 Text="{Binding ChannelValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 FontSize="14"
-                                 Padding="6,4"
-                                 MinHeight="30" />
+					             Style="{StaticResource GrandMaTextBoxStyle}"
+					             Text="{Binding ChannelValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Grid Margin="0,4,0,4">
                         <Grid.ColumnDefinitions>
@@ -138,10 +135,8 @@
                                    VerticalAlignment="Center"
                                    FontSize="14" />
                         <TextBox Grid.Column="1"
-                                 Text="{Binding PowerValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 FontSize="14"
-                                 Padding="6,4"
-                                 MinHeight="30" />
+					             Style="{StaticResource GrandMaTextBoxStyle}"
+					             Text="{Binding PowerValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
                     <Button x:Name="BtnInitializeTransmitter"
                             Content="送信機初期化 / Initialize"
