@@ -87,18 +87,32 @@ namespace Lib.Ui.Screens.ViewModels
         private string settingStatusMessage = "準備完了";
 
         /// <summary>
-        /// 送信機チャネル設定値
-        /// 概要：送信機初期化コマンド（FA）で送信するチャネル番号。
+        /// 送信機チャネル設定値（FA）
+        /// 概要：範囲 1〜4（プロトコル仕様）。
+        ///       ch=1:2401MHz / ch=2:2.434GHz / ch=3:2.451GHz / ch=4:2.475GHz
         /// </summary>
         [ObservableProperty]
-        private byte channelValue = 3;
+        [NotifyPropertyChangedFor(nameof(IsChannelValid))]
+        private byte channelValue = 1;
 
         /// <summary>
-        /// 送信機送信電力設定値
-        /// 概要：送信機初期化コマンド（FB）で送信する送信電力値。
+        /// 送信機送信電力設定値（FB）
+        /// 概要：範囲 0〜3（プロトコル仕様、4段階）。
+        ///       電力レベル表（概算）: 0=-18dBm / 1=-12dBm / 2=-6dBm / 3=0dBm(最大)
         /// </summary>
         [ObservableProperty]
-        private byte powerValue = 10;
+        [NotifyPropertyChangedFor(nameof(IsPowerValid))]
+        private byte powerValue = 3;
+
+        /// <summary>
+        /// Channel値が有効範囲内かどうか（1〜4）
+        /// </summary>
+        public bool IsChannelValid => ChannelValue >= 1 && ChannelValue <= 4;
+
+        /// <summary>
+        /// Power値が有効範囲内かどうか（0〜3）
+        /// </summary>
+        public bool IsPowerValid => PowerValue <= 3;
 
         #endregion プロパティ
 
@@ -245,6 +259,18 @@ namespace Lib.Ui.Screens.ViewModels
         private async Task InitializeTransmitterAsync()
         {
             if (IsBusy) return;
+
+            // プロトコル範囲チェック（ch=1..4, pwr=0..3）
+            if (!IsChannelValid)
+            {
+                SettingStatusMessage = "Channel は 1〜4 の範囲で入力してください。";
+                return;
+            }
+            if (!IsPowerValid)
+            {
+                SettingStatusMessage = "Power は 0〜3 の範囲で入力してください。";
+                return;
+            }
 
             IsBusy = true;
             try

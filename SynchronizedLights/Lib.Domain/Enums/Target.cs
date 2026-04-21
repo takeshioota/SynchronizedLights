@@ -26,6 +26,10 @@ namespace Lib.Domain.Enums
         /// <summary>グループ05</summary>
         Group05,
         /// <summary>グループ06</summary>
-        Group06
+        Group06,
+        /// <summary>グループ07（アドレス 151-175、武道館テスト対応）</summary>
+        Group07,
+        /// <summary>グループ08（アドレス 176-200、武道館テスト対応）</summary>
+        Group08
     }
 }

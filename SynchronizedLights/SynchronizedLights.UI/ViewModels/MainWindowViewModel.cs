@@ -135,6 +135,8 @@ namespace SynchronizedLights.UI.ViewModels
             Target.Group04 => "Group04",
             Target.Group05 => "Group05",
             Target.Group06 => "Group06",
+            Target.Group07 => "Group07",
+            Target.Group08 => "Group08",
             _ => "ALL"
         };
 
@@ -237,6 +239,16 @@ namespace SynchronizedLights.UI.ViewModels
         /// Group06ターゲットが選択中かどうか
         /// </summary>
         public bool IsTargetGroup06Selected => AppState.SelectedTarget == Target.Group06;
+
+        /// <summary>
+        /// Group07ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup07Selected => AppState.SelectedTarget == Target.Group07;
+
+        /// <summary>
+        /// Group08ターゲットが選択中かどうか
+        /// </summary>
+        public bool IsTargetGroup08Selected => AppState.SelectedTarget == Target.Group08;
 
         #endregion ターゲット
 
@@ -534,6 +546,8 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(IsTargetGroup04Selected));
             OnPropertyChanged(nameof(IsTargetGroup05Selected));
             OnPropertyChanged(nameof(IsTargetGroup06Selected));
+            OnPropertyChanged(nameof(IsTargetGroup07Selected));
+            OnPropertyChanged(nameof(IsTargetGroup08Selected));
         }
 
         /// <summary>
@@ -779,6 +793,30 @@ namespace SynchronizedLights.UI.ViewModels
         private void SelectTargetGroup06()
         {
             AppState.SelectedTarget = Target.Group06;
+            OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
+        }
+
+        /// <summary>
+        /// Group07選択コマンド
+        /// </summary>
+        [RelayCommand]
+        private void SelectTargetGroup07()
+        {
+            AppState.SelectedTarget = Target.Group07;
+            OnPropertyChanged(nameof(CurrentTargetLabel));
+            RefreshTargetSelection();
+            SyncPresetStateIfActive();
+        }
+
+        /// <summary>
+        /// Group08選択コマンド
+        /// </summary>
+        [RelayCommand]
+        private void SelectTargetGroup08()
+        {
+            AppState.SelectedTarget = Target.Group08;
             OnPropertyChanged(nameof(CurrentTargetLabel));
             RefreshTargetSelection();
             SyncPresetStateIfActive();

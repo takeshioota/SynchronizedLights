@@ -204,6 +204,8 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
@@ -271,6 +273,25 @@
                         MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
+                <Button x:Name="BtnTargetGroup07"
+			            Grid.Column="8"
+			            Content="Group07"
+			            Command="{Binding SelectTargetGroup07Command}"
+			            Style="{StaticResource GrandMaSelectableButtonStyle}"
+			            Tag="{Binding IsTargetGroup07Selected}"
+			            MinWidth="100"
+			            MinHeight="48"
+			            Margin="10,0,0,0" />
+                <Button x:Name="BtnTargetGroup08"
+			            Grid.Column="9"
+			            Content="Group08"
+			            Command="{Binding SelectTargetGroup08Command}"
+			            Style="{StaticResource GrandMaSelectableButtonStyle}"
+			            Tag="{Binding IsTargetGroup08Selected}"
+			            MinWidth="100"
+			            MinHeight="48"
+			            Margin="10,0,0,0" />
+
             </Grid>
         </Border>
 
