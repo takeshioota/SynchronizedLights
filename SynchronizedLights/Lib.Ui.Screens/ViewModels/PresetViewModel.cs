@@ -25,6 +25,26 @@ namespace Lib.Ui.Screens.ViewModels
         #endregion フィールド
 
         #region プロパティ
+
+        /// <summary>
+        /// 送信実行中フラグ
+        /// 概要：Turn On / Turn Off の実行中 true になり、ボタンを無効化
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(TurnOnCommand))]
+        [NotifyCanExecuteChangedFor(nameof(TurnOffCommand))]
+        private bool isBusy;
+
+        /// <summary>
+        /// Transport 接続状態
+        /// 概要：ILightingFacade.IsConnected を追跡し、
+        /// 未接続時は TurnOn/TurnOff/Execute 系ボタンを無効化する。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(TurnOnCommand))]
+        [NotifyCanExecuteChangedFor(nameof(TurnOffCommand))]
+        private bool isTransportConnected;
+
         /// <summary>
         /// 状態表示文字列
         /// 概要：直近の操作結果や画面状態をユーザーへ表示するためのメッセージ。
@@ -75,7 +95,25 @@ namespace Lib.Ui.Screens.ViewModels
         public PresetViewModel(ILightingFacade lighting)
         {
             _lighting = lighting;
+            _lighting.StatusChanged += OnFacadeStatusChanged;
+
+            // 初期状態反映
+            IsTransportConnected = _lighting.IsConnected;
             RefreshStatus();
+        }
+
+        /// <summary>
+        /// ファセードの状態変化通知ハンドラ
+        /// 概要：接続/切断・キュー長変化・エラー発生時に発火する。
+        /// UIスレッドで IsTransportConnected と QueueText を更新する。
+        /// </summary>
+        private void OnFacadeStatusChanged(object? sender, EventArgs e)
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                IsTransportConnected = _lighting.IsConnected;
+                QueueText = $"Queue: {_lighting.QueueLength}";
+            });
         }
 
         /// <summary>
@@ -135,9 +173,11 @@ namespace Lib.Ui.Screens.ViewModels
         /// 概要：現在選択中の対象と色を使用して点灯操作を実行し、状態表示を更新する。
         /// ILightingFacade.SetColorAsync 経由で送信。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteTurnCommand))]
         private async Task TurnOnAsync()
         {
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
                 await _lighting.SetColorAsync(SelectedTarget, CurrentColor);
@@ -147,6 +187,10 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 RefreshStatus($"TurnOn failed : {ex.Message}");
             }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -154,9 +198,11 @@ namespace Lib.Ui.Screens.ViewModels
         /// 概要：現在選択中の対象に対して黒(0,0,0)色を設定することで消灯する。
         /// ILightingFacade.SetColorAsync 経由で送信。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteTurnCommand))]
         private async Task TurnOffAsync()
         {
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
                 await _lighting.SetColorAsync(SelectedTarget, new Rgb(0, 0, 0));
@@ -166,10 +212,21 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 RefreshStatus($"TurnOff failed : {ex.Message}");
             }
+            finally
+            {
+                IsBusy = false;
+            }
         }
         #endregion コマンド
 
         #region メソッド
+
+        /// <summary>
+        /// TurnOn / TurnOff 実行可否
+        /// 概要：未接続時 + 送信中は false を返し、ボタンを無効化する。
+        /// </summary>
+        private bool CanExecuteTurnCommand() => IsTransportConnected && !IsBusy;
+
         /// <summary>
         /// 状態表示を更新する
         /// 概要：ファセードから現在のキュー件数を取得し、

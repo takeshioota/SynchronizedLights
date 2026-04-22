@@ -34,10 +34,10 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <CheckBox Grid.Column="0"
-							              Content="{Binding PortName}"
-							              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-							              Style="{StaticResource GrandMaCheckBoxStyle}"
-							              VerticalAlignment="Center" />
+                                          Content="{Binding PortName}"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          Style="{StaticResource GrandMaCheckBoxStyle}"
+                                          VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding ConnectionStatusLabel}"
                                            VerticalAlignment="Center"
@@ -110,6 +110,7 @@
                     Padding="10"
                     Margin="0,0,0,12">
                 <StackPanel>
+                    <!-- Channel -->
                     <Grid Margin="0,4,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120" />
@@ -121,9 +122,32 @@
                                    VerticalAlignment="Center"
                                    FontSize="14" />
                         <TextBox Grid.Column="1"
-					             Style="{StaticResource GrandMaTextBoxStyle}"
-					             Text="{Binding ChannelValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                 Text="{Binding ChannelValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox"
+                                       BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                    <Style.Triggers>
+                                        <!-- 1〜4 の範囲外で赤枠 -->
+                                        <DataTrigger Binding="{Binding IsChannelValid}" Value="False">
+                                            <Setter Property="BorderBrush" Value="#DC3545"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="ToolTip"
+                                                    Value="Channel は 1〜4 の範囲で入力してください。"/>
+                                        </DataTrigger>
+                                        <!-- byte 変換失敗で赤枠 -->
+                                        <Trigger Property="Validation.HasError" Value="True">
+                                            <Setter Property="BorderBrush" Value="#DC3545"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="ToolTip"
+                                                    Value="Channel は 1〜4 の整数で入力してください。"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
                     </Grid>
+
+                    <!-- Power -->
                     <Grid Margin="0,4,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120" />
@@ -135,9 +159,32 @@
                                    VerticalAlignment="Center"
                                    FontSize="14" />
                         <TextBox Grid.Column="1"
-					             Style="{StaticResource GrandMaTextBoxStyle}"
-					             Text="{Binding PowerValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                 Text="{Binding PowerValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox"
+                                       BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                    <Style.Triggers>
+                                        <!-- 0〜3 の範囲外で赤枠 -->
+                                        <DataTrigger Binding="{Binding IsPowerValid}" Value="False">
+                                            <Setter Property="BorderBrush" Value="#DC3545"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="ToolTip"
+                                                    Value="Power は 0〜3 の範囲で入力してください。"/>
+                                        </DataTrigger>
+                                        <!-- byte 変換失敗で赤枠 -->
+                                        <Trigger Property="Validation.HasError" Value="True">
+                                            <Setter Property="BorderBrush" Value="#DC3545"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Setter Property="ToolTip"
+                                                    Value="Power は 0〜3 の整数で入力してください。"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
                     </Grid>
+
+                    <!-- 送信機初期化ボタン -->
                     <Button x:Name="BtnInitializeTransmitter"
                             Content="送信機初期化 / Initialize"
                             Command="{Binding InitializeTransmitterCommand}"

@@ -107,14 +107,30 @@
                                     Mode=TwoWay,
                                     UpdateSourceTrigger=PropertyChanged}" />
                     <TextBox x:Name="NumSpeed"
-				             Grid.Column="1"
-				             Style="{StaticResource GrandMaTextBoxStyle}"
-				             Margin="10,0,0,0"
-				             HorizontalContentAlignment="Right"
-				             Text="{Binding DataContext.EditableSpeedValueMs,
-				                    RelativeSource={RelativeSource AncestorType=Window},
-				                    Mode=TwoWay,
-				                    UpdateSourceTrigger=LostFocus}" />
+                             Grid.Column="1"
+                             Margin="10,0,0,0"
+                             HorizontalContentAlignment="Right"
+                             Text="{Binding DataContext.EditableSpeedText,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox"
+                                   BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsSpeedValid,
+                                                           RelativeSource={RelativeSource AncestorType=Window}}"
+                                                 Value="False">
+                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
+                                        <Setter Property="ToolTip"
+                                                Value="Speed は 0〜10000 の整数で入力してください。"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+
                 </Grid>
             </StackPanel>
 

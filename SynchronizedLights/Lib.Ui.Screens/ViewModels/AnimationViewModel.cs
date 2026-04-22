@@ -39,8 +39,20 @@ namespace Lib.Ui.Screens.ViewModels
         [NotifyPropertyChangedFor(nameof(HasSelection))]
         private AnimationItemViewModel? selectedAnimation;
 
+        /// <summary>
+        /// 送信実行中フラグ
+        /// 概要：実行ボタン押下中は true になり、ボタンを無効化する。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasSelection))]
+        private bool isBusy;
+
+        /// <summary>
+        /// 選択中アニメが存在し、かつ送信中でないとき true
+        /// 概要：実行ボタンの IsEnabled バインド先。
+        /// </summary>
         public bool HasSelection
-            => SelectedAnimation != null && SelectedAnimation.IsDefined;
+            => SelectedAnimation != null && SelectedAnimation.IsDefined && !IsBusy;
 
         [ObservableProperty]
         private string previewText = "アニメーションを選択してください";
@@ -130,12 +142,14 @@ namespace Lib.Ui.Screens.ViewModels
         [RelayCommand]
         private async Task ExecuteAnimationAsync()
         {
+            if (IsBusy) return;
             if (SelectedAnimation == null || !SelectedAnimation.IsDefined)
             {
                 StatusMessage = "定義済みアニメーションを選択してください";
                 return;
             }
 
+            IsBusy = true;
             try
             {
                 if (_lighting == null)
@@ -156,6 +170,10 @@ namespace Lib.Ui.Screens.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"実行失敗: {ex.Message}";
+            }
+            finally
+            {
+                IsBusy = false;
             }
         }
 

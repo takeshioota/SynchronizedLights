@@ -8,7 +8,7 @@ using Lib.Application.Services;
 namespace SynchronizedLights.UI.ViewModels
 {
     /// <summary>
-    /// KPI バー用 ViewModel（Phase 2 §3.2 送信成功率可視化）
+    /// KPI バー用 ViewModel
     /// 概要：App.LightingFacade / App.LatencyTracker を 1 秒おきにポーリングし、
     ///       Queue 長／Dropped 数／Reconnect 数／Latency (P95)／送信成功率 を表示する。
     ///       しきい値に応じて色を変え、武道館本番でオペレータが目視で異常に気付けるようにする。

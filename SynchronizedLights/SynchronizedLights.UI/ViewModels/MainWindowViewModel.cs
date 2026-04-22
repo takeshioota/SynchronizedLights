@@ -145,8 +145,55 @@ namespace SynchronizedLights.UI.ViewModels
                     OnPropertyChanged(nameof(CurrentSpeedLabel));
                     RefreshSpeedSelection();
                     StatusMessage = $"Speed set : {CurrentSpeedLabel}";
+
+                    // スライダー操作・プリセット適用時に TextBox の表示も同期
+                    EditableSpeedText = clamped.ToString();
                 }
             }
+        }
+
+        /// <summary>
+        /// 速度値の入力文字列
+        /// 概要：TextBox に表示・入力される生文字列。
+        /// 範囲外（<0 or >10000）や非数値でも保持し、IsSpeedValid=false で赤枠表示。
+        /// 有効値に戻ると EditableSpeedValueMs（AppState）にも反映される。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsSpeedValid))]
+        private string editableSpeedText = "1000";
+
+        /// <summary>
+        /// Speed 入力値の有効性
+        /// 概要：0〜10000 の整数なら true。範囲外 or 非数値なら false。
+        /// PresetView の NumSpeed TextBox で赤枠表示に使用。
+        /// </summary>
+        public bool IsSpeedValid
+        {
+            get
+            {
+                if (!int.TryParse(EditableSpeedText, out var n)) return false;
+                return n >= 0 && n <= 10000;
+            }
+        }
+
+        /// <summary>
+        /// EditableSpeedText 変更時：有効範囲内なら AppState に反映
+        /// 概要：範囲外のときは AppState を更新しない（Slider は最後の有効値のまま）
+        /// </summary>
+        partial void OnEditableSpeedTextChanged(string value)
+        {
+            if (int.TryParse(value, out var n) && n >= 0 && n <= 10000)
+            {
+                if (AppState.SpeedValueMs != n)
+                {
+                    AppState.SpeedValueMs = n;
+                    OnPropertyChanged(nameof(EditableSpeedValueMs));
+                    OnPropertyChanged(nameof(CurrentSpeedLabel));
+                    RefreshSpeedSelection();
+                    StatusMessage = $"Speed set : {CurrentSpeedLabel}";
+                }
+            }
+            // 範囲外 or 非数値 → AppState は維持、赤枠だけ表示
         }
 
         /// <summary>
@@ -266,7 +313,30 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：Effect有効/無効の判定に使用する。
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFlashCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
         private bool isTransportConnected;
+
+        /// <summary>
+        /// 送信処理実行中フラグ
+        /// 概要：Flash/FadeIn/FadeOut/Execute/Sequence01-07 の実行中 true になる。
+        /// true のとき全ての送信系ボタンが無効化
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFlashCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence01Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence02Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence03Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence04Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence05Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence06Command))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence07Command))]
+        private bool isBusy;
 
         /// <summary>
         /// エラー表示文字列
@@ -361,41 +431,48 @@ namespace SynchronizedLights.UI.ViewModels
         /// Sequence01が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence01Command))]
         private bool isSequence01Defined = true;
 
         /// <summary>
         /// Sequence02が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence02Command))]
         private bool isSequence02Defined = true;
 
         /// <summary>
         /// Sequence03が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence03Command))]
         private bool isSequence03Defined = false;
 
         /// <summary>
         /// Sequence04が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence04Command))]
         private bool isSequence04Defined = false;
         /// <summary>
         /// Sequence05が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence05Command))]
         private bool isSequence05Defined = false;
 
         /// <summary>
         /// Sequence06が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence06Command))]
         private bool isSequence06Defined = false;
 
         /// <summary>
         /// Sequence07が定義済みかどうか
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSequence07Command))]
         private bool isSequence07Defined = false;
         /// <summary>
         /// KPI バー用 ViewModel
@@ -592,7 +669,7 @@ namespace SynchronizedLights.UI.ViewModels
 
         /// <summary>
         /// UserState を現在の画面状態に反映する（起動時に呼ばれる）
-        /// 概要：永続化された値を復元。設計書 Phase 2 §4.2 に対応。
+        /// 概要：永続化された値を復元
         /// </summary>
         public void ApplyUserState(UserState state)
         {
@@ -601,6 +678,8 @@ namespace SynchronizedLights.UI.ViewModels
             // AppState 復元
             AppState.SpeedValueMs = state.SpeedValueMs;
             AppState.SelectedColor = new Rgb(state.ColorR, state.ColorG, state.ColorB);
+
+            EditableSpeedText = state.SpeedValueMs.ToString();
 
             // Target 復元（文字列→Enum変換）
             if (Enum.TryParse<Target>(state.SelectedTarget, out var target))
@@ -627,7 +706,7 @@ namespace SynchronizedLights.UI.ViewModels
 
         /// <summary>
         /// 現在の画面状態から UserState を生成する（終了時に呼ばれる）
-        /// 概要：永続化すべき全フィールドを収集。設計書 Phase 2 §4.2 に対応。
+        /// 概要：永続化すべき全フィールドを収集。
         /// </summary>
         public UserState CaptureUserState()
         {
@@ -755,6 +834,54 @@ namespace SynchronizedLights.UI.ViewModels
             _errorDismissTimer.Stop();
             _errorDismissTimer.Start();
         }
+
+        /// <summary>
+        /// EFFECT/Execute 系コマンド実行可否判定
+        /// </summary>
+        private bool CanExecuteSendCommand()
+            => IsTransportConnected && !IsBusy;
+
+        /// <summary>
+        /// シーケンス01：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence01() => IsSequence01Defined && !IsBusy;
+
+        /// <summary>
+        /// シーケンス02：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence02() => IsSequence02Defined && !IsBusy;
+
+        /// <summary>
+        /// シーケンス03：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence03() => IsSequence03Defined && !IsBusy;
+        /// <summary>
+        /// シーケンス04：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence04() => IsSequence04Defined && !IsBusy;
+
+        /// <summary>
+        /// シーケンス05：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence05() => IsSequence05Defined && !IsBusy;
+
+        /// <summary>
+        /// シーケンス06：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence06() => IsSequence06Defined && !IsBusy;
+
+        /// <summary>
+        /// シーケンス07：ヘルパー関数
+        /// </summary>
+        /// <returns></returns>
+        private bool CanExecuteSequence07() => IsSequence07Defined && !IsBusy;
+
         #endregion メソッド
 
         #region コマンド
@@ -910,19 +1037,20 @@ namespace SynchronizedLights.UI.ViewModels
         /// Flash実行コマンド
         /// 概要：現在対象に対してFlash操作を実行する。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
         private async Task ExecuteFlash()
         {
-            RefreshTransportState();
-
-            if (!IsTransportConnected)
-            {
-                StatusMessage = "Flash skipped : transport disconnected";
-                return;
-            }
-
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
+                RefreshTransportState();
+                if (!IsTransportConnected)
+                {
+                    StatusMessage = "Flash skipped : transport disconnected";
+                    return;
+                }
+
                 await _lighting.FlashAsync(
                     AppState.SelectedTarget,
                     AppState.SpeedValueMs,
@@ -935,27 +1063,31 @@ namespace SynchronizedLights.UI.ViewModels
                 StatusMessage = $"Flash failed: {ex.Message}";
                 ErrorMessage = ex.Message;
             }
-
-            RefreshTransportState();
+            finally
+            {
+                IsBusy = false;
+                RefreshTransportState();
+            }
         }
 
         /// <summary>
         /// FadeIn実行コマンド
         /// 概要：現在対象に対してFadeIn操作を実行する。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
         private async Task ExecuteFadeIn()
         {
-            RefreshTransportState();
-
-            if (!IsTransportConnected)
-            {
-                StatusMessage = "FadeIn skipped : transport disconnected";
-                return;
-            }
-
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
+                RefreshTransportState();
+                if (!IsTransportConnected)
+                {
+                    StatusMessage = "FadeIn skipped : transport disconnected";
+                    return;
+                }
+
                 await _lighting.FadeInAsync(
                     AppState.SelectedTarget,
                     AppState.SpeedValueMs,
@@ -967,26 +1099,31 @@ namespace SynchronizedLights.UI.ViewModels
             {
                 StatusMessage = $"FadeIn failed: {ex.Message}";
             }
-            RefreshTransportState();
+            finally
+            {
+                IsBusy = false;
+                RefreshTransportState();
+            }
         }
 
         /// <summary>
         /// FadeOut実行コマンド
         /// 概要：現在対象に対してFadeOut操作を実行する。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
         private async Task ExecuteFadeOut()
         {
-            RefreshTransportState();
-
-            if (!IsTransportConnected)
-            {
-                StatusMessage = "FadeOut skipped : transport disconnected";
-                return;
-            }
-
+            if (IsBusy) return;
+            IsBusy = true;
             try
             {
+                RefreshTransportState();
+                if (!IsTransportConnected)
+                {
+                    StatusMessage = "FadeOut skipped : transport disconnected";
+                    return;
+                }
+
                 await _lighting.FadeOutAsync(
                     AppState.SelectedTarget,
                     AppState.SpeedValueMs,
@@ -998,8 +1135,11 @@ namespace SynchronizedLights.UI.ViewModels
             {
                 StatusMessage = $"FadeOut failed: {ex.Message}";
             }
-
-            RefreshTransportState();
+            finally
+            {
+                IsBusy = false;
+                RefreshTransportState();
+            }
         }
 
         /// <summary>
@@ -1018,15 +1158,17 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：現在の色・速度・対象・命令名・ポートで送信を実行する。
         /// 命令名が不正な場合はエラーメッセージを表示。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
         private async Task ExecuteCurrentSettingsAsync()
         {
+            if (IsBusy) return;
             if (!IsCommandNameValid)
             {
                 StatusMessage = "命令名は32文字以内で入力してください。";
                 return;
             }
 
+            IsBusy = true;
             try
             {
                 if (!_lighting.IsConnected)
@@ -1045,6 +1187,10 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Execute failed : {ex.Message}";
+            }
+            finally
+            {
+                IsBusy = false;
             }
         }
 
@@ -1126,12 +1272,26 @@ namespace SynchronizedLights.UI.ViewModels
         /// Sequence01実行コマンド
         /// 概要：Sequence01ボタン押下時に状態表示を更新する。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanExecuteSequence01))]
         private async Task ExecuteSequence01()
         {
-            if (!IsSequence01Defined) { StatusMessage = "Sequence01 is undefined"; return; }
-            await RunSequenceWithDialogAsync(1, "Sequence01");
+            if (IsBusy) return;
+            if (!IsSequence01Defined)
+            {
+                StatusMessage = "Sequence01 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(1, "Sequence01");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
+
         /// <summary>
         /// Sequence02実行コマンド
         /// 概要：Sequence02ボタン押下時に状態表示を更新する。
@@ -1139,8 +1299,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence02()
         {
-            if (!IsSequence02Defined) { StatusMessage = "Sequence02 is undefined"; return; }
-            await RunSequenceWithDialogAsync(2, "Sequence02");
+            if (IsBusy) return;
+            if (!IsSequence02Defined)
+            {
+                StatusMessage = "Sequence02 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(2, "Sequence02");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -1150,8 +1323,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence03()
         {
-            if (!IsSequence03Defined) { StatusMessage = "Sequence03 is undefined"; return; }
-            await RunSequenceWithDialogAsync(3, "Sequence03");
+            if (IsBusy) return;
+            if (!IsSequence03Defined)
+            {
+                StatusMessage = "Sequence03 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(3, "Sequence03");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -1160,8 +1346,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence04()
         {
-            if (!IsSequence04Defined) { StatusMessage = "Sequence04 is undefined"; return; }
-            await RunSequenceWithDialogAsync(4, "Sequence04");
+            if (IsBusy) return;
+            if (!IsSequence04Defined)
+            {
+                StatusMessage = "Sequence04 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(4, "Sequence04");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -1170,8 +1369,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence05()
         {
-            if (!IsSequence05Defined) { StatusMessage = "Sequence05 is undefined"; return; }
-            await RunSequenceWithDialogAsync(5, "Sequence05");
+            if (IsBusy) return;
+            if (!IsSequence05Defined)
+            {
+                StatusMessage = "Sequence05 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(5, "Sequence05");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -1180,8 +1392,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence06()
         {
-            if (!IsSequence06Defined) { StatusMessage = "Sequence06 is undefined"; return; }
-            await RunSequenceWithDialogAsync(6, "Sequence06");
+            if (IsBusy) return;
+            if (!IsSequence06Defined)
+            {
+                StatusMessage = "Sequence06 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(6, "Sequence06");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         /// <summary>
@@ -1190,8 +1415,21 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private async Task ExecuteSequence07()
         {
-            if (!IsSequence07Defined) { StatusMessage = "Sequence07 is undefined"; return; }
-            await RunSequenceWithDialogAsync(7, "Sequence07");
+            if (IsBusy) return;
+            if (!IsSequence07Defined)
+            {
+                StatusMessage = "Sequence07 is undefined";
+                return;
+            }
+            IsBusy = true;
+            try
+            {
+                await RunSequenceWithDialogAsync(7, "Sequence07");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
     /// <summary>
