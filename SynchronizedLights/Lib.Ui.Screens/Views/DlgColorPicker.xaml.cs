@@ -10,6 +10,11 @@ namespace Lib.Ui.Screens.Views
 {
     /// <summary>
     /// 色選択ダイアログ
+    /// 部品 ID:
+    ///   PckSV       = 彩度×明度ピッカー（Canvas）
+    ///   SldHue      = 色相バー（Canvas）
+    ///   LstSwatches = よく使う色リスト（UniformGrid）
+    ///   BtnOK / BtnCancel = 確定・破棄ボタン
     /// </summary>
     public partial class DlgColorPicker : Window
     {
@@ -97,28 +102,28 @@ namespace Lib.Ui.Screens.Views
 
         #endregion 公開メソッド
 
-        #region SV ピッカー イベントハンドラ
+        #region PckSV（彩度×明度ピッカー）イベントハンドラ
 
-        /// <summary>SVキャンバス押下</summary>
-        private void SVCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        /// <summary>PckSV 押下</summary>
+        private void PckSV_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            SVCanvas.CaptureMouse();
-            UpdateSVFromMouse(e.GetPosition(SVCanvas));
+            PckSV.CaptureMouse();
+            UpdateSVFromMouse(e.GetPosition(PckSV));
         }
 
-        /// <summary>SVキャンバス移動</summary>
-        private void SVCanvas_MouseMove(object sender, MouseEventArgs e)
+        /// <summary>PckSV 移動</summary>
+        private void PckSV_MouseMove(object sender, MouseEventArgs e)
         {
-            if (SVCanvas.IsMouseCaptured)
+            if (PckSV.IsMouseCaptured)
             {
-                UpdateSVFromMouse(e.GetPosition(SVCanvas));
+                UpdateSVFromMouse(e.GetPosition(PckSV));
             }
         }
 
-        /// <summary>SVキャンバス離脱</summary>
-        private void SVCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        /// <summary>PckSV 離脱</summary>
+        private void PckSV_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            SVCanvas.ReleaseMouseCapture();
+            PckSV.ReleaseMouseCapture();
         }
 
         /// <summary>
@@ -132,30 +137,30 @@ namespace Lib.Ui.Screens.Views
             UpdatePreview();
         }
 
-        #endregion SV ピッカー イベントハンドラ
+        #endregion PckSV イベントハンドラ
 
-        #region Hue バー イベントハンドラ
+        #region SldHue（色相バー）イベントハンドラ
 
-        /// <summary>Hueバー押下</summary>
-        private void HueCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        /// <summary>SldHue 押下</summary>
+        private void SldHue_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            HueCanvas.CaptureMouse();
-            UpdateHueFromMouse(e.GetPosition(HueCanvas));
+            SldHue.CaptureMouse();
+            UpdateHueFromMouse(e.GetPosition(SldHue));
         }
 
-        /// <summary>Hueバー移動</summary>
-        private void HueCanvas_MouseMove(object sender, MouseEventArgs e)
+        /// <summary>SldHue 移動</summary>
+        private void SldHue_MouseMove(object sender, MouseEventArgs e)
         {
-            if (HueCanvas.IsMouseCaptured)
+            if (SldHue.IsMouseCaptured)
             {
-                UpdateHueFromMouse(e.GetPosition(HueCanvas));
+                UpdateHueFromMouse(e.GetPosition(SldHue));
             }
         }
 
-        /// <summary>Hueバー離脱</summary>
-        private void HueCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        /// <summary>SldHue 離脱</summary>
+        private void SldHue_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            HueCanvas.ReleaseMouseCapture();
+            SldHue.ReleaseMouseCapture();
         }
 
         /// <summary>
@@ -170,12 +175,12 @@ namespace Lib.Ui.Screens.Views
             UpdatePreview();
         }
 
-        #endregion Hue バー イベントハンドラ
+        #endregion SldHue イベントハンドラ
 
         #region UI 更新
 
         /// <summary>
-        /// SVキャンバスの基本色（色相）を更新する
+        /// SV ピッカー（PckSV）の基本色（色相）を更新する
         /// </summary>
         private void UpdateSVBase()
         {
@@ -217,10 +222,10 @@ namespace Lib.Ui.Screens.Views
 
         #endregion UI 更新
 
-        #region スウォッチ
+        #region LstSwatches
 
         /// <summary>
-        /// よく使う色パレットを初期化する
+        /// よく使う色パレット（LstSwatches）を初期化する
         /// </summary>
         private void InitializeSwatches()
         {
@@ -252,11 +257,11 @@ namespace Lib.Ui.Screens.Views
                 var capturedG = g;
                 var capturedB = b;
                 btn.Click += (s, e) => SetInitialColor(capturedR, capturedG, capturedB);
-                SwatchPanel.Children.Add(btn);
+                LstSwatches.Children.Add(btn);
             }
         }
 
-        #endregion スウォッチ
+        #endregion LstSwatches
 
         #region OK / Cancel
 

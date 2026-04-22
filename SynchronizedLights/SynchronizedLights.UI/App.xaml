@@ -14,7 +14,9 @@
         <SolidColorBrush x:Key="ButtonBgBrush" Color="#181818"/>
         <SolidColorBrush x:Key="ButtonHoverBrush" Color="#252525"/>
         <SolidColorBrush x:Key="ButtonPressedBrush" Color="#3A2E00"/>
-        <SolidColorBrush x:Key="ButtonSelectedBrush" Color="#0D2BD6"/>
+        <SolidColorBrush x:Key="ButtonSelectedBrush" Color="#D6A100"/>
+        <SolidColorBrush x:Key="ButtonSelectedBorderBrush" Color="#FFE27A"/>
+        <SolidColorBrush x:Key="ButtonSelectedTextBrush" Color="#111111"/>
         <SolidColorBrush x:Key="TextBrushMain" Color="#F2F2F2"/>
         <SolidColorBrush x:Key="TextBrushSub" Color="#D0D0D0"/>
 
@@ -52,7 +54,9 @@
                                 SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}" />
+                                              Margin="{TemplateBinding Padding}"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"
+                                              TextBlock.FontWeight="{TemplateBinding FontWeight}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -74,16 +78,19 @@
 
         <!-- 選択中ボタン -->
         <Style x:Key="GrandMaSelectableButtonStyle"
-            TargetType="Button"
-            BasedOn="{StaticResource GrandMaButtonStyle}">
+               TargetType="Button"
+               BasedOn="{StaticResource GrandMaButtonStyle}">
             <Style.Triggers>
-                <Trigger Property="Tag" Value="True">
+                <!-- DataTrigger で Tag を明示的に監視 -->
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
                     <Setter Property="Background" Value="{StaticResource ButtonSelectedBrush}" />
-                    <Setter Property="BorderBrush" Value="#6FA8FF" />
-                    <Setter Property="Foreground" Value="White" />
-                </Trigger>
+                    <Setter Property="BorderBrush" Value="{StaticResource ButtonSelectedBorderBrush}" />
+                    <Setter Property="BorderThickness" Value="2.5" />
+                    <Setter Property="Foreground" Value="{StaticResource ButtonSelectedTextBrush}" />
+                    <Setter Property="FontWeight" Value="Bold" />
+                </DataTrigger>
             </Style.Triggers>
-        </Style>        
+        </Style>
 
         <!-- パネルBorder -->
         <Style x:Key="GrandMaPanelBorderStyle" TargetType="Border">

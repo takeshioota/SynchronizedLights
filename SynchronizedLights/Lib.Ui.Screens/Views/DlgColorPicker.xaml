@@ -28,16 +28,16 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- SV Picker (Saturation x Value) -->
-        <Canvas x:Name="SVCanvas"
+        <!-- PckSV: 彩度×明度 ピッカー -->
+        <Canvas x:Name="PckSV"
                 Grid.Row="0"
                 Grid.Column="0"
                 Width="256"
                 Height="256"
                 Cursor="Cross"
-                MouseLeftButtonDown="SVCanvas_MouseLeftButtonDown"
-                MouseMove="SVCanvas_MouseMove"
-                MouseLeftButtonUp="SVCanvas_MouseLeftButtonUp">
+                MouseLeftButtonDown="PckSV_MouseLeftButtonDown"
+                MouseMove="PckSV_MouseMove"
+                MouseLeftButtonUp="PckSV_MouseLeftButtonUp">
             <!-- 基本色（色相に応じてコードから設定） -->
             <Rectangle x:Name="SVBase" Width="256" Height="256"/>
             <!-- 白→透明の水平オーバーレイ -->
@@ -68,7 +68,7 @@
                      Canvas.Top="-6"/>
         </Canvas>
 
-        <!-- Hue バー（色相） -->
+        <!-- SldHue: 色相バー -->
         <Grid Grid.Row="0" Grid.Column="2" Width="30" Height="256">
             <Rectangle>
                 <Rectangle.Fill>
@@ -83,12 +83,12 @@
                     </LinearGradientBrush>
                 </Rectangle.Fill>
             </Rectangle>
-            <Canvas x:Name="HueCanvas"
+            <Canvas x:Name="SldHue"
                     Background="Transparent"
                     Cursor="SizeNS"
-                    MouseLeftButtonDown="HueCanvas_MouseLeftButtonDown"
-                    MouseMove="HueCanvas_MouseMove"
-                    MouseLeftButtonUp="HueCanvas_MouseLeftButtonUp">
+                    MouseLeftButtonDown="SldHue_MouseLeftButtonDown"
+                    MouseMove="SldHue_MouseMove"
+                    MouseLeftButtonUp="SldHue_MouseLeftButtonUp">
                 <Rectangle x:Name="HueThumb"
                            Width="34"
                            Height="4"
@@ -130,7 +130,7 @@
                    FontSize="14"
                    FontWeight="SemiBold"
                    Margin="0,0,0,6"/>
-        <UniformGrid x:Name="SwatchPanel"
+        <UniformGrid x:Name="LstSwatches"
                      Grid.Row="3"
                      Grid.ColumnSpan="5"
                      Rows="1"
@@ -147,18 +147,18 @@
                     HorizontalAlignment="Right"
                     Margin="0,15,0,0">
             <Button x:Name="BtnOK"
-		            Content="OK"
-		            Style="{StaticResource GrandMaButtonStyle}"
-		            Width="90"
-		            Height="34"
-		            Click="BtnOK_Click"
-		            Margin="0,0,10,0"/>
+                    Content="OK"
+                    Style="{StaticResource GrandMaButtonStyle}"
+                    Width="90"
+                    Height="34"
+                    Click="BtnOK_Click"
+                    Margin="0,0,10,0"/>
             <Button x:Name="BtnCancel"
-		            Content="Cancel"
-		            Style="{StaticResource GrandMaButtonStyle}"
-		            Width="90"
-		            Height="34"
-		            Click="BtnCancel_Click"/>
+                    Content="Cancel"
+                    Style="{StaticResource GrandMaButtonStyle}"
+                    Width="90"
+                    Height="34"
+                    Click="BtnCancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

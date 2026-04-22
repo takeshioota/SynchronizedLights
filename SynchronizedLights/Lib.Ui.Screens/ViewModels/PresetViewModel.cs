@@ -81,6 +81,42 @@ namespace Lib.Ui.Screens.ViewModels
         public string CurrentColorLabel => $"Color : R={CurrentColor.R}, G={CurrentColor.G}, B={CurrentColor.B}";
 
         /// <summary>
+        /// 赤選択中かどうか
+        /// 概要：CurrentColor が (255,0,0) のとき true。ボタンの選択ハイライトに使用。
+        /// </summary>
+        public bool IsColorRedSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 0 && CurrentColor.B == 0;
+
+        /// <summary>
+        /// 緑選択中かどうか
+        /// </summary>
+        public bool IsColorGreenSelected
+            => CurrentColor.R == 0 && CurrentColor.G == 255 && CurrentColor.B == 0;
+
+        /// <summary>
+        /// 青選択中かどうか
+        /// </summary>
+        public bool IsColorBlueSelected
+            => CurrentColor.R == 0 && CurrentColor.G == 0 && CurrentColor.B == 255;
+
+        /// <summary>
+        /// 白選択中かどうか
+        /// </summary>
+        public bool IsColorWhiteSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 255 && CurrentColor.B == 255;
+
+        /// <summary>
+        /// カスタム色選択中かどうか（固定 5 色以外）
+        /// 概要：Red/Green/Blue/White のいずれでもない色が選択されているとき true。
+        /// ユーザーが DlgColorPicker で選んだ任意色のとき Custom ボタンが光る。
+        /// </summary>
+        public bool IsColorCustomSelected
+            => !IsColorRedSelected
+            && !IsColorGreenSelected
+            && !IsColorBlueSelected
+            && !IsColorWhiteSelected;
+
+        /// <summary>
         /// 色変更通知イベント
         /// 概要：Preset画面で選択した色を親画面へ通知する。
         /// </summary>
@@ -123,8 +159,14 @@ namespace Lib.Ui.Screens.ViewModels
         partial void OnCurrentColorChanged(Rgb value)
         {
             OnPropertyChanged(nameof(CurrentColorLabel));
+            OnPropertyChanged(nameof(IsColorRedSelected));
+            OnPropertyChanged(nameof(IsColorGreenSelected));
+            OnPropertyChanged(nameof(IsColorBlueSelected));
+            OnPropertyChanged(nameof(IsColorWhiteSelected));
+            OnPropertyChanged(nameof(IsColorCustomSelected));
             ColorChanged?.Invoke(value);
         }
+
         #endregion コンストラクタ
 
         #region コマンド

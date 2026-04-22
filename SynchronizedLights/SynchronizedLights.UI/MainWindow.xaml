@@ -216,8 +216,8 @@
                         Grid.Column="1"
                         Content="ALL"
                         Command="{Binding SelectTargetAllCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
-                        MinWidth="100"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTargetAllSelected}"                        MinWidth="100"
                         MinHeight="48"
                         Margin="10,0,0,0" />
                 <Button x:Name="BtnTargetGroup01"

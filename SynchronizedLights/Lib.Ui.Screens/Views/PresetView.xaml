@@ -38,28 +38,32 @@
                 <Button x:Name="BtnColorRed"
                         Content="Red"
                         Command="{Binding SelectRedCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsColorRedSelected}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorGreen"
                         Content="Green"
                         Command="{Binding SelectGreenCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsColorGreenSelected}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorBlue"
                         Content="Blue"
                         Command="{Binding SelectBlueCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsColorBlueSelected}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,10,0" />
                 <Button x:Name="BtnColorWhite"
                         Content="White"
                         Command="{Binding SelectWhiteCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsColorWhiteSelected}"
                         MinWidth="110"
                         MinHeight="56"
                         Margin="0,0,20,0" />
@@ -67,7 +71,8 @@
                         Content="Custom..."
                         Command="{Binding DataContext.OpenColorPickerCommand,
                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                        Style="{StaticResource GrandMaButtonStyle}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsColorCustomSelected}"
                         MinWidth="130"
                         MinHeight="56" />
             </StackPanel>
