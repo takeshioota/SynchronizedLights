@@ -316,6 +316,7 @@ namespace SynchronizedLights.UI.ViewModels
         [NotifyCanExecuteChangedFor(nameof(ExecuteFlashCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteBreathCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
         private bool isTransportConnected;
 
@@ -328,6 +329,7 @@ namespace SynchronizedLights.UI.ViewModels
         [NotifyCanExecuteChangedFor(nameof(ExecuteFlashCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteBreathCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteSequence01Command))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteSequence02Command))]
@@ -1142,6 +1144,42 @@ namespace SynchronizedLights.UI.ViewModels
             }
         }
 
+        /// <summary>
+        /// Breath 実行コマンド
+        /// 概要：現在対象に対して呼吸演出（FadeIn+FadeOut の 3 サイクル繰返し）を実行する。
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
+        private async Task ExecuteBreath()
+        {
+            if (IsBusy) return;
+            IsBusy = true;
+            try
+            {
+                RefreshTransportState();
+                if (!IsTransportConnected)
+                {
+                    StatusMessage = "Breath skipped : transport disconnected";
+                    return;
+                }
+
+                await _lighting.BreathAsync(
+                    AppState.SelectedTarget,
+                    AppState.SpeedValueMs,
+                    AppState.SelectedColor,
+                    cycles: 3);
+
+                StatusMessage = $"Breath executed for {CurrentTargetLabel}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Breath failed: {ex.Message}";
+            }
+            finally
+            {
+                IsBusy = false;
+                RefreshTransportState();
+            }
+        }
         /// <summary>
         /// ストロボ停止トグルコマンド
         /// 概要：ストロボ停止状態をトグル切替する。

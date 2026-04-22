@@ -458,6 +458,56 @@ namespace Lib.Application.Facades
                 RaiseStatusChanged();
             }
         }
+        public async Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default)
+        {
+            if (ShouldDropCommand("Breath")) return;
+
+            // 1 サイクル = cycleMs、半分ずつ FadeIn / FadeOut に割り当て
+            var halfMs = Math.Max(100, cycleMs / 2);
+
+            var startTs = Stopwatch.GetTimestamp();
+            try
+            {
+                for (var i = 0; i < cycles; i++)
+                {
+                    if (ct.IsCancellationRequested) break;
+
+                    // 明るくなる（既存 FadeIn ロジックと同じ 10 ステップ補間）
+                    const int steps = 10;
+                    var stepMs = Math.Max(50, halfMs / steps);
+
+                    for (var s = 1; s <= steps; s++)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        var t = s / (double)steps;
+                        var faded = new Rgb(
+                            (byte)(color.R * t),
+                            (byte)(color.G * t),
+                            (byte)(color.B * t));
+                        await InternalSetColorAsync(target, faded, ct);
+                        if (s < steps) await Task.Delay(stepMs, ct);
+                    }
+
+                    // 暗くなる
+                    for (var s = steps - 1; s >= 0; s--)
+                    {
+                        if (ct.IsCancellationRequested) break;
+                        var t = s / (double)steps;
+                        var faded = new Rgb(
+                            (byte)(color.R * t),
+                            (byte)(color.G * t),
+                            (byte)(color.B * t));
+                        await InternalSetColorAsync(target, faded, ct);
+                        if (s > 0) await Task.Delay(stepMs, ct);
+                    }
+                }
+            }
+            finally
+            {
+                RecordLatency(startTs);
+                RaiseStatusChanged();
+            }
+        }
 
         public async Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default)
         {

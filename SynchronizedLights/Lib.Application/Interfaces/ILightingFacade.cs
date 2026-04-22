@@ -59,6 +59,17 @@ public interface ILightingFacade
     /// <summary>フェードアウトを実行する</summary>
     Task FadeOutAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default);
 
+    /// <summary>
+    /// ブレス（呼吸）演出を実行する
+    /// 概要：FadeIn + FadeOut を指定サイクル数繰り返し、呼吸のように
+    ///       ゆっくり明滅する演出。1 サイクル = fadeIn + fadeOut = cycleMs。
+    /// </summary>
+    /// <param name="target">対象</param>
+    /// <param name="cycleMs">1サイクル（明暗 1 往復）の時間（ms）</param>
+    /// <param name="color">色</param>
+    /// <param name="cycles">繰り返し回数（既定 3 回）</param>
+    Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default);
+
     // --- シーケンス ---
 
     /// <summary>登録済みシーケンスを実行する</summary>

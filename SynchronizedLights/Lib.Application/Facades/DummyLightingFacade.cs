@@ -316,6 +316,47 @@ namespace Lib.Application.Facades
             return Task.CompletedTask;
         }
 
+        public async Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default)
+        {
+            if (!IsConnected)
+            {
+                _lastError = $"送信失敗: 未接続状態で Breath が呼ばれました";
+                RaiseStatusChanged();
+                throw new InvalidOperationException(_lastError);
+            }
+
+            if (ShouldDropCommand("Breath")) return;
+
+            Log.Information(
+                "[Dummy] Breath target={Target} cycle={Cycle}ms cycles={Cycles} color=({R},{G},{B})",
+                target, cycleMs, cycles, color.R, color.G, color.B);
+
+            // FadeIn + FadeOut を cycles 回繰り返す（疑似実装）
+            var halfMs = Math.Max(50, cycleMs / 2);
+            for (var i = 0; i < cycles; i++)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                // 明るくなる（10ステップ）
+                const int steps = 10;
+                var stepMs = Math.Max(5, halfMs / steps);
+                for (var s = 1; s <= steps; s++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    SimulateSend();
+                    if (s < steps) await Task.Delay(stepMs, ct);
+                }
+
+                // 暗くなる（10ステップ）
+                for (var s = steps - 1; s >= 0; s--)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    SimulateSend();
+                    if (s > 0) await Task.Delay(stepMs, ct);
+                }
+            }
+        }
+
         public Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default)
         {
             if (ShouldDropCommand("Sequence")) return Task.CompletedTask;

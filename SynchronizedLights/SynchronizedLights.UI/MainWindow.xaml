@@ -306,6 +306,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
@@ -335,7 +336,15 @@
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
-            </Grid>
+                <Button x:Name="BtnFxBreath"
+                        Grid.Column="4"
+                        Content="Breath"
+                        Command="{Binding ExecuteBreathCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
+                        MinWidth="110"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+                </Grid>
         </Border>
 
         <!-- SequenceBar -->

@@ -48,6 +48,9 @@ namespace SynchronizedLights.UI
         /// <summary>再接続試行中の重複防止フラグ</summary>
         private bool _reconnectInFlight;
 
+        /// <summary>ハートビートタイマー</summary>
+        private DispatcherTimer? _heartbeatTimer;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // ----- Serilog 初期化 -----
@@ -95,7 +98,11 @@ namespace SynchronizedLights.UI
                 config["Lighting:AutoReconnectEnabled"], "false", StringComparison.OrdinalIgnoreCase);
             var reconnectIntervalSec = int.TryParse(
                 config["Lighting:ReconnectIntervalSec"], out var rs) ? rs : 5;
-
+            // ハートビート
+            var heartbeatEnabled = !string.Equals(
+                config["Lighting:HeartbeatEnabled"], "false", StringComparison.OrdinalIgnoreCase);
+            var heartbeatIntervalSec = int.TryParse(
+                config["Lighting:HeartbeatIntervalSec"], out var hb) ? hb : 30;
             // 循環バッファを設定値のサイズで再作成
             LatencyTracker = new LatencyTracker(windowSize: latencyWindow);
 
@@ -103,11 +110,13 @@ namespace SynchronizedLights.UI
                 "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
                 "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}, " +
                 "LatencyEnabled={LatEn}, LatencyWindow={LatWin}, LatencyLogIntervalSec={LatInt}, " +
-                "AutoReconnectEnabled={RcEn}, ReconnectIntervalSec={RcInt}",
+                "AutoReconnectEnabled={RcEn}, ReconnectIntervalSec={RcInt}, " +
+                "HeartbeatEnabled={HbEn}, HeartbeatIntervalSec={HbInt}",
                 LightingMode, queueCapacity, sendIntervalMs,
                 queuePolicy, dropThreshold, dummySendDelayMs,
                 latencyEnabled, latencyWindow, latencyLogSec,
-                autoReconnectEnabled, reconnectIntervalSec);
+                autoReconnectEnabled, reconnectIntervalSec,
+                heartbeatEnabled, heartbeatIntervalSec);
 
             // ----- UserState 読込 -----
             LoadedUserState = UserStateService.Load();
@@ -158,7 +167,17 @@ namespace SynchronizedLights.UI
                 _reconnectTimer.Tick += ReconnectTimer_Tick;
                 _reconnectTimer.Start();
             }
-
+            // ----- ハートビートタイマー-----
+            if (heartbeatEnabled && heartbeatIntervalSec > 0)
+            {
+                _heartbeatTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(heartbeatIntervalSec)
+                };
+                _heartbeatTimer.Tick += HeartbeatTimer_Tick;
+                _heartbeatTimer.Start();
+                Log.Information("Heartbeat enabled (interval={Interval}s)", heartbeatIntervalSec);
+            }
             // ----- セッション終了時の保険 -----
             SessionEnding += (sender, args) =>
             {
@@ -176,6 +195,7 @@ namespace SynchronizedLights.UI
             // タイマー停止
             try { _kpiTimer?.Stop(); } catch { /* ignore */ }
             try { _reconnectTimer?.Stop(); } catch { /* ignore */ }
+            try { _heartbeatTimer?.Stop(); } catch { /* ignore */ }
 
             // UserState 保存
             SaveUserStateSafely();
@@ -242,6 +262,36 @@ namespace SynchronizedLights.UI
             finally
             {
                 _reconnectInFlight = false;
+            }
+        }
+
+        /// <summary>
+        /// ハートビートタイマー発火ハンドラ（Phase 1 §3.1 運用）
+        /// 概要：接続状態・キュー長・エラーを定期的にログに記録する。
+        ///       武道館本番中に「いつ何が起きたか」を事後解析するための
+        ///       生存確認ログとして機能する。
+        /// </summary>
+        private void HeartbeatTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                var facade = LightingFacade;
+                if (facade == null)
+                {
+                    Log.Information("Heartbeat: facade=null");
+                    return;
+                }
+
+                Log.Information(
+                    "Heartbeat: Connected={Connected}, Ports=[{Ports}], QueueLength={Queue}, LastError={Err}",
+                    facade.IsConnected,
+                    string.Join(",", facade.ConnectedPorts),
+                    facade.QueueLength,
+                    facade.LastError ?? "-");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Heartbeat tick error");
             }
         }
 
