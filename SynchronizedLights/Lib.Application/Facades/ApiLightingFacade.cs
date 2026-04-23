@@ -1,34 +1,36 @@
-﻿using System.Diagnostics;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+// 2026-04-21 Nakazawa: SynchrolightAPI.Core 直接参照 → HTTP API (SynchrolightAPI.Api) 呼び出しに全面変更
+// 変更前: MultiPortTransport / LightingService / TxWorkerService をインプロセスで直接生成・利用
+// 変更後: HttpClient で http://localhost:5100/api/* を呼び出す構成に変更
+
+using System.Diagnostics;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Lib.Application.Interfaces;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
-
-// API側型のエイリアス：UI側と名前が衝突するので明示的に分離
-using ApiRgb = SynchrolightAPI.Domain.Rgb;
-using ApiCommandBuilder = SynchrolightAPI.Protocol.CommandBuilder;
-using ApiLightingService = SynchrolightAPI.Services.LightingService;
-using ApiMultiPortTransport = SynchrolightAPI.Transport.MultiPortTransport;
-using ApiTxWorkerService = SynchrolightAPI.Transport.TxWorkerService;
+using Serilog;
 
 namespace Lib.Application.Facades
 {
     /// <summary>
-    /// 実API実装
-    /// 概要：SynchrolightAPI.Core の LightingService / MultiPortTransport / TxWorkerService を
-    /// 統合し、ILightingFacade を提供する。実機2.4GHz発信機制御時に使用。
-    /// appsettings.json の Lighting:Mode = "Real" で有効化される。
+    /// HTTP API経由のライティング制御ファセード
+    /// 2026-04-21 Nakazawa: SynchrolightAPI.Core 直接利用 → REST API 呼び出しに変更
+    /// SynchrolightAPI.Api (http://localhost:5100) に対して HTTP リクエストを送信する。
     /// </summary>
     public class ApiLightingFacade : ILightingFacade, IDisposable
     {
         #region フィールド
 
-        private readonly ILoggerFactory _loggerFactory;
-        private readonly ApiMultiPortTransport _transport;
-        private readonly ApiLightingService _lightingService;
-        private readonly ApiTxWorkerService _worker;
-        private readonly CancellationTokenSource _workerCts;
+        private readonly HttpClient _httpClient;
+        private readonly JsonSerializerOptions _jsonOptions;
+
+        // 2026-04-21 Nakazawa: Transport直接アクセス → ステータスキャッシュに変更
+        // HTTP経由ではプロパティの同期取得ができないため、API呼び出し後にキャッシュを更新する方式
+        private bool _isConnected;
+        private List<string> _connectedPorts = new();
+        private int _queueLength;
         private string? _lastError;
         private bool _disposed;
 
@@ -36,21 +38,14 @@ namespace Lib.Application.Facades
 
         #region プロパティ (ILightingFacade)
 
-        public bool IsConnected
-            => _transport.ListPorts().Any(p => p.IsConnected);
+        // 2026-04-21 Nakazawa: _transport.ListPorts() 直接参照 → キャッシュ参照に変更
+        public bool IsConnected => _isConnected;
 
-        public IReadOnlyList<string> ConnectedPorts
-            => _transport.ListPorts()
-                .Where(p => p.IsConnected)
-                .Select(p => p.Name)
-                .ToList()
-                .AsReadOnly();
+        public IReadOnlyList<string> ConnectedPorts => _connectedPorts.AsReadOnly();
 
-        public int QueueLength
-            => _transport.GetStatus().QueueLength;
+        public int QueueLength => _queueLength;
 
-        public string? LastError
-            => _lastError ?? _transport.GetStatus().LastError;
+        public string? LastError => _lastError;
 
         public event EventHandler? StatusChanged;
 
@@ -60,52 +55,26 @@ namespace Lib.Application.Facades
 
         /// <summary>
         /// ApiLightingFacade を生成する。
+        /// 2026-04-21 Nakazawa: コンストラクタ引数を (queueCapacity, sendIntervalMs) → (baseUrl) に変更
+        /// MultiPortTransport / LightingService / TxWorkerService の生成を削除し、HttpClient を生成
         /// </summary>
-        /// <param name="queueCapacity">送信キュー容量（既定 256）</param>
-        /// <param name="sendIntervalMs">送信間隔 ms（既定 5）</param>
-        public ApiLightingFacade(int queueCapacity = 256, int sendIntervalMs = 5)
+        /// <param name="baseUrl">SynchrolightAPI.Api のベースURL（例: http://localhost:5100）</param>
+        public ApiLightingFacade(string baseUrl)
         {
-            // Logger
-            _loggerFactory = LoggerFactory.Create(builder =>
+            _httpClient = new HttpClient
             {
-                builder.SetMinimumLevel(LogLevel.Information);
-                builder.AddDebug();
-            });
+                BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/")
+            };
 
-            // Transport
-            _transport = new ApiMultiPortTransport(
-                _loggerFactory.CreateLogger<ApiMultiPortTransport>(),
-                queueCapacity);
+            // 2026-04-21 Nakazawa: API側の JSON 設定 (camelCase) に合わせる
+            _jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                PropertyNameCaseInsensitive = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
 
-            // Protocol CommandBuilder
-            var cmdBuilder = new ApiCommandBuilder();
-
-            // LightingService
-            _lightingService = new ApiLightingService(
-                cmdBuilder,
-                _transport,
-                _loggerFactory.CreateLogger<ApiLightingService>());
-
-            // TxWorkerService は IConfiguration を要求するので、
-            // SerialPort:SendIntervalMs を含むインメモリ設定を渡す
-            var workerConfig = new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["SerialPort:SendIntervalMs"] = sendIntervalMs.ToString()
-                })
-                .Build();
-
-            _worker = new ApiTxWorkerService(
-                _transport,
-                _loggerFactory.CreateLogger<ApiTxWorkerService>(),
-                workerConfig);
-
-            // BackgroundService.StartAsync 内部で ExecuteAsync がタスクとして起動する
-            _workerCts = new CancellationTokenSource();
-            _ = _worker.StartAsync(_workerCts.Token);
-
-            Debug.WriteLine(
-                $"[Api] ApiLightingFacade initialized (queue={queueCapacity}, interval={sendIntervalMs}ms)");
+            Log.Information("[Api] ApiLightingFacade initialized (HTTP mode, baseUrl={BaseUrl})", baseUrl);
         }
 
         #endregion コンストラクタ
@@ -114,46 +83,89 @@ namespace Lib.Application.Facades
 
         public async Task<IReadOnlyList<string>> GetAvailablePortsAsync()
         {
-            // OSから実COMポート一覧を取得
+            // 2026-04-21 Nakazawa: ローカル SerialPort.GetPortNames() をそのまま維持
+            // API側に利用可能ポート一覧エンドポイントが未実装のため、ローカル取得で代替
+            // TODO: API側に GET /api/transport/ports エンドポイントが追加されたら切り替える
             var ports = System.IO.Ports.SerialPort.GetPortNames();
             Array.Sort(ports);
             return await Task.FromResult<IReadOnlyList<string>>(ports);
         }
 
+        // 2026-04-21 Nakazawa: _transport.ConnectAsync() → POST /api/transport/connect に変更
         public async Task ConnectAsync(IEnumerable<string> portNames, CancellationToken ct = default)
         {
             try
             {
                 _lastError = null;
-                await _transport.ConnectAsync(portNames, ct);
+                var request = new { portNames = portNames.ToArray() };
+                var response = await _httpClient.PostAsJsonAsync("api/transport/connect", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? "接続に失敗しました";
+                    Log.Error("[Api] Connect failed: {Error}", _lastError);
+                }
+                else
+                {
+                    Log.Information("[Api] Connect succeeded: {Message}", result.Message);
+                }
             }
             catch (Exception ex)
             {
-                _lastError = ex.Message;
-                Debug.WriteLine($"[Api] Connect failed: {ex.Message}");
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] Connect HTTP error");
             }
             finally
             {
+                await RefreshStatusAsync();
                 RaiseStatusChanged();
             }
         }
 
+        // 2026-04-21 Nakazawa: _transport.DisconnectAsync() → POST /api/transport/disconnect に変更
         public async Task DisconnectAsync()
         {
-            await _transport.DisconnectAsync();
-            RaiseStatusChanged();
+            try
+            {
+                var response = await _httpClient.PostAsync("api/transport/disconnect", null);
+                var result = await ReadApiResponseAsync(response);
+                Log.Information("[Api] Disconnect: {Message}", result.Message);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] Disconnect HTTP error");
+            }
+            finally
+            {
+                await RefreshStatusAsync();
+                RaiseStatusChanged();
+            }
         }
 
+        // 2026-04-21 Nakazawa: _lightingService.InitializeTransmitterAsync() → POST /api/transmitter/init に変更
         public async Task InitializeTransmitterAsync(byte channel, byte power, CancellationToken ct = default)
         {
             try
             {
                 _lastError = null;
-                await _lightingService.InitializeTransmitterAsync(channel, power, ct);
+                var request = new { channel = (int)channel, power = (int)power };
+                var response = await _httpClient.PostAsJsonAsync("api/transmitter/init", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? "送信機初期化に失敗しました";
+                    throw new InvalidOperationException(_lastError);
+                }
+
+                Log.Information("[Api] InitializeTransmitter: {Message}", result.Message);
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                _lastError = ex.Message;
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] InitializeTransmitter HTTP error");
                 throw;
             }
             finally
@@ -176,6 +188,7 @@ namespace Lib.Application.Facades
         {
             try
             {
+                // 2026-04-21 Nakazawa: InternalSetColorAsync 内部も HTTP 呼び出しに変更済み
                 await InternalSetColorAsync(target, color, ct);
             }
             catch (Exception ex)
@@ -191,7 +204,7 @@ namespace Lib.Application.Facades
 
         public async Task FlashAsync(Target target, int speedMs, Rgb color, CancellationToken ct = default)
         {
-            // クライアント側実装（API未対応）：1サイクル on/off
+            // クライアント側実装（API未対応）：1サイクル on/off — ロジック変更なし
             var halfMs = Math.Max(50, speedMs / 2);
             var black = new Rgb(0, 0, 0);
 
@@ -209,7 +222,7 @@ namespace Lib.Application.Facades
 
         public async Task FadeInAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default)
         {
-            // クライアント側実装：10ステップで段階補間
+            // クライアント側実装：10ステップで段階補間 — ロジック変更なし
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
 
@@ -238,7 +251,7 @@ namespace Lib.Application.Facades
 
         public async Task FadeOutAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default)
         {
-            // クライアント側実装：10ステップで段階補間（減衰）
+            // クライアント側実装：10ステップで段階補間（減衰） — ロジック変更なし
             const int steps = 10;
             var stepMs = Math.Max(50, timeMs / steps);
 
@@ -267,12 +280,24 @@ namespace Lib.Application.Facades
 
         public async Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default)
         {
-            // Phase 1時点ではAPI側にシーケンス再生（A1コマンド）が未実装。
-            // 将来 LightingService に ExecuteSequenceAsync が追加されたら差し替える。
-            Debug.WriteLine(
-                $"[Api] Sequence execution pending API support. target={target}, id={sequenceId}");
-            await Task.CompletedTask;
-            RaiseStatusChanged();
+            // 2026-04-21 Nakazawa: API側に POST /api/light/sequence が存在するためHTTP呼び出しに変更
+            // ただし target → frameNo のマッピングは暫定で sequenceId をそのまま使用
+            try
+            {
+                var request = new { frameNo = (uint)sequenceId };
+                var response = await _httpClient.PostAsJsonAsync("api/light/sequence", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+                Log.Information("[Api] ExecuteSequence: {Message}", result.Message);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] ExecuteSequence HTTP error");
+            }
+            finally
+            {
+                RaiseStatusChanged();
+            }
         }
 
         #endregion 制御
@@ -280,37 +305,136 @@ namespace Lib.Application.Facades
         #region 内部メソッド
 
         /// <summary>
-        /// UI側 Target を API 呼び出しに振り分ける。
-        /// ALL → SetGlobalColorAsync (A2)
-        /// Group01〜08 → SetRowColorAsync (A3)
+        /// UI側 Target を HTTP API 呼び出しに振り分ける。
+        /// 2026-04-21 Nakazawa: LightingService直接呼び出し → HTTP POST に変更
+        /// ALL → POST /api/light/global (A2)
+        /// Group01〜08 → POST /api/light/rows/each (A3)
         /// </summary>
         private async Task InternalSetColorAsync(Target target, Rgb color, CancellationToken ct)
         {
-            var apiColor = ToApiRgb(color);
+            var colorObj = new { r = (int)color.R, g = (int)color.G, b = (int)color.B };
 
             if (target == Target.All)
             {
-                await _lightingService.SetGlobalColorAsync(apiColor, ct);
+                // 2026-04-21 Nakazawa: _lightingService.SetGlobalColorAsync() → POST /api/light/global
+                var request = new { color = colorObj };
+                var response = await _httpClient.PostAsJsonAsync("api/light/global", request, _jsonOptions, ct);
+                await EnsureApiSuccessAsync(response, "SetGlobalColor", ct);
             }
             else
             {
+                // 2026-04-21 Nakazawa: _lightingService.SetRowColorAsync() → POST /api/light/rows/each
                 var (startRow, len) = GroupToRowRange(target);
-                await _lightingService.SetRowColorAsync(
-                    field: 0,
-                    startRow: startRow,
-                    len: len,
-                    color: apiColor,
-                    ct: ct);
+                var request = new
+                {
+                    field = 0,
+                    startRow = (int)startRow,
+                    len = (int)len,
+                    color = colorObj
+                };
+                var response = await _httpClient.PostAsJsonAsync("api/light/rows/each", request, _jsonOptions, ct);
+                await EnsureApiSuccessAsync(response, "SetRowColor", ct);
             }
         }
 
         /// <summary>
-        /// UI Rgb → API Rgb 変換
+        /// API レスポンスを読み取り、ApiResponseDto に変換する。
+        /// 2026-04-21 Nakazawa: 新規追加 — HTTP レスポンスのパース用ヘルパー
         /// </summary>
-        private static ApiRgb ToApiRgb(Rgb color) => new(color.R, color.G, color.B);
+        private async Task<ApiResponseDto> ReadApiResponseAsync(HttpResponseMessage response, CancellationToken ct = default)
+        {
+            var json = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // HTTP エラー時もJSON解析を試みる（API側は BadRequest でも ApiResponse を返す）
+                try
+                {
+                    var errorResult = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
+                    if (errorResult != null) return errorResult;
+                }
+                catch { /* JSONパース失敗時は下で汎用エラーを返す */ }
+
+                return new ApiResponseDto
+                {
+                    Success = false,
+                    Error = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}"
+                };
+            }
+
+            var result = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
+            return result ?? new ApiResponseDto { Success = false, Error = "レスポンスのパースに失敗しました" };
+        }
 
         /// <summary>
-        /// UI Group → (startRow, len) マッピング（25台×8グループ＝200台）
+        /// API 呼び出し結果を確認し、失敗時は例外をスローする。
+        /// 2026-04-21 Nakazawa: 新規追加
+        /// </summary>
+        private async Task EnsureApiSuccessAsync(HttpResponseMessage response, string operation, CancellationToken ct)
+        {
+            var result = await ReadApiResponseAsync(response, ct);
+            if (!result.Success)
+            {
+                var errorMsg = result.Error ?? $"{operation} に失敗しました";
+                Log.Error("[Api] {Operation} failed: {Error}", operation, errorMsg);
+                throw new InvalidOperationException(errorMsg);
+            }
+            Log.Information("[Api] {Operation}: {Message}", operation, result.Message);
+        }
+
+        /// <summary>
+        /// GET /api/transport/status を呼び出してステータスキャッシュを更新する。
+        /// 2026-04-21 Nakazawa: 新規追加 — プロパティ用のキャッシュ更新メソッド
+        /// </summary>
+        private async Task RefreshStatusAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync("api/transport/status");
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
+
+                if (result?.Success == true && result.Data != null)
+                {
+                    var data = (JsonElement)result.Data;
+
+                    if (data.TryGetProperty("queueLength", out var ql))
+                        _queueLength = ql.GetInt32();
+
+                    if (data.TryGetProperty("connectedPorts", out var cp))
+                        _connectedPorts = new List<string>(
+                            cp.ValueKind == JsonValueKind.Number
+                                ? (cp.GetInt32() > 0 ? Enumerable.Repeat("(connected)", cp.GetInt32()) : Array.Empty<string>())
+                                : Array.Empty<string>());
+
+                    // Ports 配列からポート名を取得
+                    if (data.TryGetProperty("ports", out var ports) && ports.ValueKind == JsonValueKind.Array)
+                    {
+                        var connectedNames = new List<string>();
+                        foreach (var port in ports.EnumerateArray())
+                        {
+                            var isConnected = port.TryGetProperty("isConnected", out var ic) && ic.GetBoolean();
+                            var name = port.TryGetProperty("name", out var n) ? n.GetString() : null;
+                            if (isConnected && name != null)
+                                connectedNames.Add(name);
+                        }
+                        _connectedPorts = connectedNames;
+                    }
+
+                    _isConnected = _connectedPorts.Count > 0;
+
+                    if (data.TryGetProperty("lastError", out var le) && le.ValueKind != JsonValueKind.Null)
+                        _lastError = le.GetString();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[Api] RefreshStatus failed — ステータスキャッシュ更新をスキップ");
+            }
+        }
+
+        /// <summary>
+        /// UI Group → (startRow, len) マッピング（25台×8グループ＝200台）— 変更なし
         /// </summary>
         private static (ushort startRow, byte len) GroupToRowRange(Target group)
         {
@@ -335,19 +459,31 @@ namespace Lib.Application.Facades
 
         #endregion 内部メソッド
 
+        #region 内部DTO
+
+        /// <summary>
+        /// API レスポンス用 DTO
+        /// 2026-04-21 Nakazawa: 新規追加 — SynchrolightAPI.Api の ApiResponse に対応
+        /// </summary>
+        private class ApiResponseDto
+        {
+            public bool Success { get; set; }
+            public string? Message { get; set; }
+            public string? Error { get; set; }
+            public object? Data { get; set; }
+        }
+
+        #endregion 内部DTO
+
         #region Dispose
 
+        // 2026-04-21 Nakazawa: Transport/Worker の Dispose → HttpClient の Dispose に変更
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
 
-            try { _workerCts?.Cancel(); } catch { /* ignore */ }
-            try { _worker?.StopAsync(CancellationToken.None).GetAwaiter().GetResult(); } catch { /* ignore */ }
-            try { _transport?.Dispose(); } catch { /* ignore */ }
-
-            _workerCts?.Dispose();
-            _loggerFactory?.Dispose();
+            try { _httpClient?.Dispose(); } catch { /* ignore */ }
 
             GC.SuppressFinalize(this);
         }

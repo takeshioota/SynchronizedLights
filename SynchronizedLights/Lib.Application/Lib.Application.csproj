@@ -8,11 +8,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Lib.Domain\Lib.Domain.csproj" />
-    <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" />
+    <!-- 2026-04-21 Nakazawa: SynchrolightAPI.Core 直接参照を削除（HTTP API方式に移行） -->
+    <!-- 変更前: <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" /> -->
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- 2026-04-21 Nakazawa: SynchrolightAPI.Core 削除に伴い、SerialPort.GetPortNames() 用に追加 -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
