@@ -781,6 +781,7 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Sequence failed : {ex.Message}";
+                App.MisOpTracker.RecordSendFailure();
             }
         }
 
@@ -1050,6 +1051,7 @@ namespace SynchronizedLights.UI.ViewModels
                 if (!IsTransportConnected)
                 {
                     StatusMessage = "Flash skipped : transport disconnected";
+                    App.MisOpTracker.RecordSendFailure();
                     return;
                 }
 
@@ -1064,6 +1066,7 @@ namespace SynchronizedLights.UI.ViewModels
             {
                 StatusMessage = $"Flash failed: {ex.Message}";
                 ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
             }
             finally
             {
@@ -1087,6 +1090,7 @@ namespace SynchronizedLights.UI.ViewModels
                 if (!IsTransportConnected)
                 {
                     StatusMessage = "FadeIn skipped : transport disconnected";
+                    App.MisOpTracker.RecordSendFailure();
                     return;
                 }
 
@@ -1100,6 +1104,8 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"FadeIn failed: {ex.Message}";
+                ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
             }
             finally
             {
@@ -1123,6 +1129,7 @@ namespace SynchronizedLights.UI.ViewModels
                 if (!IsTransportConnected)
                 {
                     StatusMessage = "FadeOut skipped : transport disconnected";
+                    App.MisOpTracker.RecordSendFailure();
                     return;
                 }
 
@@ -1136,6 +1143,8 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"FadeOut failed: {ex.Message}";
+                ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
             }
             finally
             {
@@ -1159,6 +1168,7 @@ namespace SynchronizedLights.UI.ViewModels
                 if (!IsTransportConnected)
                 {
                     StatusMessage = "Breath skipped : transport disconnected";
+                    App.MisOpTracker.RecordSendFailure();
                     return;
                 }
 
@@ -1173,6 +1183,8 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Breath failed: {ex.Message}";
+                ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
             }
             finally
             {
@@ -1203,6 +1215,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsCommandNameValid)
             {
                 StatusMessage = "命令名は32文字以内で入力してください。";
+                App.MisOpTracker.RecordInvalidCommandName();
                 return;
             }
 
@@ -1225,6 +1238,7 @@ namespace SynchronizedLights.UI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Execute failed : {ex.Message}";
+                App.MisOpTracker.RecordSendFailure();
             }
             finally
             {
@@ -1317,6 +1331,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence01Defined)
             {
                 StatusMessage = "Sequence01 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1341,6 +1356,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence02Defined)
             {
                 StatusMessage = "Sequence02 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1365,6 +1381,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence03Defined)
             {
                 StatusMessage = "Sequence03 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1388,6 +1405,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence04Defined)
             {
                 StatusMessage = "Sequence04 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1411,6 +1429,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence05Defined)
             {
                 StatusMessage = "Sequence05 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1434,6 +1453,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence06Defined)
             {
                 StatusMessage = "Sequence06 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;
@@ -1457,6 +1477,7 @@ namespace SynchronizedLights.UI.ViewModels
             if (!IsSequence07Defined)
             {
                 StatusMessage = "Sequence07 is undefined";
+                App.MisOpTracker.RecordUndefinedAction();
                 return;
             }
             IsBusy = true;

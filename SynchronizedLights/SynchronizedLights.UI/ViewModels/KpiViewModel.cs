@@ -47,12 +47,14 @@ namespace SynchronizedLights.UI.ViewModels
         [ObservableProperty] private string latencyText = "P95: -- ms";
         [ObservableProperty] private string successRateText = "100.0 %";
         [ObservableProperty] private string totalSentText = "0";
+        [ObservableProperty] private string misOpText = "0";
 
         [ObservableProperty] private Brush queueBrush = NeutralBrush;
         [ObservableProperty] private Brush droppedBrush = NeutralBrush;
         [ObservableProperty] private Brush reconnectBrush = NeutralBrush;
         [ObservableProperty] private Brush latencyBrush = NeutralBrush;
         [ObservableProperty] private Brush successRateBrush = NeutralBrush;
+        [ObservableProperty] private Brush misOpBrush = NeutralBrush;
 
         #endregion プロパティ
 
@@ -92,6 +94,7 @@ namespace SynchronizedLights.UI.ViewModels
                 PollQueue();
                 PollDroppedAndReconnect();
                 PollLatencyAndSuccess();
+                PollMisOp();
             }
             catch (Exception ex)
             {
@@ -208,6 +211,24 @@ namespace SynchronizedLights.UI.ViewModels
             }
         }
 
+        private void PollMisOp()
+        {
+            var tracker = App.MisOpTracker;
+            if (tracker == null)
+            {
+                MisOpText = "--";
+                MisOpBrush = NeutralBrush;
+                return;
+            }
+
+            var total = tracker.TotalMisOperationCount;
+            MisOpText = total.ToString();
+
+            // 0 件=緑、1-5件=黄、>5件=赤
+            MisOpBrush = total == 0 ? OkBrush
+                       : total <= 5 ? WarningBrush
+                       : CriticalBrush;
+        }
         #endregion ポーリング
 
         #region Dispose

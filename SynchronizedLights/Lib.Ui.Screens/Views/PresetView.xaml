@@ -178,16 +178,17 @@
                         </TextBlock>
                     </Grid>
                     <TextBox x:Name="TxtCommandName"
-				             Text="{Binding DataContext.CommandName,
-				                    RelativeSource={RelativeSource AncestorType=Window},
-				                    Mode=TwoWay,
-				                    UpdateSourceTrigger=PropertyChanged}">
+                             MaxLength="32"
+                             Text="{Binding DataContext.CommandName,
+                                    RelativeSource={RelativeSource AncestorType=Window},
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}">
                         <TextBox.Style>
                             <Style TargetType="TextBox" BasedOn="{StaticResource GrandMaTextBoxStyle}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding DataContext.IsCommandNameValid,
-				                                            RelativeSource={RelativeSource AncestorType=Window}}"
-				                                 Value="False">
+                                                            RelativeSource={RelativeSource AncestorType=Window}}"
+                                                 Value="False">
                                         <Setter Property="BorderBrush" Value="#DC3545"/>
                                         <Setter Property="BorderThickness" Value="2"/>
                                         <Setter Property="ToolTip" Value="命令名は32文字以内で入力してください。"/>

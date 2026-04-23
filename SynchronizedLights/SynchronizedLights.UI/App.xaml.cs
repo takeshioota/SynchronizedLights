@@ -39,6 +39,9 @@ namespace SynchronizedLights.UI
         /// <summary>アプリ全体で共有する遅延計測トラッカー</summary>
         public static LatencyTracker LatencyTracker { get; private set; } = new LatencyTracker(windowSize: 1000);
 
+        /// <summary>操作ミス計測トラッカー</summary>
+        public static MisOperationTracker MisOpTracker => MisOperationTracker.Instance;
+
         /// <summary>KPI 定期ログ出力タイマー</summary>
         private DispatcherTimer? _kpiTimer;
 
@@ -204,6 +207,7 @@ namespace SynchronizedLights.UI
             LogDroppedCount();
             LogReconnectCount();
             LogLatencyStats(final: true);
+            LogMisOpCount();
 
             // Facade 破棄
             if (LightingFacade is IDisposable disposable)
@@ -266,7 +270,7 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
-        /// ハートビートタイマー発火ハンドラ（Phase 1 §3.1 運用）
+        /// ハートビートタイマー発火ハンドラ
         /// 概要：接続状態・キュー長・エラーを定期的にログに記録する。
         ///       武道館本番中に「いつ何が起きたか」を事後解析するための
         ///       生存確認ログとして機能する。
@@ -341,6 +345,9 @@ namespace SynchronizedLights.UI
             }
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         private static void LogReconnectCount()
         {
             try
@@ -356,6 +363,20 @@ namespace SynchronizedLights.UI
             }
         }
 
+        /// <summary>
+        /// 操作ミス累計をログに出力する
+        /// </summary>
+        private static void LogMisOpCount()
+        {
+            try
+            {
+                Log.Information("KPI: MisOperation {Stats}", MisOpTracker.ToString());
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "MisOp log failed");
+            }
+        }
         #endregion KPI ログ出力
 
         #region UserState / Config

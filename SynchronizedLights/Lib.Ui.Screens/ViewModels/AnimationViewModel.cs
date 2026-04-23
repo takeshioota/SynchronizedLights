@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lib.Application.Interfaces;
+using Lib.Application.Services;
 using Lib.Domain.Enums;
 
 namespace Lib.Ui.Screens.ViewModels
@@ -119,6 +120,7 @@ namespace Lib.Ui.Screens.ViewModels
                 StopPreview();
                 PreviewText = $"『アニメデータなし』: {animation.Name}";
                 StatusMessage = $"アニメデータなし ({animation.Name})";
+                MisOperationTracker.Instance.RecordUndefinedAction();
                 return;
             }
 

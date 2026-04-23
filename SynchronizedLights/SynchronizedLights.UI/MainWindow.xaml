@@ -572,6 +572,17 @@
                            Foreground="#EEE"
                            FontWeight="Bold"
                            VerticalAlignment="Center"/>
+                <!-- 操作ミス -->
+                <TextBlock Text="MisOp:"
+                           Foreground="#888"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBlock Text="{Binding MisOpText}"
+                           Foreground="{Binding MisOpBrush}"
+                           FontWeight="Bold"
+                           MinWidth="32"
+                           VerticalAlignment="Center"
+                           Margin="0,0,24,0"/>
             </StackPanel>
         </Border>
     </Grid>

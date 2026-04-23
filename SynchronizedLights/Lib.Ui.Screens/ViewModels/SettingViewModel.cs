@@ -38,6 +38,15 @@ namespace Lib.Ui.Screens.ViewModels
         private bool isBusy;
 
         /// <summary>
+        /// Transport 接続状態
+        /// 概要：ILightingFacade.IsConnected を追跡。
+        /// Disconnect ボタンの有効/無効判定に使用。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+        private bool isConnected;
+
+        /// <summary>
         /// ポート状態表示文字列
         /// 概要：Connected / Disconnected を表示する。
         /// </summary>
@@ -127,6 +136,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             _lighting = lighting;
             _lighting.StatusChanged += OnFacadeStatusChanged;
+            IsConnected = _lighting.IsConnected; 
 
             // 初期ポート読み込み（UI表示ブロックしない）
             _ = RefreshPortsAsync();
@@ -228,10 +238,25 @@ namespace Lib.Ui.Screens.ViewModels
         /// 切断コマンド
         /// 概要：接続中の全ポートを閉じる。
         /// </summary>
-        [RelayCommand]
+        [RelayCommand(CanExecute = nameof(CanDisconnect))]
         private async Task DisconnectAsync()
         {
             if (IsBusy) return;
+
+            // 重要操作の確認ダイアログ
+            var result = System.Windows.MessageBox.Show(
+                "全ポートを切断します。本番中の場合、演出が停止します。\n実行してよろしいですか？",
+                "切断確認 / Disconnect Confirmation",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No);
+
+            if (result != System.Windows.MessageBoxResult.Yes)
+            {
+                SettingStatusMessage = "切断をキャンセルしました";
+                return;
+            }
+
             IsBusy = true;
             try
             {
@@ -272,6 +297,22 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // 約4秒ブロックの警告ダイアログ
+            var result = System.Windows.MessageBox.Show(
+                $"送信機を初期化します（Channel={ChannelValue}, Power={PowerValue}）。\n" +
+                "初期化には約4秒かかり、その間は送信ができません。\n" +
+                "本番演出中の場合は中断されます。\n\n実行してよろしいですか？",
+                "送信機初期化確認 / Initialize Transmitter",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Information,
+                System.Windows.MessageBoxResult.Yes);  // 既定は Yes（通常は実行想定）
+
+            if (result != System.Windows.MessageBoxResult.Yes)
+            {
+                SettingStatusMessage = "初期化をキャンセルしました";
+                return;
+            }
+
             IsBusy = true;
             try
             {
@@ -287,6 +328,13 @@ namespace Lib.Ui.Screens.ViewModels
                 IsBusy = false;
             }
         }
+
+        /// <summary>
+        /// Disconnect 実行可否判定（UX fix）
+        /// 概要：接続中かつ送信中でない時のみ Disconnect ボタンが押せる。
+        /// 未接続時はボタンがグレーアウトする。
+        /// </summary>
+        private bool CanDisconnect() => IsConnected && !IsBusy;
 
         #endregion コマンド
 
@@ -337,9 +385,9 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         private void OnFacadeStatusChanged(object? sender, EventArgs e)
         {
-
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
+                IsConnected = _lighting.IsConnected; 
                 UpdatePortConnectionFlags();
                 LoadStatus();
             });

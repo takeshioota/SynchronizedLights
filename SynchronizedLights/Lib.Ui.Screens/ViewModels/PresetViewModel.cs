@@ -244,6 +244,24 @@ namespace Lib.Ui.Screens.ViewModels
         private async Task TurnOffAsync()
         {
             if (IsBusy) return;
+
+            // ALL 対象での消灯は会場ブラックアウトを招くので確認
+            if (SelectedTarget == Target.All)
+            {
+                var result = System.Windows.MessageBox.Show(
+                    "全ての端末を消灯します（会場全体がブラックアウトします）。\n本番中の場合は演出に影響します。\n\n実行してよろしいですか？",
+                    "全体消灯確認 / Turn Off All Confirmation",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning,
+                    System.Windows.MessageBoxResult.No);  // 既定は No（誤タップ防止）
+
+                if (result != System.Windows.MessageBoxResult.Yes)
+                {
+                    RefreshStatus("全体消灯をキャンセルしました");
+                    return;
+                }
+            }
+
             IsBusy = true;
             try
             {
