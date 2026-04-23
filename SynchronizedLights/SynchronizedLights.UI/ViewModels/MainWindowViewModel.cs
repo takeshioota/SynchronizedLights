@@ -11,6 +11,7 @@ using Lib.Ui.Screens.Views;
 using System.Windows;
 using Lib.Application.Models;
 using Lib.Application.Services;
+using System.Collections.ObjectModel;
 namespace SynchronizedLights.UI.ViewModels
 {
     /// <summary>
@@ -398,8 +399,16 @@ namespace SynchronizedLights.UI.ViewModels
         /// 概要：「文字数超過でカウンタ赤」
         /// XAML側のDataTriggerでForegroundを赤に切り替える。
         /// </summary>
-        public string CommandNameCountText
-            => $"{(CommandName?.Length ?? 0)} / 32";
+        public string CommandNameCountText => $"{(CommandName?.Length ?? 0)} / 32";
+
+        /// <summary>
+        /// ゾーン一覧
+        /// 概要：Zone1〜4 の割当状態・CH・電力を保持する共通ソース。
+        ///       SettingView からはこのコレクションを Window DataContext 経由で参照する。
+        ///       UserState 保存・復元にも使用。
+        /// </summary>
+        public ObservableCollection<Lib.Ui.Screens.ViewModels.ZoneItemViewModel> Zones { get; }
+            = new ObservableCollection<Lib.Ui.Screens.ViewModels.ZoneItemViewModel>();
 
         /// <summary>
         /// 送信先ポート
@@ -498,6 +507,7 @@ namespace SynchronizedLights.UI.ViewModels
         {
             _lighting = lighting;
             _lighting.StatusChanged += OnFacadeStatusChanged;
+            InitializeZones();
             UpdateCurrentViewModel();
             RefreshCategorySelection();
             RefreshTargetSelection();
@@ -588,10 +598,8 @@ namespace SynchronizedLights.UI.ViewModels
         private SettingViewModel CreateSettingViewModel()
         {
             var vm = new SettingViewModel(_lighting);
-            // 前回値を反映
             vm.ChannelValue = LastTransmitterChannel;
             vm.PowerValue = LastTransmitterPower;
-            // 変更追跡
             vm.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(SettingViewModel.ChannelValue))
@@ -603,6 +611,15 @@ namespace SynchronizedLights.UI.ViewModels
                     LastTransmitterPower = vm.PowerValue;
                 }
             };
+
+            // Setting VM 側のポート一覧が読み込まれたら Zones 側にも反映
+            vm.Ports.CollectionChanged += (s, e) =>
+            {
+                var names = new System.Collections.Generic.List<string>();
+                foreach (var p in vm.Ports) names.Add(p.PortName);
+                UpdateZoneAvailablePorts(names);
+            };
+
             return vm;
         }
 
@@ -670,6 +687,46 @@ namespace SynchronizedLights.UI.ViewModels
         }
 
         /// <summary>
+        /// ゾーンコレクションの初期化
+        /// 概要：起動時に 4 個のゾーンアイテムを作成する。
+        ///       ApplyUserState で UserState.Zones が復元された場合はその値で上書きされる。
+        /// </summary>
+        private void InitializeZones()
+        {
+            Zones.Clear();
+            for (int i = 1; i <= 4; i++)
+            {
+                var zone = new Lib.Ui.Screens.ViewModels.ZoneItemViewModel(_lighting)
+                {
+                    ZoneName = $"Zone{i}",
+                    AssignedPort = "-",
+                    Channel = (byte)i,
+                    Power = 3
+                };
+                Zones.Add(zone);
+            }
+        }
+
+        /// <summary>
+        /// ゾーンの AvailablePorts（選択肢リスト）を全ゾーンに配る
+        /// 概要：Setting 画面が開かれたタイミングで、利用可能な COM ポート一覧を
+        ///       各ゾーンの ComboBox ソースとして設定する。
+        /// </summary>
+        public void UpdateZoneAvailablePorts(System.Collections.Generic.IEnumerable<string> comPorts)
+        {
+            var list = new System.Collections.Generic.List<string> { "-" };
+            foreach (var p in comPorts)
+            {
+                if (!string.IsNullOrEmpty(p)) list.Add(p);
+            }
+            var ro = list.AsReadOnly();
+            foreach (var z in Zones)
+            {
+                z.AvailablePorts = ro;
+            }
+        }
+
+        /// <summary>
         /// UserState を現在の画面状態に反映する（起動時に呼ばれる）
         /// 概要：永続化された値を復元
         /// </summary>
@@ -704,6 +761,15 @@ namespace SynchronizedLights.UI.ViewModels
 
             // Preset画面が開いている場合、色・対象を反映
             SyncPresetStateIfActive();
+
+            // ゾーン構成を復元
+            if (state.Zones != null && state.Zones.Count > 0)
+            {
+                for (int i = 0; i < Zones.Count && i < state.Zones.Count; i++)
+                {
+                    Zones[i].ApplyConfig(state.Zones[i]);
+                }
+            }
         }
 
         /// <summary>
@@ -722,7 +788,8 @@ namespace SynchronizedLights.UI.ViewModels
                 CommandName = CommandName ?? "",
                 SelectedPort = SelectedPort ?? "ALL",
                 TransmitterChannel = LastTransmitterChannel,
-                TransmitterPower = LastTransmitterPower
+                TransmitterPower = LastTransmitterPower,
+                Zones = Zones.Select(z => z.ToConfig()).ToList() 
             };
         }
 

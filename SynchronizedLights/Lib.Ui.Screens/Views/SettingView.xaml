@@ -196,6 +196,142 @@
                 </StackPanel>
             </Border>
 
+            <!-- ゾーン割当 -->
+            <TextBlock Text="ゾーン割当 / Zone Allocation"
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    Margin="0,0,0,8" />
+            <Border BorderBrush="{StaticResource AccentAmberBrush}"
+                    BorderThickness="1"
+                    Padding="10"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="各ゾーンに COM ポート・CH・電力を割り当てます。大規模構成（7〜8万台）の複数発信機運用向け。"
+                            FontSize="12"
+                            Opacity="0.75"
+                            TextWrapping="Wrap"
+                            Margin="0,0,0,8"/>
+        
+                    <!-- ヘッダー行 -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="100"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="ゾーン" FontWeight="SemiBold" Opacity="0.8"/>
+                        <TextBlock Grid.Column="1" Text="割当ポート" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="2" Text="CH (1-4)" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="3" Text="Pwr (0-3)" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="4" Text="" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
+                        <TextBlock Grid.Column="5" Text="状態" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
+                    </Grid>
+        
+                    <!-- Zones データバインド（MainWindowViewModel.Zones へ） -->
+                    <ItemsControl ItemsSource="{Binding DataContext.Zones,
+                                        RelativeSource={RelativeSource AncestorType=Window}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3,0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="160"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+        
+                                    <!-- ゾーン名 -->
+                                    <TextBlock Grid.Column="0"
+                                            Text="{Binding ZoneName}"
+                                            VerticalAlignment="Center"
+                                            FontWeight="SemiBold"/>
+        
+                                    <!-- ポート選択 ComboBox -->
+                                    <ComboBox Grid.Column="1"
+                                            x:Name="CmbZonePort"
+                                            ItemsSource="{Binding AvailablePorts}"
+                                            SelectedItem="{Binding AssignedPort, Mode=TwoWay}"
+                                            Style="{StaticResource GrandMaComboBoxStyle}"
+                                            MinHeight="30"
+                                            Margin="10,0,0,0"/>
+        
+                                    <!-- CH TextBox -->
+                                    <TextBox Grid.Column="2"
+                                            x:Name="TxtZoneCh"
+                                            Text="{Binding Channel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            MinHeight="30"
+                                            Margin="10,0,0,0">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox"
+                                                BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsChannelValid}" Value="False">
+                                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                        <Setter Property="ToolTip" Value="Channel は 1〜4 の整数"/>
+                                                    </DataTrigger>
+                                                    <Trigger Property="Validation.HasError" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+        
+                                    <!-- Pwr TextBox -->
+                                    <TextBox Grid.Column="3"
+                                            x:Name="TxtZonePwr"
+                                            Text="{Binding Power, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            MinHeight="30"
+                                            Margin="10,0,0,0">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox"
+                                                BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPowerValid}" Value="False">
+                                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                        <Setter Property="ToolTip" Value="Power は 0〜3 の整数"/>
+                                                    </DataTrigger>
+                                                    <Trigger Property="Validation.HasError" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+        
+                                    <!-- 適用ボタン -->
+                                    <Button Grid.Column="4"
+                                            x:Name="BtnZoneInit"
+                                            Content="適用"
+                                            Command="{Binding InitializeZoneCommand}"
+                                            Style="{StaticResource GrandMaButtonStyle}"
+                                            MinWidth="80"
+                                            MinHeight="30"
+                                            Margin="10,0,0,0"/>
+        
+                                    <!-- 状態表示 -->
+                                    <TextBlock Grid.Column="5"
+                                            Text="{Binding ZoneStatusMessage}"
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            TextTrimming="CharacterEllipsis"
+                                            Margin="10,0,0,0"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
             <!-- ステータスメッセージ -->
             <TextBlock Text="{Binding SettingStatusMessage}"
                        FontSize="14"
