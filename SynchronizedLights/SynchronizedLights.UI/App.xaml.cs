@@ -51,9 +51,12 @@ namespace SynchronizedLights.UI
                 LightingMode, queueCapacity, sendIntervalMs);
 
             // ----- Facade 生成 -----
+            // 2026-04-21 Nakazawa: ApiLightingFacade を HTTP API 呼び出し方式に変更
+            // "Real" モード時は ApiBaseUrl を使って HTTP 経由で SynchrolightAPI.Api に接続
+            var apiBaseUrl = config["Lighting:ApiBaseUrl"] ?? "http://localhost:5100";
             LightingFacade = LightingMode switch
             {
-                "Real" => new ApiLightingFacade(queueCapacity, sendIntervalMs),
+                "Real" => new ApiLightingFacade(apiBaseUrl),
                 _ => new DummyLightingFacade()
             };
 

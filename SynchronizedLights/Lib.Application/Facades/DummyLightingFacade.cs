@@ -3,7 +3,8 @@ using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
 using System.Diagnostics;
-using static SynchrolightAPI.Domain.Target;
+// 2026-04-21 Nakazawa: SynchrolightAPI.Core 直接参照を削除（HTTP API方式に移行のため不要）
+// 変更前: using static SynchrolightAPI.Domain.Target;
 
 namespace Lib.Application.Facades;
 

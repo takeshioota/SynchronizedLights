@@ -60,6 +60,15 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         public string CurrentColorLabel => $"Color : R={CurrentColor.R}, G={CurrentColor.G}, B={CurrentColor.B}";
 
+        /// <summary>赤が選択中か</summary>
+        public bool IsRedSelected => CurrentColor.R == 255 && CurrentColor.G == 0 && CurrentColor.B == 0;
+        /// <summary>緑が選択中か</summary>
+        public bool IsGreenSelected => CurrentColor.R == 0 && CurrentColor.G == 255 && CurrentColor.B == 0;
+        /// <summary>青が選択中か</summary>
+        public bool IsBlueSelected => CurrentColor.R == 0 && CurrentColor.G == 0 && CurrentColor.B == 255;
+        /// <summary>白が選択中か</summary>
+        public bool IsWhiteSelected => CurrentColor.R == 255 && CurrentColor.G == 255 && CurrentColor.B == 255;
+
         /// <summary>
         /// 色変更通知イベント
         /// 概要：Preset画面で選択した色を親画面へ通知する。
@@ -85,6 +94,10 @@ namespace Lib.Ui.Screens.ViewModels
         partial void OnCurrentColorChanged(Rgb value)
         {
             OnPropertyChanged(nameof(CurrentColorLabel));
+            OnPropertyChanged(nameof(IsRedSelected));
+            OnPropertyChanged(nameof(IsGreenSelected));
+            OnPropertyChanged(nameof(IsBlueSelected));
+            OnPropertyChanged(nameof(IsWhiteSelected));
             ColorChanged?.Invoke(value);
         }
         #endregion コンストラクタ

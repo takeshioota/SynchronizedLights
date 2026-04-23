@@ -27,9 +27,8 @@
     <ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-      <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" />
-  </ItemGroup>
+  <!-- 2026-04-21 Nakazawa: SynchrolightAPI.Core 直接参照を削除（HTTP API方式に移行） -->
+  <!-- 変更前: <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" /> -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
