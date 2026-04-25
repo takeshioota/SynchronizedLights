@@ -1,20 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWPF>true</UseWPF>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Lib.Application\Lib.Application.csproj" />
-    <ProjectReference Include="..\Lib.Domain\Lib.Domain.csproj" />
-    <ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Lib.Application\Lib.Application.csproj" />
+		<ProjectReference Include="..\Lib.Domain\Lib.Domain.csproj" />
+		<ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
+	</ItemGroup>
 
 </Project>

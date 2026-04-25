@@ -1,49 +1,47 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UseWPF>true</UseWPF>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Compile Remove="MainWindow_step0_backup.cs" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Remove="MainWindow_step0_backup.cs" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Page Remove="MainWindow_step0_backup.xaml" />
-  </ItemGroup>
+	<ItemGroup>
+		<Page Remove="MainWindow_step0_backup.xaml" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Lib.Application\Lib.Application.csproj" />
-    <ProjectReference Include="..\Lib.Domain\Lib.Domain.csproj" />
-    <ProjectReference Include="..\Lib.Ui.Screens\Lib.Ui.Screens.csproj" />
-    <ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Lib.Application\Lib.Application.csproj" />
+		<ProjectReference Include="..\Lib.Domain\Lib.Domain.csproj" />
+		<ProjectReference Include="..\Lib.Ui.Screens\Lib.Ui.Screens.csproj" />
+		<ProjectReference Include="..\Lib.UiFramework\Lib.UiFramework.csproj" />
+	</ItemGroup>
 
-  <ItemGroup>
-      <ProjectReference Include="..\..\..\SynchrolightAPI\SynchrolightAPI.Core\SynchrolightAPI.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
-  </ItemGroup>
-  <ItemGroup>
-      <None Update="appsettings.json">
-          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
-  </ItemGroup>
-  <ItemGroup>
-      <PackageReference Include="Serilog" Version="4.0.0" />
-      <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-      <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
+	</ItemGroup>
+	
+	<ItemGroup>
+		<None Update="appsettings.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Serilog" Version="4.0.0" />
+		<PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+		<PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+	</ItemGroup>
 
 </Project>
