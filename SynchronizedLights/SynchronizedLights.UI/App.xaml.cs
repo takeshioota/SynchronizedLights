@@ -78,9 +78,6 @@ namespace SynchronizedLights.UI
             var queueCapacity = int.TryParse(config["Lighting:SendQueueCapacity"], out var q) ? q : 256;
             var sendIntervalMs = int.TryParse(config["Lighting:SendIntervalMs"], out var s) ? s : 5;
 
-            // 2026-04-25 REST API統合: API サーバの BaseURL を設定から読込
-            var apiBaseUrl = config["Lighting:ApiBaseUrl"] ?? "http://localhost:5100";
-
             // ----- キュー間引きポリシー-----
             var queuePolicy = config["Lighting:QueuePolicy"] ?? "Wait";
             var dropThreshold = double.TryParse(
@@ -113,12 +110,12 @@ namespace SynchronizedLights.UI
             LatencyTracker = new LatencyTracker(windowSize: latencyWindow);
 
             Log.Information(
-                "LightingMode={Mode}, ApiBaseUrl={Url}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
+                "LightingMode={Mode}, QueueCapacity={Queue}, SendIntervalMs={Interval}, " +
                 "QueuePolicy={Policy}, DropThreshold={Thr}, DummySendDelayMs={Delay}, " +
                 "LatencyEnabled={LatEn}, LatencyWindow={LatWin}, LatencyLogIntervalSec={LatInt}, " +
                 "AutoReconnectEnabled={RcEn}, ReconnectIntervalSec={RcInt}, " +
                 "HeartbeatEnabled={HbEn}, HeartbeatIntervalSec={HbInt}",
-                LightingMode, apiBaseUrl, queueCapacity, sendIntervalMs,
+                LightingMode, queueCapacity, sendIntervalMs,
                 queuePolicy, dropThreshold, dummySendDelayMs,
                 latencyEnabled, latencyWindow, latencyLogSec,
                 autoReconnectEnabled, reconnectIntervalSec,
@@ -136,13 +133,11 @@ namespace SynchronizedLights.UI
             // ----- Facade 生成 -----
             var latencyInjected = latencyEnabled ? LatencyTracker : null;
 
-            // 2026-04-25 REST API統合: ApiLightingFacade の引数を sendIntervalMs → baseUrl に変更
-            // sendIntervalMs は API サーバ内部の TxWorkerService が使う値（API 側 appsettings で設定）
             LightingFacade = LightingMode switch
             {
                 "Real" => new ApiLightingFacade(
                     queueCapacity: queueCapacity,
-                    baseUrl: apiBaseUrl,                  // ← sendIntervalMs から変更
+                    sendIntervalMs: sendIntervalMs,
                     queuePolicy: queuePolicy,
                     dropThreshold: dropThreshold,
                     latency: latencyInjected),
@@ -351,7 +346,7 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
-        /// 再接続累計をログに出力する
+        /// 
         /// </summary>
         private static void LogReconnectCount()
         {

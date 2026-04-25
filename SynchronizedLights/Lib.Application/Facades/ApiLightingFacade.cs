@@ -1,51 +1,46 @@
-﻿// 2026-04-25 REST API統合: SynchrolightAPI.Core 直接参照 → HTTP REST API 呼び出しに全面変更
-// 変更前: MultiPortTransport / LightingService / TxWorkerService をインプロセスで直接生成・利用
-// 変更後: HttpClient で http://localhost:5100/api/* を呼び出す構成
-//
-//   - QueuePolicy / DropNewest / DroppedCount
-//   - LatencyTracker 注入
-//   - _intendedPorts による自動再接続（TryReconnectMissingPortsAsync）
-//   - ReconnectCount
-//   - Breath / Flash / FadeIn / FadeOut のクライアント側組立
-//   - StatusChanged イベント
-
-using System.Diagnostics;
-using System.Net.Http;
-using System.Net.Http.Json;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+﻿using System.Diagnostics;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Lib.Application.Interfaces;
 using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
 
+// API側型のエイリアス
+using ApiRgb = SynchrolightAPI.Domain.Rgb;
+using ApiCommandBuilder = SynchrolightAPI.Protocol.CommandBuilder;
+using ApiLightingService = SynchrolightAPI.Services.LightingService;
+using ApiMultiPortTransport = SynchrolightAPI.Transport.MultiPortTransport;
+using ApiTxWorkerService = SynchrolightAPI.Transport.TxWorkerService;
+
 namespace Lib.Application.Facades
 {
     /// <summary>
-    /// 実 API 実装（REST API / HTTP 版）
-    /// 概要：SynchrolightAPI.Api（http://localhost:5100）に対して HTTP リクエストを送信する。
+    /// 実API実装
+    /// 概要：SynchrolightAPI.Core の LightingService / MultiPortTransport / TxWorkerService を
+    ///       統合し、ILightingFacade を提供する。実機2.4GHz発信機制御時に使用。
+    ///       QueuePolicy=DropNewest 指定時は、MultiPortTransport の QueueLength が
+    ///       閾値を超えた段階で、Transport に送り込む前に Drop する（API 側 BoundedChannel
+    ///       に負荷をかけないための前段フィルタ）。
     /// </summary>
     public class ApiLightingFacade : ILightingFacade, IDisposable
     {
         #region フィールド
 
-        // ===== HTTP 関連 =====
-        private readonly HttpClient _httpClient;
-        private readonly JsonSerializerOptions _jsonOptions;
+        private readonly ILoggerFactory _loggerFactory;
+        private readonly ApiMultiPortTransport _transport;
+        private readonly ApiLightingService _lightingService;
+        private readonly ApiTxWorkerService _worker;
+        private readonly CancellationTokenSource _workerCts;
 
-        // ===== ステータスキャッシュ（HTTP のため同期取得不可、API 呼び出し後にキャッシュ更新） =====
-        private bool _isConnected;
-        private List<string> _connectedPorts = new();
-        private int _queueLength;
-        private int _highPriorityQueueLength;
-        private int _disconnectedPortsCount;
-        private string? _lastError;
-
-        /// <summary>本来接続しておくべきポート一覧（自動再接続のため保持）</summary>
+        /// <summary>本来接続しておくべきポート一覧</summary>
         private readonly List<string> _intendedPorts = new();
         private readonly object _intendedLock = new();
+
+        private string? _lastError;
+        private bool _disposed;
 
         /// <summary>キュー容量（Drop 判定用に保持）</summary>
         private readonly int _queueCapacity;
@@ -58,26 +53,30 @@ namespace Lib.Application.Facades
 
         /// <summary>累積ドロップ回数</summary>
         private long _droppedCount;
-
-        /// <summary>累積自動再接続回数</summary>
         private long _reconnectCount;
 
         /// <summary>遅延計測（nullable：注入されなければ計測しない）</summary>
         private readonly LatencyTracker? _latency;
 
-        private bool _disposed;
-
         #endregion フィールド
 
         #region プロパティ (ILightingFacade)
 
-        public bool IsConnected => _isConnected;
+        public bool IsConnected
+            => _transport.ListPorts().Any(p => p.IsConnected);
 
-        public IReadOnlyList<string> ConnectedPorts => _connectedPorts.AsReadOnly();
+        public IReadOnlyList<string> ConnectedPorts
+            => _transport.ListPorts()
+                .Where(p => p.IsConnected)
+                .Select(p => p.Name)
+                .ToList()
+                .AsReadOnly();
 
-        public int QueueLength => _queueLength;
+        public int QueueLength
+            => _transport.GetStatus().QueueLength;
 
-        public string? LastError => _lastError;
+        public string? LastError
+            => _lastError ?? _transport.GetStatus().LastError;
 
         /// <summary>累積ドロップ回数（KPI 用）</summary>
         public long DroppedCount => Interlocked.Read(ref _droppedCount);
@@ -107,16 +106,16 @@ namespace Lib.Application.Facades
         #region コンストラクタ
 
         /// <summary>
-        /// ApiLightingFacade を生成する（REST API 版）
+        /// ApiLightingFacade を生成する
         /// </summary>
-        /// <param name="queueCapacity">送信キュー容量（Drop 判定用、API側と合わせる）（既定 256）</param>
-        /// <param name="baseUrl">SynchrolightAPI.Api のベースURL（例：http://localhost:5100）</param>
+        /// <param name="queueCapacity">送信キュー容量（既定 256）</param>
+        /// <param name="sendIntervalMs">送信間隔 ms（既定 5）</param>
         /// <param name="queuePolicy">"Wait" or "DropNewest"（既定 Wait）</param>
         /// <param name="dropThreshold">ドロップ判定の使用率閾値（既定 0.95）</param>
         /// <param name="latency">遅延計測トラッカー（任意）</param>
         public ApiLightingFacade(
             int queueCapacity = 256,
-            string baseUrl = "http://localhost:5100",
+            int sendIntervalMs = 5,
             string queuePolicy = "Wait",
             double dropThreshold = 0.95,
             LatencyTracker? latency = null)
@@ -126,24 +125,47 @@ namespace Lib.Application.Facades
             _dropThreshold = dropThreshold;
             _latency = latency;
 
-            _httpClient = new HttpClient
+            // Logger
+            _loggerFactory = LoggerFactory.Create(builder =>
             {
-                BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/"),
-                // 短すぎると本番中の一時的遅延で誤エラーになるため 10 秒
-                Timeout = TimeSpan.FromSeconds(10)
-            };
+                builder.SetMinimumLevel(LogLevel.Information);
+                builder.AddDebug();
+            });
 
-            // API 側の JSON 設定 (camelCase) に合わせる
-            _jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                PropertyNameCaseInsensitive = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-            };
+            // Transport
+            _transport = new ApiMultiPortTransport(
+                _loggerFactory.CreateLogger<ApiMultiPortTransport>(),
+                queueCapacity);
+
+            // Protocol CommandBuilder
+            var cmdBuilder = new ApiCommandBuilder();
+
+            // LightingService
+            _lightingService = new ApiLightingService(
+                cmdBuilder,
+                _transport,
+                _loggerFactory.CreateLogger<ApiLightingService>());
+
+            // TxWorkerService
+            var workerConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["SerialPort:SendIntervalMs"] = sendIntervalMs.ToString()
+                })
+                .Build();
+
+            _worker = new ApiTxWorkerService(
+                _transport,
+                _loggerFactory.CreateLogger<ApiTxWorkerService>(),
+                workerConfig);
+
+            // BackgroundService.StartAsync 内部で ExecuteAsync がタスクとして起動する
+            _workerCts = new CancellationTokenSource();
+            _ = _worker.StartAsync(_workerCts.Token);
 
             Log.Information(
-                "[Api] ApiLightingFacade initialized (HTTP mode, baseUrl={BaseUrl}, queue={Queue}, policy={Policy}, threshold={Thr}, latency={HasLat})",
-                baseUrl, queueCapacity, queuePolicy, dropThreshold, _latency != null);
+                "[Api] ApiLightingFacade initialized (queue={Queue}, interval={Interval}ms, policy={Policy}, threshold={Thr}, latency={HasLat})",
+                queueCapacity, sendIntervalMs, queuePolicy, dropThreshold, _latency != null);
         }
 
         #endregion コンストラクタ
@@ -153,7 +175,7 @@ namespace Lib.Application.Facades
         /// <summary>
         /// 現在のキュー状況とポリシーから、コマンドをドロップすべきか判定する
         /// 概要：QueuePolicy が "DropNewest" のときだけ有効。
-        ///       キャッシュされた _queueLength が容量 × 閾値を超えていたら Drop して true を返す。
+        ///       Transport の QueueLength が容量 × 閾値を超えていたら Drop して true を返す。
         /// </summary>
         private bool ShouldDropCommand(string commandName)
         {
@@ -163,7 +185,7 @@ namespace Lib.Application.Facades
             }
 
             var threshold = (int)(_queueCapacity * _dropThreshold);
-            var current = _queueLength;
+            var current = _transport.GetStatus().QueueLength;
             if (current >= threshold)
             {
                 Interlocked.Increment(ref _droppedCount);
@@ -183,7 +205,7 @@ namespace Lib.Application.Facades
 
         public async Task<IReadOnlyList<string>> GetAvailablePortsAsync()
         {
-            // OS から実 COM ポート一覧を取得（API 側に同等エンドポイントなし）
+            // OSから実COMポート一覧を取得
             var ports = System.IO.Ports.SerialPort.GetPortNames();
             Array.Sort(ports);
             return await Task.FromResult<IReadOnlyList<string>>(ports);
@@ -202,30 +224,18 @@ namespace Lib.Application.Facades
             try
             {
                 _lastError = null;
-                var request = new { portNames = ports.ToArray() };
-                var response = await _httpClient.PostAsJsonAsync("api/transport/connect", request, _jsonOptions, ct);
-                var result = await ReadApiResponseAsync(response, ct);
-
-                if (!result.Success)
-                {
-                    _lastError = result.Error ?? "接続に失敗しました";
-                    Log.Warning("[Api] Connect failed: {Err}", _lastError);
-                }
-                else
-                {
-                    Log.Information(
-                        "[Api] Connect: {Ports} (intended saved for auto-reconnect): {Msg}",
-                        string.Join(", ", ports), result.Message);
-                }
+                await _transport.ConnectAsync(ports, ct);
+                Log.Information(
+                    "[Api] Connect: {Ports} (intended saved for auto-reconnect)",
+                    string.Join(", ", ports));
             }
             catch (Exception ex)
             {
-                _lastError = $"HTTP通信エラー: {ex.Message}";
-                Log.Warning("[Api] Connect HTTP error: {Err}", ex.Message);
+                _lastError = ex.Message;
+                Log.Warning("[Api] Connect failed: {Err}", ex.Message);
             }
             finally
             {
-                await RefreshStatusAsync();
                 RaiseStatusChanged();
             }
         }
@@ -237,22 +247,9 @@ namespace Lib.Application.Facades
                 _intendedPorts.Clear();
             }
 
-            try
-            {
-                var response = await _httpClient.PostAsync("api/transport/disconnect", null);
-                var result = await ReadApiResponseAsync(response);
-                Log.Information("[Api] Disconnect: all ports closed, intended cleared. {Msg}", result.Message);
-            }
-            catch (Exception ex)
-            {
-                _lastError = $"HTTP通信エラー: {ex.Message}";
-                Log.Warning("[Api] Disconnect HTTP error: {Err}", ex.Message);
-            }
-            finally
-            {
-                await RefreshStatusAsync();
-                RaiseStatusChanged();
-            }
+            await _transport.DisconnectAsync();
+            Log.Information("[Api] Disconnect: all ports closed, intended cleared");
+            RaiseStatusChanged();
         }
 
         public async Task InitializeTransmitterAsync(byte channel, byte power, CancellationToken ct = default)
@@ -260,27 +257,15 @@ namespace Lib.Application.Facades
             try
             {
                 _lastError = null;
-                var request = new { channel = (int)channel, power = (int)power };
-                var response = await _httpClient.PostAsJsonAsync("api/transmitter/init", request, _jsonOptions, ct);
-                var result = await ReadApiResponseAsync(response, ct);
-
-                if (!result.Success)
-                {
-                    _lastError = result.Error ?? "送信機初期化に失敗しました";
-                    throw new InvalidOperationException(_lastError);
-                }
-
-                Log.Information("[Api] InitializeTransmitter: ch={Ch}, pwr={Pwr}, {Msg}", channel, power, result.Message);
+                await _lightingService.InitializeTransmitterAsync(channel, power, ct);
             }
-            catch (HttpRequestException ex)
+            catch (Exception ex)
             {
-                _lastError = $"HTTP通信エラー: {ex.Message}";
-                Log.Error(ex, "[Api] InitializeTransmitter HTTP error");
+                _lastError = ex.Message;
                 throw;
             }
             finally
             {
-                await RefreshStatusAsync();
                 RaiseStatusChanged();
             }
         }
@@ -297,9 +282,9 @@ namespace Lib.Application.Facades
 
         /// <summary>
         /// intended だが現在 connected でないポートを再接続試行する
-        /// 概要：API の GET /api/transport/status で現在の接続状態を取得し、
-        ///       intended に含まれるが connectedPorts に含まれないポートを
-        ///       POST /api/transport/connect で再接続する。
+        /// 概要：MultiPortTransport.ListPorts() で現在の接続状態を取得し、
+        ///       intended に含まれるが IsConnected=false または存在しないポートを
+        ///       _transport.ConnectAsync() で再接続する。
         /// 戻り値：再接続に成功したポート数（失敗時 0）
         /// </summary>
         public async Task<int> TryReconnectMissingPortsAsync(CancellationToken ct = default)
@@ -311,10 +296,10 @@ namespace Lib.Application.Facades
                 intendedSnapshot = _intendedPorts.ToList();
             }
 
-            // API から現在の接続状態を取得
-            await RefreshStatusAsync();
-
-            var liveConnected = _connectedPorts
+            // 現在の接続状態を取得（IsConnected=true のものだけ生きてると判定）
+            var liveConnected = _transport.ListPorts()
+                .Where(p => p.IsConnected)
+                .Select(p => p.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var missing = intendedSnapshot
@@ -324,19 +309,17 @@ namespace Lib.Application.Facades
             if (missing.Count == 0) return 0;
 
             Log.Warning(
-                "[Api] Missing ports detected: {Ports}. Attempting reconnect via HTTP...",
+                "[Api] Missing ports detected: {Ports}. Attempting reconnect...",
                 string.Join(", ", missing));
 
             try
             {
-                // 不足分のみ再接続
-                var request = new { portNames = missing.ToArray() };
-                var response = await _httpClient.PostAsJsonAsync("api/transport/connect", request, _jsonOptions, ct);
-                var result = await ReadApiResponseAsync(response, ct);
+                await _transport.ConnectAsync(missing, ct);
 
                 // 再接続後にもう一度状態を確認
-                await RefreshStatusAsync();
-                var afterLive = _connectedPorts
+                var afterLive = _transport.ListPorts()
+                    .Where(p => p.IsConnected)
+                    .Select(p => p.Name)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 var reconnected = missing.Count(p => afterLive.Contains(p));
@@ -352,8 +335,7 @@ namespace Lib.Application.Facades
                 else
                 {
                     Log.Warning(
-                        "[Api] Reconnect attempt returned but no ports came back online. {Err}",
-                        result.Error ?? "(no error)");
+                        "[Api] Reconnect attempt returned but no ports came back online");
                 }
 
                 return reconnected;
@@ -361,7 +343,7 @@ namespace Lib.Application.Facades
             catch (Exception ex)
             {
                 _lastError = $"再接続失敗: {ex.Message}";
-                Log.Warning("[Api] Reconnect HTTP error: {Err}", ex.Message);
+                Log.Warning("[Api] Reconnect failed: {Err}", ex.Message);
                 RaiseStatusChanged();
                 return 0;
             }
@@ -476,7 +458,6 @@ namespace Lib.Application.Facades
                 RaiseStatusChanged();
             }
         }
-
         public async Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default)
         {
             if (ShouldDropCommand("Breath")) return;
@@ -535,28 +516,10 @@ namespace Lib.Application.Facades
             var startTs = Stopwatch.GetTimestamp();
             try
             {
-                // 仕様：POST /api/light/sequence  body: { "frameNo": <uint> }
-                // target 引数は現状未使用（API 側は frameNo のみ受領）
-                var request = new { frameNo = (uint)sequenceId };
-                var response = await _httpClient.PostAsJsonAsync("api/light/sequence", request, _jsonOptions, ct);
-                var result = await ReadApiResponseAsync(response, ct);
-
-                if (!result.Success)
-                {
-                    _lastError = result.Error ?? $"Sequence {sequenceId} 実行失敗";
-                    Log.Warning("[Api] Sequence failed: {Err}", _lastError);
-                }
-                else
-                {
-                    Log.Information(
-                        "[Api] Sequence executed. target={Target}, id={Id}, msg={Msg}",
-                        target, sequenceId, result.Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                _lastError = $"HTTP通信エラー: {ex.Message}";
-                Log.Warning("[Api] Sequence HTTP error: {Err}", ex.Message);
+                Log.Information(
+                    "[Api] Sequence execution pending API support. target={Target}, id={Id}",
+                    target, sequenceId);
+                await Task.CompletedTask;
             }
             finally
             {
@@ -570,148 +533,27 @@ namespace Lib.Application.Facades
         #region 内部メソッド
 
         /// <summary>
-        /// UI側 Target を HTTP API 呼び出しに振り分ける。
-        /// ALL          → POST /api/light/global (A2)
-        /// Group01〜08  → POST /api/light/rows   (AA, 多行同色)
-        ///
-        /// 2026-04-25 hotfix-2: グループ制御を A3（行個別色）→ AA（多行同色）に変更
-        ///   理由：グループ制御は本質的に「範囲を1色で塗る」用途であり、
-        ///         実機ファームでは A3 が反応しないため AA を使う必要がある
-        ///         （API 側 /api/light/rows が AA コマンドを生成 — LightController.cs 確認済）
-        ///   変更：エンドポイント /api/light/rows/each → /api/light/rows
-        ///         ペイロードフィールド名 len → rowLen
+        /// UI側 Target を API 呼び出しに振り分ける。
+        /// ALL → SetGlobalColorAsync (A2)
+        /// Group01〜08 → SetRowColorAsync (A3)
         /// </summary>
         private async Task InternalSetColorAsync(Target target, Rgb color, CancellationToken ct)
         {
-            var colorObj = new { r = (int)color.R, g = (int)color.G, b = (int)color.B };
-
-            HttpResponseMessage response;
-            string operation;
+            var apiColor = ToApiRgb(color);
 
             if (target == Target.All)
             {
-                var request = new { color = colorObj };
-                response = await _httpClient.PostAsJsonAsync("api/light/global", request, _jsonOptions, ct);
-                operation = "SetGlobalColor";
+                await _lightingService.SetGlobalColorAsync(apiColor, ct);
             }
             else
             {
                 var (startRow, len) = GroupToRowRange(target);
-                var request = new
-                {
-                    field = 0,
-                    startRow = (int)startRow,
-                    rowLen = (int)len,        // ← API 仕様書 /api/light/rows のフィールド名は rowLen
-                    color = colorObj
-                };
-                // /api/light/rows は AA コマンドを生成（多行同色）
-                response = await _httpClient.PostAsJsonAsync("api/light/rows", request, _jsonOptions, ct);
-                operation = $"SetRowsColor({target})";
-            }
-
-            await EnsureApiSuccessAsync(response, operation, ct);
-        }
-
-        /// <summary>
-        /// API レスポンスを読み取り、ApiResponseDto に変換する。
-        /// </summary>
-        private async Task<ApiResponseDto> ReadApiResponseAsync(HttpResponseMessage response, CancellationToken ct = default)
-        {
-            var json = await response.Content.ReadAsStringAsync(ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                // HTTP エラー時もJSON解析を試みる（API側は BadRequest でも ApiResponse を返す）
-                try
-                {
-                    var errorResult = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
-                    if (errorResult != null) return errorResult;
-                }
-                catch { /* JSONパース失敗時は下で汎用エラーを返す */ }
-
-                return new ApiResponseDto
-                {
-                    Success = false,
-                    Error = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}"
-                };
-            }
-
-            var result = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
-            return result ?? new ApiResponseDto { Success = false, Error = "レスポンスのパースに失敗しました" };
-        }
-
-        /// <summary>
-        /// API 呼び出し結果を確認し、失敗時は例外をスローする。
-        /// </summary>
-        private async Task EnsureApiSuccessAsync(HttpResponseMessage response, string operation, CancellationToken ct)
-        {
-            var result = await ReadApiResponseAsync(response, ct);
-            if (!result.Success)
-            {
-                var errorMsg = result.Error ?? $"{operation} に失敗しました";
-                Log.Warning("[Api] {Operation} failed: {Error}", operation, errorMsg);
-                throw new InvalidOperationException(errorMsg);
-            }
-            // 成功時は冗長なのでログ出さない（高頻度呼び出しのため）
-        }
-
-        /// <summary>
-        /// GET /api/transport/status を呼び出してステータスキャッシュを更新する。
-        /// 概要：queueLength / highPriorityQueueLength / connectedPorts /
-        ///       disconnectedPorts / lastError / ports[] を取得してキャッシュに反映。
-        /// </summary>
-        private async Task RefreshStatusAsync()
-        {
-            try
-            {
-                var response = await _httpClient.GetAsync("api/transport/status");
-                var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<ApiResponseDto>(json, _jsonOptions);
-
-                if (result?.Success == true && result.Data != null)
-                {
-                    var data = (JsonElement)result.Data;
-
-                    if (data.TryGetProperty("queueLength", out var ql))
-                        _queueLength = ql.GetInt32();
-
-                    if (data.TryGetProperty("highPriorityQueueLength", out var hql))
-                        _highPriorityQueueLength = hql.GetInt32();
-
-                    if (data.TryGetProperty("disconnectedPorts", out var dcp))
-                        _disconnectedPortsCount = dcp.GetInt32();
-
-                    // ports 配列から接続中ポート名を取得
-                    if (data.TryGetProperty("ports", out var ports) && ports.ValueKind == JsonValueKind.Array)
-                    {
-                        var connectedNames = new List<string>();
-                        foreach (var port in ports.EnumerateArray())
-                        {
-                            var isConnected = port.TryGetProperty("isConnected", out var ic) && ic.GetBoolean();
-                            var name = port.TryGetProperty("name", out var n) ? n.GetString() : null;
-                            if (isConnected && name != null)
-                                connectedNames.Add(name);
-                        }
-                        _connectedPorts = connectedNames;
-                    }
-                    else if (data.TryGetProperty("connectedPorts", out var cpInt) && cpInt.ValueKind == JsonValueKind.Number)
-                    {
-                        // ports 配列が無い旧フォーマット fallback
-                        var n = cpInt.GetInt32();
-                        _connectedPorts = n > 0
-                            ? Enumerable.Range(1, n).Select(i => $"(connected#{i})").ToList()
-                            : new List<string>();
-                    }
-
-                    _isConnected = _connectedPorts.Count > 0;
-
-                    if (data.TryGetProperty("lastError", out var le) && le.ValueKind != JsonValueKind.Null)
-                        _lastError = le.GetString();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning("[Api] RefreshStatus failed: {Err} — ステータスキャッシュ更新スキップ", ex.Message);
+                await _lightingService.SetRowColorAsync(
+                    field: 0,
+                    startRow: startRow,
+                    len: len,
+                    color: apiColor,
+                    ct: ct);
             }
         }
 
@@ -725,9 +567,8 @@ namespace Lib.Application.Facades
             _latency.Record(elapsedMs);
         }
 
-        /// <summary>
-        /// UI Group → (startRow, len) マッピング（25台×8グループ＝200台）
-        /// </summary>
+        private static ApiRgb ToApiRgb(Rgb color) => new(color.R, color.G, color.B);
+
         private static (ushort startRow, byte len) GroupToRowRange(Target group)
         {
             return group switch
@@ -751,21 +592,6 @@ namespace Lib.Application.Facades
 
         #endregion 内部メソッド
 
-        #region 内部DTO
-
-        /// <summary>
-        /// API レスポンス用 DTO（SynchrolightAPI.Api の ApiResponse に対応）
-        /// </summary>
-        private class ApiResponseDto
-        {
-            public bool Success { get; set; }
-            public string? Message { get; set; }
-            public string? Error { get; set; }
-            public object? Data { get; set; }
-        }
-
-        #endregion 内部DTO
-
         #region Dispose
 
         public void Dispose()
@@ -773,7 +599,12 @@ namespace Lib.Application.Facades
             if (_disposed) return;
             _disposed = true;
 
-            try { _httpClient?.Dispose(); } catch { /* ignore */ }
+            try { _workerCts?.Cancel(); } catch { /* ignore */ }
+            try { _worker?.StopAsync(CancellationToken.None).GetAwaiter().GetResult(); } catch { /* ignore */ }
+            try { _transport?.Dispose(); } catch { /* ignore */ }
+
+            _workerCts?.Dispose();
+            _loggerFactory?.Dispose();
 
             GC.SuppressFinalize(this);
         }
