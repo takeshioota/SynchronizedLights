@@ -1,6 +1,4 @@
-﻿// 2026-04-25 REST API統合: SynchrolightAPI.Core 直接参照 → HTTP REST API 呼び出しに全面変更
-// 変更前: MultiPortTransport / LightingService / TxWorkerService をインプロセスで直接生成・利用
-// 変更後: HttpClient で http://localhost:5100/api/* を呼び出す構成
+﻿// HttpClient で http://localhost:5100/api/* を呼び出す構成
 //
 //   - QueuePolicy / DropNewest / DroppedCount
 //   - LatencyTracker 注入
@@ -573,13 +571,8 @@ namespace Lib.Application.Facades
         /// UI側 Target を HTTP API 呼び出しに振り分ける。
         /// ALL          → POST /api/light/global (A2)
         /// Group01〜08  → POST /api/light/rows   (AA, 多行同色)
-        ///
-        /// 2026-04-25 hotfix-2: グループ制御を A3（行個別色）→ AA（多行同色）に変更
-        ///   理由：グループ制御は本質的に「範囲を1色で塗る」用途であり、
-        ///         実機ファームでは A3 が反応しないため AA を使う必要がある
-        ///         （API 側 /api/light/rows が AA コマンドを生成 — LightController.cs 確認済）
-        ///   変更：エンドポイント /api/light/rows/each → /api/light/rows
-        ///         ペイロードフィールド名 len → rowLen
+　　    /// エンドポイント /api/light/rows/each → /api/light/rows
+        /// ペイロードフィールド名 len → rowLen
         /// </summary>
         private async Task InternalSetColorAsync(Target target, Rgb color, CancellationToken ct)
         {
