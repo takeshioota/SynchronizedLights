@@ -45,7 +45,7 @@ namespace SynchronizedLights.UI
                 System.Diagnostics.Debug.WriteLine("[MainWindow] UserState applied on startup.");
             }
 
-            // Window Closing イベントで保存
+            // Window Closing イベントで終了確認 + UserState保存（×ボタン・Exitボタン共通）
             this.Closing += OnWindowClosing;
 
             // 動作確認用：Ctrl+Shift+D で擬似切断（Dummy モードのみ有効）
@@ -53,10 +53,28 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
-        /// Window が閉じられる直前に UserState を保存する
+        /// Window が閉じられる直前のイベント
+        /// 概要：×ボタン・Preset画面のExitボタンどちらでも、終了確認ダイアログを表示する。
+        ///       Yes時のみUserStateを保存して終了。No時は e.Cancel=true で終了をキャンセル。
         /// </summary>
         private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
+            // 終了確認ダイアログ
+            var result = MessageBox.Show(
+                "シンクロライト制御アプリを終了しますか？",
+                "終了確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                // 終了をキャンセル（ウィンドウは閉じない）
+                e.Cancel = true;
+                System.Diagnostics.Debug.WriteLine("[MainWindow] Closing cancelled by user.");
+                return;
+            }
+
+            // Yes時のみ UserState 保存
             try
             {
                 if (DataContext is SynchronizedLights.UI.ViewModels.MainWindowViewModel vm)

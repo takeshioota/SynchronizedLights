@@ -1320,16 +1320,7 @@ namespace SynchronizedLights.UI.ViewModels
         [RelayCommand]
         private void PowerExit()
         {
-            var result = MessageBox.Show(
-                "シンクロライト制御アプリを終了しますか？",
-                "終了確認",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
-            {
-                System.Windows.Application.Current?.Shutdown();
-            }
+            System.Windows.Application.Current?.MainWindow?.Close();
         }
 
         /// <summary>
