@@ -9,8 +9,13 @@ namespace Lib.Application.Models
     /// </summary>
     public class UserState
     {
-        /// <summary>最後に使用した速度（ミリ秒）</summary>
+        /// <summary>最後に使用した速度（ミリ秒）— Fade等の総時間</summary>
         public int SpeedValueMs { get; set; } = 1000;
+
+        /// <summary>
+        /// 最後に使用した補間ステップ間隔（ミリ秒）
+        /// </summary>
+        public int InterpolationIntervalMs { get; set; } = 50;
 
         /// <summary>最後に選択した色（R）</summary>
         public byte ColorR { get; set; } = 255;

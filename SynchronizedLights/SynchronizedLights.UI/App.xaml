@@ -361,6 +361,10 @@
             <views:SettingView />
         </DataTemplate>
 
+        <DataTemplate DataType="{x:Type viewModels:TimeSequenceViewModel}">
+            <views:TimeSequenceView />
+        </DataTemplate>
+
         <!--罫線枠：アンバー-->
         <SolidColorBrush x:Key="AccentAmberBrush" Color="#E69F2C"/>
         

@@ -17,6 +17,7 @@ namespace Lib.Domain.Enums
         Mode = 1,
         Animation = 2,
         Sequence = 3,
-        Setting = 4
+        Setting = 4,
+        TimeSeq = 5
     }
 }

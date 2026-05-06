@@ -33,8 +33,16 @@ namespace Lib.Domain.States
 
         /// <summary>
         /// 現在選択中の速度値（ミリ秒）
+        /// 概要：Fade IN / FadeOut / Breath 等の総時間として使用される。
         /// </summary>
         public int SpeedValueMs { get; set; } = 1000;
+
+        /// <summary>
+        /// 補間ステップ間隔（ミリ秒）
+        /// 概要：Fade等で「コマンドとコマンドの間隔」をms単位で指定する。
+        ///       「最速 20ms」を最小値として、20〜100 の範囲で運用する。
+        /// </summary>
+        public int InterpolationIntervalMs { get; set; } = 50;
 
         /// <summary>
         /// 現在接続中のポート一覧

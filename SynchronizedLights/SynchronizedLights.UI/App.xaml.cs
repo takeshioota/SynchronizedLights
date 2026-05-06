@@ -77,8 +77,6 @@ namespace SynchronizedLights.UI
             LightingMode = config["Lighting:Mode"] ?? "Dummy";
             var queueCapacity = int.TryParse(config["Lighting:SendQueueCapacity"], out var q) ? q : 256;
             var sendIntervalMs = int.TryParse(config["Lighting:SendIntervalMs"], out var s) ? s : 5;
-
-            // 2026-04-25 REST API統合: API サーバの BaseURL を設定から読込
             var apiBaseUrl = config["Lighting:ApiBaseUrl"] ?? "http://localhost:5100";
 
             // ----- キュー間引きポリシー-----
@@ -136,7 +134,6 @@ namespace SynchronizedLights.UI
             // ----- Facade 生成 -----
             var latencyInjected = latencyEnabled ? LatencyTracker : null;
 
-            // 2026-04-25 REST API統合: ApiLightingFacade の引数を sendIntervalMs → baseUrl に変更
             // sendIntervalMs は API サーバ内部の TxWorkerService が使う値（API 側 appsettings で設定）
             LightingFacade = LightingMode switch
             {

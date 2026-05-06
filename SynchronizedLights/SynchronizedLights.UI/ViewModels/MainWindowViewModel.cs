@@ -198,6 +198,65 @@ namespace SynchronizedLights.UI.ViewModels
         }
 
         /// <summary>
+        /// 編集可能な補間ステップ間隔（ミリ秒）
+        /// 概要：Fade等の「コマンド間隔」を 20〜100 ms で指定する。
+        ///       SPEED 行のスライダー・数値入力からの双方向バインド用。
+        /// </summary>
+        public int EditableInterpolationIntervalMs
+        {
+            get => AppState.InterpolationIntervalMs;
+            set
+            {
+                var clamped = Math.Clamp(value, 20, 100);
+                if (AppState.InterpolationIntervalMs != clamped)
+                {
+                    AppState.InterpolationIntervalMs = clamped;
+                    OnPropertyChanged();
+                    StatusMessage = $"補間間隔 set : {clamped} ms";
+                    EditableInterpolationIntervalText = clamped.ToString();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 補間間隔の入力文字列
+        /// 概要：TextBox に表示・入力される生文字列。
+        ///       範囲外（&lt;20 or &gt;100）や非数値でも保持し、IsInterpolationIntervalValid=false で赤枠表示。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsInterpolationIntervalValid))]
+        private string editableInterpolationIntervalText = "50";
+
+        /// <summary>
+        /// 補間間隔 入力値の有効性
+        /// 概要：20〜100 の整数なら true。範囲外 or 非数値なら false。
+        /// </summary>
+        public bool IsInterpolationIntervalValid
+        {
+            get
+            {
+                if (!int.TryParse(EditableInterpolationIntervalText, out var n)) return false;
+                return n >= 20 && n <= 100;
+            }
+        }
+
+        /// <summary>
+        /// EditableInterpolationIntervalText 変更時：有効範囲内なら AppState に反映
+        /// </summary>
+        partial void OnEditableInterpolationIntervalTextChanged(string value)
+        {
+            if (int.TryParse(value, out var n) && n >= 20 && n <= 100)
+            {
+                if (AppState.InterpolationIntervalMs != n)
+                {
+                    AppState.InterpolationIntervalMs = n;
+                    OnPropertyChanged(nameof(EditableInterpolationIntervalMs));
+                    StatusMessage = $"補間間隔 set : {n} ms";
+                }
+            }
+            // 範囲外 or 非数値 → AppState は維持、赤枠だけ表示
+        }
+        /// <summary>
         /// 現在色表示文字列
         /// 概要：AppStateに保持している現在色を画面表示用の文字列として返す。
         /// </summary>
@@ -231,6 +290,11 @@ namespace SynchronizedLights.UI.ViewModels
         /// Settingカテゴリが選択中かどうか
         /// </summary>
         public bool IsSettingSelected => CurrentCategory == UiCategory.Setting;
+
+        /// <summary>
+        /// TimeSeqカテゴリが選択中かどうか
+        /// </summary>
+        public bool IsTimeSeqSelected => CurrentCategory == UiCategory.TimeSeq;
         #endregion カテゴリ
 
         #region ターゲット
@@ -318,6 +382,7 @@ namespace SynchronizedLights.UI.ViewModels
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteBreathCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSevenColorCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
         private bool isTransportConnected;
 
@@ -331,6 +396,7 @@ namespace SynchronizedLights.UI.ViewModels
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeInCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteFadeOutCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteBreathCommand))]
+        [NotifyCanExecuteChangedFor(nameof(ExecuteSevenColorCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteCurrentSettingsCommand))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteSequence01Command))]
         [NotifyCanExecuteChangedFor(nameof(ExecuteSequence02Command))]
@@ -571,6 +637,7 @@ namespace SynchronizedLights.UI.ViewModels
                 UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
                 UiCategory.Setting => CreateSettingViewModel(),
+                UiCategory.TimeSeq => new TimeSequenceViewModel(),
                 _ => CreatePresetViewModel()
             };
         }
@@ -657,6 +724,7 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(IsModeSelected));
             OnPropertyChanged(nameof(IsAnimationSelected));
             OnPropertyChanged(nameof(IsSettingSelected));
+            OnPropertyChanged(nameof(IsTimeSeqSelected));
         }
 
         /// <summary>
@@ -736,9 +804,11 @@ namespace SynchronizedLights.UI.ViewModels
 
             // AppState 復元
             AppState.SpeedValueMs = state.SpeedValueMs;
+            AppState.InterpolationIntervalMs = state.InterpolationIntervalMs;
             AppState.SelectedColor = new Rgb(state.ColorR, state.ColorG, state.ColorB);
 
             EditableSpeedText = state.SpeedValueMs.ToString();
+            EditableInterpolationIntervalText = state.InterpolationIntervalMs.ToString();
 
             // Target 復元（文字列→Enum変換）
             if (Enum.TryParse<Target>(state.SelectedTarget, out var target))
@@ -756,6 +826,7 @@ namespace SynchronizedLights.UI.ViewModels
             OnPropertyChanged(nameof(CurrentTargetLabel));
             OnPropertyChanged(nameof(CurrentColorLabel));
             OnPropertyChanged(nameof(CurrentSpeedLabel));
+            OnPropertyChanged(nameof(EditableInterpolationIntervalMs));
             RefreshTargetSelection();
             RefreshSpeedSelection();
 
@@ -781,6 +852,7 @@ namespace SynchronizedLights.UI.ViewModels
             return new UserState
             {
                 SpeedValueMs = AppState.SpeedValueMs,
+                InterpolationIntervalMs = AppState.InterpolationIntervalMs,
                 ColorR = AppState.SelectedColor.R,
                 ColorG = AppState.SelectedColor.G,
                 ColorB = AppState.SelectedColor.B,
@@ -989,6 +1061,14 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [RelayCommand]
         private void ShowSetting() => CurrentCategory = UiCategory.Setting;
+
+        /// <summary>
+        /// TimeSeq画面表示コマンド
+        /// 概要：現在の画面カテゴリを TimeSeq（時間ベースシーケンス編集）に切り替える。
+        /// </summary>
+        [RelayCommand]
+        private void ShowTimeSeq() => CurrentCategory = UiCategory.TimeSeq;
+
         /// <summary>
         /// ALL選択コマンド
         /// 概要：現在の対象をALLに設定する。
@@ -1256,6 +1336,118 @@ namespace SynchronizedLights.UI.ViewModels
             finally
             {
                 IsBusy = false;
+                RefreshTransportState();
+            }
+        }
+
+        /// <summary>
+        /// 7色変化の順送り色リスト
+        /// 赤 → 橙 → 黄 → 緑 → 水色 → 青 → 紫
+        /// </summary>
+        private static readonly Lib.Domain.ValueObjects.Rgb[] SevenColors = new[]
+        {
+            new Lib.Domain.ValueObjects.Rgb(255,   0,   0),  // 赤
+            new Lib.Domain.ValueObjects.Rgb(255, 128,   0),  // 橙
+            new Lib.Domain.ValueObjects.Rgb(255, 255,   0),  // 黄
+            new Lib.Domain.ValueObjects.Rgb(  0, 255,   0),  // 緑
+            new Lib.Domain.ValueObjects.Rgb(  0, 255, 255),  // 水色 (Cyan)
+            new Lib.Domain.ValueObjects.Rgb(  0,   0, 255),  // 青
+            new Lib.Domain.ValueObjects.Rgb(255,   0, 255),  // 紫 (Magenta)
+        };
+
+        /// <summary>7Color 実行中の停止トークン（押されたら Cancel）</summary>
+        private System.Threading.CancellationTokenSource? _sevenColorCts;
+
+        /// <summary>7Color 実行中フラグ（ボタンハイライト連動）</summary>
+        public bool IsSevenColorRunning => _sevenColorCts != null && !_sevenColorCts.IsCancellationRequested;
+
+        /// <summary>7Color ボタンの表示テキスト（実行中は "Stop 7Color"）</summary>
+        public string SevenColorButtonText => IsSevenColorRunning ? "Stop 7Color" : "7Color";
+
+        /// <summary>
+        /// 7Color の CanExecute 判定
+        /// 概要：実行中なら true（停止のため押せる）、未実行時は他EFFECTと同条件。
+        /// </summary>
+        private bool CanExecuteSevenColor()
+        {
+            // 実行中は常に押せる（停止ボタンとして機能させるため）
+            if (IsSevenColorRunning) return true;
+            // 未実行時：他のEFFECTボタンと同じ条件
+            return CanExecuteSendCommand();
+        }
+
+        /// <summary>
+        /// 7Color 実行コマンド
+        /// 概要：押下時に動作を開始/停止トグル。
+        ///       実行中：CancellationToken 発火 → ループ break
+        ///       停止中：新規 CTS 作成 → 7 色順送りループ開始
+        /// 1 色あたりの時間 = SpeedValueMs / 7（最低 100ms）
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteSevenColor), AllowConcurrentExecutions = true)]
+        private async Task ExecuteSevenColor()
+        {
+            // 実行中なら停止
+            if (IsSevenColorRunning)
+            {
+                _sevenColorCts?.Cancel();
+                StatusMessage = "7Color stopping...";
+                return;
+            }
+
+            // 開始
+            _sevenColorCts = new System.Threading.CancellationTokenSource();
+            OnPropertyChanged(nameof(IsSevenColorRunning));
+            OnPropertyChanged(nameof(SevenColorButtonText));
+            ExecuteSevenColorCommand.NotifyCanExecuteChanged();
+
+            var token = _sevenColorCts.Token;
+            // 1 色あたりの時間：SpeedValueMs を 7 で割る、最低 100ms
+            var perColorMs = Math.Max(100, AppState.SpeedValueMs / 7);
+
+            StatusMessage = $"7Color started (1色 {perColorMs}ms)";
+
+            try
+            {
+                if (!_lighting.IsConnected)
+                {
+                    StatusMessage = "7Color skipped : transport disconnected";
+                    App.MisOpTracker.RecordSendFailure();
+                    return;
+                }
+
+                // 連続ループ：トークンが Cancel されるまで 7 色を回し続ける
+                while (!token.IsCancellationRequested)
+                {
+                    foreach (var color in SevenColors)
+                    {
+                        if (token.IsCancellationRequested) break;
+                        await _lighting.SetColorAsync(AppState.SelectedTarget, color, token);
+                        try { await Task.Delay(perColorMs, token); }
+                        catch (OperationCanceledException) { break; }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 停止ボタンによる正常終了
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"7Color failed: {ex.Message}";
+                ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
+            }
+            finally
+            {
+                _sevenColorCts?.Dispose();
+                _sevenColorCts = null;
+                OnPropertyChanged(nameof(IsSevenColorRunning));
+                OnPropertyChanged(nameof(SevenColorButtonText));
+                ExecuteSevenColorCommand.NotifyCanExecuteChanged();
+                if (StatusMessage?.StartsWith("7Color") == true)
+                {
+                    StatusMessage = "7Color stopped";
+                }
                 RefreshTransportState();
             }
         }

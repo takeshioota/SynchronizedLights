@@ -1,0 +1,412 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Lib.Application.Models;
+using Lib.Application.Services;
+using Serilog;
+
+namespace Lib.Ui.Screens.ViewModels
+{
+    /// <summary>
+    /// 時間ベースシーケンス編集画面の ViewModel
+    /// 概要：追加機能③に基づくシーケンス編集UI。
+    ///       一覧表示・新規作成・保存・削除・ステップ編集（DataGrid）を提供。
+    /// 構造：
+    ///   - 左ペイン：シーケンス一覧（ListBox）
+    ///   - 右ペイン：選択中シーケンスの編集（名前、説明、ステップDataGrid）
+    /// </summary>
+    public partial class TimeSequenceViewModel : ObservableObject
+    {
+        #region フィールド
+        private readonly TimeBasedSequenceStore _store;
+        private TimeBasedSequence? _editingSequence;  // 編集中シーケンスの実体
+        #endregion
+
+        #region コンストラクタ
+        public TimeSequenceViewModel()
+        {
+            _store = new TimeBasedSequenceStore();
+            Sequences = new ObservableCollection<TimeBasedSequence>();
+            EditingSteps = new ObservableCollection<SequenceStepWrapper>();
+            ReloadSequences();
+        }
+        #endregion
+
+        #region プロパティ
+
+        /// <summary>シーケンス一覧（左ペイン用）</summary>
+        public ObservableCollection<TimeBasedSequence> Sequences { get; }
+
+        /// <summary>選択中シーケンス</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasSelectedSequence))]
+        private TimeBasedSequence? selectedSequence;
+
+        /// <summary>選択中があるかどうか</summary>
+        public bool HasSelectedSequence => SelectedSequence != null;
+
+        /// <summary>編集中シーケンス名</summary>
+        [ObservableProperty]
+        private string editingName = "";
+
+        /// <summary>編集中シーケンスの説明</summary>
+        [ObservableProperty]
+        private string editingDescription = "";
+
+        /// <summary>編集中ステップ一覧（DataGrid 用）</summary>
+        public ObservableCollection<SequenceStepWrapper> EditingSteps { get; }
+
+        /// <summary>選択中ステップ（行削除用）</summary>
+        [ObservableProperty]
+        private SequenceStepWrapper? selectedStep;
+
+        /// <summary>状態メッセージ</summary>
+        [ObservableProperty]
+        private string statusMessage = "シーケンスを選択するか、「新規」で作成してください。";
+
+        /// <summary>保存先ディレクトリのパス（情報表示用）</summary>
+        public string StoreDirectoryPath => _store.GetStoreDirectoryPath();
+
+        #endregion
+
+        #region SelectedSequence 変更時：編集ペインに反映
+        partial void OnSelectedSequenceChanged(TimeBasedSequence? value)
+        {
+            if (value == null)
+            {
+                EditingName = "";
+                EditingDescription = "";
+                EditingSteps.Clear();
+                _editingSequence = null;
+                StatusMessage = "シーケンスを選択するか、「新規」で作成してください。";
+                return;
+            }
+
+            // 編集ペインに値を流し込む
+            _editingSequence = value;
+            EditingName = value.Name;
+            EditingDescription = value.Description;
+
+            EditingSteps.Clear();
+            foreach (var step in value.SortedSteps)
+            {
+                EditingSteps.Add(new SequenceStepWrapper(step));
+            }
+
+            StatusMessage = $"編集中: {value.Name}（{EditingSteps.Count} ステップ）";
+        }
+        #endregion
+
+        #region コマンド：シーケンス管理
+
+        /// <summary>新規シーケンス作成</summary>
+        [RelayCommand]
+        private void NewSequence()
+        {
+            var newSeq = new TimeBasedSequence
+            {
+                Name = $"新規シーケンス_{DateTime.Now:HHmmss}",
+                Description = "",
+                Steps = new List<SequenceStep>()
+            };
+
+            _store.Save(newSeq);
+            ReloadSequences();
+            SelectedSequence = Sequences.FirstOrDefault(s => s.Id == newSeq.Id);
+            StatusMessage = $"新規作成: {newSeq.Name}";
+        }
+
+        /// <summary>選択中シーケンスを保存</summary>
+        [RelayCommand]
+        private void SaveSequence()
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "保存対象が選択されていません。";
+                return;
+            }
+
+            // 名前の重複チェック（自分以外）
+            if (string.IsNullOrWhiteSpace(EditingName))
+            {
+                StatusMessage = "シーケンス名を入力してください。";
+                return;
+            }
+            if (_store.ExistsByName(EditingName, _editingSequence.Id))
+            {
+                StatusMessage = $"「{EditingName}」という名前のシーケンスが既に存在します。";
+                return;
+            }
+
+            // 編集ペインの内容を _editingSequence に書き戻す
+            _editingSequence.Name = EditingName.Trim();
+            _editingSequence.Description = EditingDescription ?? "";
+            _editingSequence.Steps = EditingSteps.Select(w => w.ToModel()).ToList();
+
+            //   再選択に必要な情報をローカル変数に退避してから ReloadSequences する。
+            var savedId = _editingSequence.Id;
+            var savedName = _editingSequence.Name;
+            var savedStepCount = _editingSequence.Steps.Count;
+
+            if (_store.Save(_editingSequence))
+            {
+                ReloadSequences();
+                // 保存後の再選択（ローカル変数を使う：_editingSequence は null になっている可能性あり）
+                SelectedSequence = Sequences.FirstOrDefault(s => s.Id == savedId);
+                StatusMessage = $"保存完了: {savedName}（{savedStepCount} ステップ）";
+            }
+            else
+            {
+                StatusMessage = "保存に失敗しました。ログを確認してください。";
+            }
+        }
+
+        /// <summary>選択中シーケンスを削除</summary>
+        [RelayCommand]
+        private void DeleteSequence()
+        {
+            if (SelectedSequence == null)
+            {
+                StatusMessage = "削除対象が選択されていません。";
+                return;
+            }
+
+            var name = SelectedSequence.Name;
+            var result = MessageBox.Show(
+                $"「{name}」を削除しますか？\nこの操作は取り消せません。",
+                "シーケンス削除確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes) return;
+
+            if (_store.Delete(SelectedSequence.Id))
+            {
+                StatusMessage = $"削除完了: {name}";
+                ReloadSequences();
+                SelectedSequence = null;
+            }
+            else
+            {
+                StatusMessage = $"削除に失敗しました: {name}";
+            }
+        }
+
+        /// <summary>編集破棄（一覧から再読込）</summary>
+        [RelayCommand]
+        private void DiscardChanges()
+        {
+            if (_editingSequence == null) return;
+            // SelectedSequence を一度クリアして再選択することで OnSelectedSequenceChanged 経由で復元
+            var id = _editingSequence.Id;
+            ReloadSequences();
+            SelectedSequence = Sequences.FirstOrDefault(s => s.Id == id);
+            StatusMessage = "編集を破棄して最後の保存状態に戻しました。";
+        }
+
+        #endregion
+
+        #region コマンド：ステップ編集
+
+        /// <summary>ステップ追加（末尾に追加）</summary>
+        [RelayCommand]
+        private void AddStep()
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "シーケンスを選択するか新規作成してください。";
+                return;
+            }
+
+            // 末尾の時刻 + 1秒で新規追加
+            var lastTimeMs = EditingSteps.Count > 0
+                ? EditingSteps.Max(s => s.TimeMs)
+                : -1000;
+
+            var step = new SequenceStep
+            {
+                TimeMs = lastTimeMs + 1000,
+                Command = "SetColor",
+                ColorR = 255,
+                ColorG = 255,
+                ColorB = 255,
+                DurationMs = 1000,
+                RetransmitCount = 3,
+                InterpolationIntervalMs = 50,
+                Note = ""
+            };
+            EditingSteps.Add(new SequenceStepWrapper(step));
+            StatusMessage = $"ステップ追加（時刻 {step.TimeMs / 1000.0:F1}s）。 "
+                          + "「保存」を押すまでは未保存です。";
+        }
+
+        /// <summary>選択中ステップを削除</summary>
+        [RelayCommand]
+        private void RemoveStep()
+        {
+            if (SelectedStep == null)
+            {
+                StatusMessage = "削除する行を選択してください。";
+                return;
+            }
+            EditingSteps.Remove(SelectedStep);
+            StatusMessage = "ステップを削除しました。「保存」を押すまでは未保存です。";
+        }
+
+        /// <summary>ステップを時刻順にソート</summary>
+        [RelayCommand]
+        private void SortSteps()
+        {
+            var sorted = EditingSteps.OrderBy(s => s.TimeMs).ToList();
+            EditingSteps.Clear();
+            foreach (var s in sorted) EditingSteps.Add(s);
+            StatusMessage = $"時刻順にソートしました（{EditingSteps.Count} ステップ）。";
+        }
+
+        #endregion
+
+        #region 内部メソッド
+
+        /// <summary>一覧を再読込</summary>
+        private void ReloadSequences()
+        {
+            Sequences.Clear();
+            foreach (var seq in _store.LoadAll())
+            {
+                Sequences.Add(seq);
+            }
+        }
+
+        #endregion
+    }
+
+
+    /// <summary>
+    /// SequenceStep の DataGrid 編集用ラッパー
+    /// 概要：内部単位（ms, byte）を UI 表示用（秒、int）に変換しつつ INotifyPropertyChanged を提供。
+    ///       ToModel() で永続化用 SequenceStep に戻す。
+    /// </summary>
+    public partial class SequenceStepWrapper : ObservableObject
+    {
+        private int _timeMs;
+        private int _durationMs;
+
+        public SequenceStepWrapper() { }
+
+        public SequenceStepWrapper(SequenceStep src)
+        {
+            _timeMs = src.TimeMs;
+            _durationMs = src.DurationMs;
+            command = src.Command;
+            colorR = src.ColorR;
+            colorG = src.ColorG;
+            colorB = src.ColorB;
+            retransmitCount = src.RetransmitCount;
+            interpolationIntervalMs = src.InterpolationIntervalMs;
+            note = src.Note;
+        }
+
+        /// <summary>時刻（ミリ秒）— 内部値</summary>
+        public int TimeMs
+        {
+            get => _timeMs;
+            set
+            {
+                if (_timeMs != value)
+                {
+                    _timeMs = Math.Max(0, value);
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(TimeSec));
+                }
+            }
+        }
+
+        /// <summary>時刻（秒、UI表示用）</summary>
+        public double TimeSec
+        {
+            get => _timeMs / 1000.0;
+            set
+            {
+                var ms = (int)Math.Max(0, Math.Round(value * 1000));
+                if (_timeMs != ms)
+                {
+                    _timeMs = ms;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(TimeMs));
+                }
+            }
+        }
+
+        [ObservableProperty]
+        private string command = "SetColor";
+
+        [ObservableProperty]
+        private byte colorR = 255;
+
+        [ObservableProperty]
+        private byte colorG = 255;
+
+        [ObservableProperty]
+        private byte colorB = 255;
+
+        /// <summary>所要時間（ミリ秒）— 内部値</summary>
+        public int DurationMs
+        {
+            get => _durationMs;
+            set
+            {
+                if (_durationMs != value)
+                {
+                    _durationMs = Math.Max(0, value);
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DurationSec));
+                }
+            }
+        }
+
+        /// <summary>所要時間（秒、UI表示用）</summary>
+        public double DurationSec
+        {
+            get => _durationMs / 1000.0;
+            set
+            {
+                var ms = (int)Math.Max(0, Math.Round(value * 1000));
+                if (_durationMs != ms)
+                {
+                    _durationMs = ms;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(DurationMs));
+                }
+            }
+        }
+
+        [ObservableProperty]
+        private int retransmitCount = 3;
+
+        [ObservableProperty]
+        private int interpolationIntervalMs = 50;
+
+        [ObservableProperty]
+        private string note = "";
+
+        /// <summary>永続化用 SequenceStep に変換</summary>
+        public SequenceStep ToModel()
+        {
+            return new SequenceStep
+            {
+                TimeMs = TimeMs,
+                Command = Command ?? "SetColor",
+                ColorR = ColorR,
+                ColorG = ColorG,
+                ColorB = ColorB,
+                DurationMs = DurationMs,
+                RetransmitCount = RetransmitCount,
+                InterpolationIntervalMs = InterpolationIntervalMs,
+                Note = Note ?? ""
+            };
+        }
+    }
+}

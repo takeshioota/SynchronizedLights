@@ -15,6 +15,7 @@
             <RowDefinition Height="80"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="110"/>
+            <RowDefinition Height="80"/>
             <RowDefinition Height="110"/>
             <RowDefinition Height="120"/>
             <RowDefinition Height="44"/>
@@ -188,6 +189,12 @@
                         Tag="{Binding IsSettingSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
+                <Button Content="TimeSeq"
+                        Command="{Binding ShowTimeSeqCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsTimeSeqSelected}"
+                        MinHeight="56"
+                        Margin="0,0,0,10" />
             </StackPanel>
         </Border>
 
@@ -296,13 +303,130 @@
             </Grid>
         </Border>
 
-        <!-- EffectBar -->
         <Border Grid.Row="3"
+                Grid.ColumnSpan="2"
+                Style="{StaticResource GrandMaPanelBorderStyle}">
+            <Grid Margin="0,4,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="SPEED"
+                           Style="{StaticResource GrandMaSectionTitleStyle}"
+                           VerticalAlignment="Center" />
+
+                <!-- 列1: Fade 総時間 -->
+                <Grid Grid.Column="1" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="Fade総時間 (ms) :"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <Slider x:Name="SldSpeedCommon"
+                            Grid.Column="1"
+                            Minimum="0"
+                            Maximum="10000"
+                            SmallChange="50"
+                            LargeChange="500"
+                            TickFrequency="1000"
+                            TickPlacement="BottomRight"
+                            IsSnapToTickEnabled="False"
+                            VerticalAlignment="Center"
+                            MinHeight="32"
+                            Value="{Binding EditableSpeedValueMs,
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Grid.Column="2"
+                             Margin="8,0,0,0"
+                             HorizontalContentAlignment="Right"
+                             VerticalContentAlignment="Center"
+                             Text="{Binding EditableSpeedText,
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSpeedValid}" Value="False">
+                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
+                                        <Setter Property="ToolTip" Value="Speed は 0〜10000 の整数で入力してください。"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Grid>
+
+                <!-- 列3: 補間ステップ間隔 -->
+                <Grid Grid.Column="3" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="補間間隔 (ms) :"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               ToolTip="コマンドとコマンドの間隔。最速 20ms。&#x0a;Fade 総時間 ÷ 補間間隔 = 送信ステップ数"/>
+                    <Slider x:Name="SldInterpolationInterval"
+                            Grid.Column="1"
+                            Minimum="20"
+                            Maximum="100"
+                            SmallChange="5"
+                            LargeChange="10"
+                            TickFrequency="10"
+                            TickPlacement="BottomRight"
+                            IsSnapToTickEnabled="True"
+                            VerticalAlignment="Center"
+                            MinHeight="32"
+                            Value="{Binding EditableInterpolationIntervalMs,
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Grid.Column="2"
+                             Margin="8,0,0,0"
+                             HorizontalContentAlignment="Right"
+                             VerticalContentAlignment="Center"
+                             Text="{Binding EditableInterpolationIntervalText,
+                                    Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsInterpolationIntervalValid}" Value="False">
+                                        <Setter Property="BorderBrush" Value="#DC3545"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
+                                        <Setter Property="ToolTip" Value="補間間隔は 20〜100 の整数で入力してください。"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- EffectBar -->
+        <Border Grid.Row="4"
                 Grid.ColumnSpan="2"
                 Style="{StaticResource GrandMaPanelBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
@@ -344,11 +468,20 @@
                         MinWidth="110"
                         MinHeight="48"
                         Margin="10,0,0,0" />
-                </Grid>
+                <Button x:Name="BtnFx7Color"
+                        Grid.Column="5"
+                        Content="{Binding SevenColorButtonText}"
+                        Command="{Binding ExecuteSevenColorCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsSevenColorRunning}"
+                        MinWidth="130"
+                        MinHeight="48"
+                        Margin="10,0,0,0" />
+            </Grid>
         </Border>
 
         <!-- SequenceBar -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Grid.ColumnSpan="2"
                 Style="{StaticResource GrandMaPanelBorderStyle}">
             <Grid>
@@ -489,7 +622,7 @@
                         Margin="12,0,0,0"/>
             </Grid>
         </Border>
-        <Border Grid.Row="5"
+        <Border Grid.Row="6"
                 Grid.ColumnSpan="2"
                 Style="{StaticResource GrandMaPanelBorderStyle}"
                 Padding="10,4">
