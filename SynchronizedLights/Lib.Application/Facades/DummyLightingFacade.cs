@@ -366,6 +366,36 @@ namespace Lib.Application.Facades
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Effect 開始（Dummy 疑似実装：ログ出力のみ）
+        /// </summary>
+        public Task StartEffectAsync(
+            string effectType,
+            Rgb color,
+            int cycleDurationMs = 1000,
+            int? flashIntervalMs = null,
+            int fadeSteps = 20,
+            bool continuous = true,
+            CancellationToken ct = default)
+        {
+            Log.Information(
+                "[Dummy] StartEffect: type={Type}, color=({R},{G},{B}), cycle={Cycle}ms, " +
+                "flashInterval={FI}, fadeSteps={FS}, continuous={Cont}",
+                effectType, color.R, color.G, color.B, cycleDurationMs,
+                flashIntervalMs?.ToString() ?? "null", fadeSteps, continuous);
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Effect 停止（Dummy 疑似実装：ログ出力のみ）
+        /// </summary>
+        public Task StopEffectAsync(CancellationToken ct = default)
+        {
+            Log.Information("[Dummy] StopEffect");
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
         #endregion 即時制御
 
         #region 内部処理

@@ -67,6 +67,7 @@
                 <Button x:Name="BtnClosePorts"
                         Content="切断 / Disconnect"
                         Command="{Binding DisconnectCommand}"
+                        IsEnabled="{Binding IsConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="160"
                         MinHeight="44" />

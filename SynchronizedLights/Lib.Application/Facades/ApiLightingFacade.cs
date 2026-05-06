@@ -563,6 +563,102 @@ namespace Lib.Application.Facades
             }
         }
 
+        /// <summary>
+        /// Effect 開始（POST /api/effect/start）
+        /// 概要：Flash/FadeIn/FadeOut/Breathing/SevenColor を
+        ///       continuous=true で連続再生、false で単発実行する。
+        /// </summary>
+        public async Task StartEffectAsync(
+            string effectType,
+            Rgb color,
+            int cycleDurationMs = 1000,
+            int? flashIntervalMs = null,
+            int fadeSteps = 20,
+            bool continuous = true,
+            CancellationToken ct = default)
+        {
+            if (ShouldDropCommand($"Effect.{effectType}")) return;
+
+            var startTs = Stopwatch.GetTimestamp();
+            try
+            {
+                var colorObj = new { r = (int)color.R, g = (int)color.G, b = (int)color.B };
+                object request;
+
+                if (flashIntervalMs.HasValue)
+                {
+                    request = new
+                    {
+                        type = effectType,
+                        color = colorObj,
+                        field = 0,
+                        cycleDurationMs = cycleDurationMs,
+                        flashIntervalMs = flashIntervalMs.Value,
+                        fadeSteps = fadeSteps,
+                        continuous = continuous
+                    };
+                }
+                else
+                {
+                    request = new
+                    {
+                        type = effectType,
+                        color = colorObj,
+                        field = 0,
+                        cycleDurationMs = cycleDurationMs,
+                        fadeSteps = fadeSteps,
+                        continuous = continuous
+                    };
+                }
+
+                var response = await _httpClient.PostAsJsonAsync("api/effect/start", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? $"Effect {effectType} 開始失敗";
+                    Log.Warning("[Api] StartEffect failed: {Err}", _lastError);
+                }
+                else
+                {
+                    Log.Information(
+                        "[Api] StartEffect: type={Type}, continuous={Cont}, msg={Msg}",
+                        effectType, continuous, result.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] StartEffect HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RecordLatency(startTs);
+                RaiseStatusChanged();
+            }
+        }
+
+        /// <summary>
+        /// Effect 停止（POST /api/effect/stop）
+        /// </summary>
+        public async Task StopEffectAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync("api/effect/stop", null, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+                Log.Information("[Api] StopEffect: {Msg}", result.Message);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] StopEffect HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RaiseStatusChanged();
+            }
+        }
         #endregion 制御
 
         #region 内部メソッド
@@ -571,7 +667,7 @@ namespace Lib.Application.Facades
         /// UI側 Target を HTTP API 呼び出しに振り分ける。
         /// ALL          → POST /api/light/global (A2)
         /// Group01〜08  → POST /api/light/rows   (AA, 多行同色)
-　　    /// エンドポイント /api/light/rows/each → /api/light/rows
+        　　    /// エンドポイント /api/light/rows/each → /api/light/rows
         /// ペイロードフィールド名 len → rowLen
         /// </summary>
         private async Task InternalSetColorAsync(Target target, Rgb color, CancellationToken ct)

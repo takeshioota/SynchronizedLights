@@ -193,6 +193,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
             catch (Exception ex)
             {
+                IsConnected = _lighting.IsConnected;
                 SettingStatusMessage = $"ポート一覧取得失敗: {ex.Message}";
             }
             finally
@@ -230,6 +231,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
             finally
             {
+                IsConnected = _lighting.IsConnected;
                 IsBusy = false;
             }
         }
@@ -238,10 +240,10 @@ namespace Lib.Ui.Screens.ViewModels
         /// 切断コマンド
         /// 概要：接続中の全ポートを閉じる。
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanDisconnect))]
+        [RelayCommand]
         private async Task DisconnectAsync()
         {
-            if (IsBusy) return;
+            if (!IsConnected || IsBusy) return;
 
             // 重要操作の確認ダイアログ
             var result = System.Windows.MessageBox.Show(
@@ -271,6 +273,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
             finally
             {
+                IsConnected = _lighting.IsConnected;
                 IsBusy = false;
             }
         }

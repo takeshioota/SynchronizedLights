@@ -48,7 +48,7 @@ public interface ILightingFacade
     /// <summary>対象に色を設定する</summary>
     Task SetColorAsync(Target target, Rgb color, CancellationToken ct = default);
 
-    // --- 演出（ApiLightingFacade側の実装にて対応） ---
+    // --- 演出 StartEffectAsync / StopEffectAsync ---
 
     /// <summary>点滅を実行する</summary>
     Task FlashAsync(Target target, int speedMs, Rgb color, CancellationToken ct = default);
@@ -61,17 +61,36 @@ public interface ILightingFacade
 
     /// <summary>
     /// ブレス（呼吸）演出を実行する
-    /// 概要：FadeIn + FadeOut を指定サイクル数繰り返し、呼吸のように
-    ///       ゆっくり明滅する演出。1 サイクル = fadeIn + fadeOut = cycleMs。
     /// </summary>
-    /// <param name="target">対象</param>
-    /// <param name="cycleMs">1サイクル（明暗 1 往復）の時間（ms）</param>
-    /// <param name="color">色</param>
-    /// <param name="cycles">繰り返し回数（既定 3 回）</param>
     Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default);
 
     // --- シーケンス ---
 
     /// <summary>登録済みシーケンスを実行する</summary>
     Task ExecuteSequenceAsync(Target target, int sequenceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// エフェクトを開始する（Effect API: POST /api/effect/start）
+    /// 概要：単発(continuous=false)・連続(continuous=true)を切替可能。
+    ///       連続中に新しい StartEffect を呼ぶと前のエフェクトは API 側で自動停止される。
+    /// </summary>
+    /// <param name="effectType">"Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor"</param>
+    /// <param name="color">基本色</param>
+    /// <param name="cycleDurationMs">1サイクルの時間（ms）</param>
+    /// <param name="flashIntervalMs">Flash時のON/OFF間隔（ms）。Flash以外はnull可</param>
+    /// <param name="fadeSteps">Fade補間ステップ数（既定20）</param>
+    /// <param name="continuous">true=連続再生、false=1回のみ</param>
+    Task StartEffectAsync(
+        string effectType,
+        Rgb color,
+        int cycleDurationMs = 1000,
+        int? flashIntervalMs = null,
+        int fadeSteps = 20,
+        bool continuous = true,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// 実行中のエフェクトを停止する（Effect API: POST /api/effect/stop）
+    /// </summary>
+    Task StopEffectAsync(CancellationToken ct = default);
 }

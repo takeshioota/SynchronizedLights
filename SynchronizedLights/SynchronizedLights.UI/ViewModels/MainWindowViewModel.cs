@@ -1184,273 +1184,233 @@ namespace SynchronizedLights.UI.ViewModels
         }
 
         /// <summary>
-        /// Flash実行コマンド
-        /// 概要：現在対象に対してFlash操作を実行する。
+        /// 単発/連続モード切替フラグ
+        /// 概要：true=連続、false=単発。ContinuousModeButtonText とトグル連動。
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
-        private async Task ExecuteFlash()
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ContinuousModeButtonText))]
+        private bool isContinuousMode = false;
+
+        /// <summary>
+        /// 単発/連続モード ボタンの表示テキスト
+        /// </summary>
+        public string ContinuousModeButtonText => IsContinuousMode ? "連続" : "単発";
+
+        /// <summary>
+        /// 単発/連続モード トグルコマンド
+        /// </summary>
+        [RelayCommand]
+        private void ToggleContinuousMode()
         {
-            if (IsBusy) return;
-            IsBusy = true;
-            try
-            {
-                RefreshTransportState();
-                if (!IsTransportConnected)
-                {
-                    StatusMessage = "Flash skipped : transport disconnected";
-                    App.MisOpTracker.RecordSendFailure();
-                    return;
-                }
-
-                await _lighting.FlashAsync(
-                    AppState.SelectedTarget,
-                    AppState.SpeedValueMs,
-                    AppState.SelectedColor);
-
-                StatusMessage = $"Flash executed for {CurrentTargetLabel}";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Flash failed: {ex.Message}";
-                ErrorMessage = ex.Message;
-                App.MisOpTracker.RecordSendFailure();
-            }
-            finally
-            {
-                IsBusy = false;
-                RefreshTransportState();
-            }
+            IsContinuousMode = !IsContinuousMode;
+            StatusMessage = IsContinuousMode ? "Effect mode : 連続" : "Effect mode : 単発";
         }
 
         /// <summary>
-        /// FadeIn実行コマンド
-        /// 概要：現在対象に対してFadeIn操作を実行する。
+        /// 現在実行中の Effect 種別（null なら未実行）
+        /// 値： "Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor" / null
         /// </summary>
-        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
-        private async Task ExecuteFadeIn()
-        {
-            if (IsBusy) return;
-            IsBusy = true;
-            try
-            {
-                RefreshTransportState();
-                if (!IsTransportConnected)
-                {
-                    StatusMessage = "FadeIn skipped : transport disconnected";
-                    App.MisOpTracker.RecordSendFailure();
-                    return;
-                }
+        private string? _activeEffectType;
 
-                await _lighting.FadeInAsync(
-                    AppState.SelectedTarget,
-                    AppState.SpeedValueMs,
-                    AppState.SelectedColor);
+        // 各ボタンの「実行中」フラグ（XAMLハイライト連動）
+        public bool IsFlashRunning => _activeEffectType == "Flash";
+        public bool IsFadeInRunning => _activeEffectType == "FadeIn";
+        public bool IsFadeOutRunning => _activeEffectType == "FadeOut";
+        public bool IsBreathRunning => _activeEffectType == "Breathing";
+        public bool IsSevenColorRunning => _activeEffectType == "SevenColor";
 
-                StatusMessage = $"FadeIn executed for {CurrentTargetLabel}";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"FadeIn failed: {ex.Message}";
-                ErrorMessage = ex.Message;
-                App.MisOpTracker.RecordSendFailure();
-            }
-            finally
-            {
-                IsBusy = false;
-                RefreshTransportState();
-            }
-        }
-
-        /// <summary>
-        /// FadeOut実行コマンド
-        /// 概要：現在対象に対してFadeOut操作を実行する。
-        /// </summary>
-        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
-        private async Task ExecuteFadeOut()
-        {
-            if (IsBusy) return;
-            IsBusy = true;
-            try
-            {
-                RefreshTransportState();
-                if (!IsTransportConnected)
-                {
-                    StatusMessage = "FadeOut skipped : transport disconnected";
-                    App.MisOpTracker.RecordSendFailure();
-                    return;
-                }
-
-                await _lighting.FadeOutAsync(
-                    AppState.SelectedTarget,
-                    AppState.SpeedValueMs,
-                    AppState.SelectedColor);
-
-                StatusMessage = $"FadeOut executed for {CurrentTargetLabel}";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"FadeOut failed: {ex.Message}";
-                ErrorMessage = ex.Message;
-                App.MisOpTracker.RecordSendFailure();
-            }
-            finally
-            {
-                IsBusy = false;
-                RefreshTransportState();
-            }
-        }
-
-        /// <summary>
-        /// Breath 実行コマンド
-        /// 概要：現在対象に対して呼吸演出（FadeIn+FadeOut の 3 サイクル繰返し）を実行する。
-        /// </summary>
-        [RelayCommand(CanExecute = nameof(CanExecuteSendCommand))]
-        private async Task ExecuteBreath()
-        {
-            if (IsBusy) return;
-            IsBusy = true;
-            try
-            {
-                RefreshTransportState();
-                if (!IsTransportConnected)
-                {
-                    StatusMessage = "Breath skipped : transport disconnected";
-                    App.MisOpTracker.RecordSendFailure();
-                    return;
-                }
-
-                await _lighting.BreathAsync(
-                    AppState.SelectedTarget,
-                    AppState.SpeedValueMs,
-                    AppState.SelectedColor,
-                    cycles: 3);
-
-                StatusMessage = $"Breath executed for {CurrentTargetLabel}";
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Breath failed: {ex.Message}";
-                ErrorMessage = ex.Message;
-                App.MisOpTracker.RecordSendFailure();
-            }
-            finally
-            {
-                IsBusy = false;
-                RefreshTransportState();
-            }
-        }
-
-        /// <summary>
-        /// 7色変化の順送り色リスト
-        /// 赤 → 橙 → 黄 → 緑 → 水色 → 青 → 紫
-        /// </summary>
-        private static readonly Lib.Domain.ValueObjects.Rgb[] SevenColors = new[]
-        {
-            new Lib.Domain.ValueObjects.Rgb(255,   0,   0),  // 赤
-            new Lib.Domain.ValueObjects.Rgb(255, 128,   0),  // 橙
-            new Lib.Domain.ValueObjects.Rgb(255, 255,   0),  // 黄
-            new Lib.Domain.ValueObjects.Rgb(  0, 255,   0),  // 緑
-            new Lib.Domain.ValueObjects.Rgb(  0, 255, 255),  // 水色 (Cyan)
-            new Lib.Domain.ValueObjects.Rgb(  0,   0, 255),  // 青
-            new Lib.Domain.ValueObjects.Rgb(255,   0, 255),  // 紫 (Magenta)
-        };
-
-        /// <summary>7Color 実行中の停止トークン（押されたら Cancel）</summary>
-        private System.Threading.CancellationTokenSource? _sevenColorCts;
-
-        /// <summary>7Color 実行中フラグ（ボタンハイライト連動）</summary>
-        public bool IsSevenColorRunning => _sevenColorCts != null && !_sevenColorCts.IsCancellationRequested;
-
-        /// <summary>7Color ボタンの表示テキスト（実行中は "Stop 7Color"）</summary>
+        // 各ボタンの動的テキスト
+        public string FlashButtonText => IsFlashRunning ? "Stop Flash" : "Flash";
+        public string FadeInButtonText => IsFadeInRunning ? "Stop FadeIn" : "FadeIn";
+        public string FadeOutButtonText => IsFadeOutRunning ? "Stop FadeOut" : "FadeOut";
+        public string BreathButtonText => IsBreathRunning ? "Stop Breath" : "Breath";
         public string SevenColorButtonText => IsSevenColorRunning ? "Stop 7Color" : "7Color";
 
         /// <summary>
-        /// 7Color の CanExecute 判定
-        /// 概要：実行中なら true（停止のため押せる）、未実行時は他EFFECTと同条件。
+        /// EFFECT ボタン群の共通 CanExecute 判定
+        /// 概要：実行中ボタン（自身がアクティブ）は常に true（停止のため）。
+        ///       それ以外は CanExecuteSendCommand（接続中 & !IsBusy）に委ねる。
         /// </summary>
-        private bool CanExecuteSevenColor()
+        private bool CanExecuteEffect(string effectType)
         {
-            // 実行中は常に押せる（停止ボタンとして機能させるため）
-            if (IsSevenColorRunning) return true;
-            // 未実行時：他のEFFECTボタンと同じ条件
+            if (_activeEffectType == effectType) return true;  // 自身がアクティブなら停止用に押せる
             return CanExecuteSendCommand();
         }
 
+        private bool CanExecuteFlash() => CanExecuteEffect("Flash");
+        private bool CanExecuteFadeIn() => CanExecuteEffect("FadeIn");
+        private bool CanExecuteFadeOut() => CanExecuteEffect("FadeOut");
+        private bool CanExecuteBreath() => CanExecuteEffect("Breathing");
+        private bool CanExecuteSevenColor() => CanExecuteEffect("SevenColor");
+
         /// <summary>
-        /// 7Color 実行コマンド
-        /// 概要：押下時に動作を開始/停止トグル。
-        ///       実行中：CancellationToken 発火 → ループ break
-        ///       停止中：新規 CTS 作成 → 7 色順送りループ開始
-        /// 1 色あたりの時間 = SpeedValueMs / 7（最低 100ms）
+        /// アクティブ Effect 状態を更新し、関連プロパティを通知する
+        /// </summary>
+        private void SetActiveEffect(string? effectType)
+        {
+            _activeEffectType = effectType;
+            // ボタンテキスト & ハイライト用の Tag 更新
+            OnPropertyChanged(nameof(IsFlashRunning));
+            OnPropertyChanged(nameof(IsFadeInRunning));
+            OnPropertyChanged(nameof(IsFadeOutRunning));
+            OnPropertyChanged(nameof(IsBreathRunning));
+            OnPropertyChanged(nameof(IsSevenColorRunning));
+            OnPropertyChanged(nameof(FlashButtonText));
+            OnPropertyChanged(nameof(FadeInButtonText));
+            OnPropertyChanged(nameof(FadeOutButtonText));
+            OnPropertyChanged(nameof(BreathButtonText));
+            OnPropertyChanged(nameof(SevenColorButtonText));
+            // CanExecute 再評価
+            ExecuteFlashCommand.NotifyCanExecuteChanged();
+            ExecuteFadeInCommand.NotifyCanExecuteChanged();
+            ExecuteFadeOutCommand.NotifyCanExecuteChanged();
+            ExecuteBreathCommand.NotifyCanExecuteChanged();
+            ExecuteSevenColorCommand.NotifyCanExecuteChanged();
+        }
+
+        /// <summary>
+        /// Effect の共通開始/停止トグル
+        /// 概要：押されたボタンが現在のアクティブEffectなら停止、
+        ///       異なるEffect or 未実行なら開始。連続フラグは IsContinuousMode に従う。
+        /// </summary>
+        /// <param name="effectType">"Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor"</param>
+        /// <param name="cycleDurationMs">1 サイクル時間（既定 SpeedValueMs）</param>
+        /// <param name="flashIntervalMs">Flash の点滅間隔（Flash のみ指定）</param>
+        private async Task ToggleEffectAsync(
+            string effectType,
+            int cycleDurationMs,
+            int? flashIntervalMs)
+        {
+            // ───── 同一 Effect 押下 → 停止 ─────
+            if (_activeEffectType == effectType)
+            {
+                try
+                {
+                    await _lighting.StopEffectAsync();
+                    StatusMessage = $"{effectType} stopped";
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"{effectType} stop failed: {ex.Message}";
+                    ErrorMessage = ex.Message;
+                }
+                finally
+                {
+                    SetActiveEffect(null);
+                }
+                return;
+            }
+
+            // ───── 異Effect 実行中 / 未実行 → 開始（必要なら旧Effectを停止） ─────
+            RefreshTransportState();
+            if (!IsTransportConnected)
+            {
+                StatusMessage = $"{effectType} skipped : transport disconnected";
+                App.MisOpTracker.RecordSendFailure();
+                return;
+            }
+
+            // 別 Effect が動いていれば先に停止（API 側でも自動停止されるが、念のため）
+            if (_activeEffectType != null)
+            {
+                try { await _lighting.StopEffectAsync(); }
+                catch { /* 失敗しても続行 */ }
+            }
+
+            try
+            {
+                await _lighting.StartEffectAsync(
+                    effectType: effectType,
+                    color: AppState.SelectedColor,
+                    cycleDurationMs: cycleDurationMs,
+                    flashIntervalMs: flashIntervalMs,
+                    fadeSteps: 20,
+                    continuous: IsContinuousMode);
+
+                SetActiveEffect(effectType);
+                StatusMessage = IsContinuousMode
+                    ? $"{effectType} started (連続) for {CurrentTargetLabel}"
+                    : $"{effectType} executed (単発) for {CurrentTargetLabel}";
+
+                // 単発（continuous=false）の場合、API 側で 1 サイクル後に終了するため
+                // クライアント側の active も自動でクリアする（cycleDurationMs 経過後）
+                if (!IsContinuousMode)
+                {
+                    var capturedType = effectType;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Delay(cycleDurationMs + 200);
+                        }
+                        catch { }
+                        // UI スレッドでクリア
+                        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+                        {
+                            if (_activeEffectType == capturedType)
+                                SetActiveEffect(null);
+                        });
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"{effectType} failed: {ex.Message}";
+                ErrorMessage = ex.Message;
+                App.MisOpTracker.RecordSendFailure();
+                SetActiveEffect(null);
+            }
+        }
+
+        /// <summary>
+        /// Flash 実行コマンド（Effect API 経由）
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteFlash), AllowConcurrentExecutions = true)]
+        private async Task ExecuteFlash()
+        {
+            // Flash は ON/OFF 間隔 = SpeedValueMs / 2、サイクル = SpeedValueMs
+            var cycle = AppState.SpeedValueMs;
+            var flashInterval = Math.Max(50, cycle / 2);
+            await ToggleEffectAsync("Flash", cycle, flashInterval);
+        }
+
+        /// <summary>
+        /// FadeIn 実行コマンド（Effect API 経由）
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteFadeIn), AllowConcurrentExecutions = true)]
+        private async Task ExecuteFadeIn()
+        {
+            await ToggleEffectAsync("FadeIn", AppState.SpeedValueMs, null);
+        }
+
+        /// <summary>
+        /// FadeOut 実行コマンド（Effect API 経由）
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteFadeOut), AllowConcurrentExecutions = true)]
+        private async Task ExecuteFadeOut()
+        {
+            await ToggleEffectAsync("FadeOut", AppState.SpeedValueMs, null);
+        }
+
+        /// <summary>
+        /// Breath 実行コマンド（Effect API 経由）
+        /// UI 上は "Breath"、API 上は "Breathing"
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanExecuteBreath), AllowConcurrentExecutions = true)]
+        private async Task ExecuteBreath()
+        {
+            await ToggleEffectAsync("Breathing", AppState.SpeedValueMs, null);
+        }
+
+        /// <summary>
+        /// 7Color 実行コマンド（Effect API 経由）
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanExecuteSevenColor), AllowConcurrentExecutions = true)]
         private async Task ExecuteSevenColor()
         {
-            // 実行中なら停止
-            if (IsSevenColorRunning)
-            {
-                _sevenColorCts?.Cancel();
-                StatusMessage = "7Color stopping...";
-                return;
-            }
-
-            // 開始
-            _sevenColorCts = new System.Threading.CancellationTokenSource();
-            OnPropertyChanged(nameof(IsSevenColorRunning));
-            OnPropertyChanged(nameof(SevenColorButtonText));
-            ExecuteSevenColorCommand.NotifyCanExecuteChanged();
-
-            var token = _sevenColorCts.Token;
-            // 1 色あたりの時間：SpeedValueMs を 7 で割る、最低 100ms
-            var perColorMs = Math.Max(100, AppState.SpeedValueMs / 7);
-
-            StatusMessage = $"7Color started (1色 {perColorMs}ms)";
-
-            try
-            {
-                if (!_lighting.IsConnected)
-                {
-                    StatusMessage = "7Color skipped : transport disconnected";
-                    App.MisOpTracker.RecordSendFailure();
-                    return;
-                }
-
-                // 連続ループ：トークンが Cancel されるまで 7 色を回し続ける
-                while (!token.IsCancellationRequested)
-                {
-                    foreach (var color in SevenColors)
-                    {
-                        if (token.IsCancellationRequested) break;
-                        await _lighting.SetColorAsync(AppState.SelectedTarget, color, token);
-                        try { await Task.Delay(perColorMs, token); }
-                        catch (OperationCanceledException) { break; }
-                    }
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // 停止ボタンによる正常終了
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"7Color failed: {ex.Message}";
-                ErrorMessage = ex.Message;
-                App.MisOpTracker.RecordSendFailure();
-            }
-            finally
-            {
-                _sevenColorCts?.Dispose();
-                _sevenColorCts = null;
-                OnPropertyChanged(nameof(IsSevenColorRunning));
-                OnPropertyChanged(nameof(SevenColorButtonText));
-                ExecuteSevenColorCommand.NotifyCanExecuteChanged();
-                if (StatusMessage?.StartsWith("7Color") == true)
-                {
-                    StatusMessage = "7Color stopped";
-                }
-                RefreshTransportState();
-            }
+            await ToggleEffectAsync("SevenColor", AppState.SpeedValueMs, null);
         }
+
         /// <summary>
         /// ストロボ停止トグルコマンド
         /// 概要：ストロボ停止状態をトグル切替する。
