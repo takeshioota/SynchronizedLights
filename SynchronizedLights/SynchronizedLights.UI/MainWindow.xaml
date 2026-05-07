@@ -313,6 +313,7 @@
                     <ColumnDefinition Width="20"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0"
@@ -416,6 +417,23 @@
                         </TextBox.Style>
                     </TextBox>
                 </Grid>
+
+                <!-- 列5: Fade 補間ステップ数（計算値、読み取り専用） -->
+                <Border Grid.Column="5"
+                        BorderBrush="{StaticResource BorderBrushAmber}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="10,4"
+                        Margin="10,0,10,0"
+                        VerticalAlignment="Center"
+                        Background="#1A1A1A">
+                    <TextBlock Text="{Binding ComputedFadeStepsLabel}"
+                               FontSize="12"
+                               FontFamily="Consolas"
+                               Foreground="#FFC107"
+                               VerticalAlignment="Center"
+                               ToolTip="Fade 総時間 ÷ 補間間隔 = 送信ステップ数。&#x0a;Effect API の fadeSteps パラメータに渡される。"/>
+                </Border>
             </Grid>
         </Border>
 

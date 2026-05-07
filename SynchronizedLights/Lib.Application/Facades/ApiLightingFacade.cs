@@ -659,6 +659,199 @@ namespace Lib.Application.Facades
                 RaiseStatusChanged();
             }
         }
+
+        /// <summary>
+        /// シーケンスを登録/上書き（POST /api/sequence）
+        /// </summary>
+        public async Task UpsertSequenceAsync(
+            string name,
+            IReadOnlyList<Lib.Application.Models.SequenceApiStep> steps,
+            CancellationToken ct = default)
+        {
+            if (ShouldDropCommand("Sequence.Upsert")) return;
+
+            var startTs = Stopwatch.GetTimestamp();
+            try
+            {
+                var request = new
+                {
+                    name = name,
+                    steps = steps,
+                };
+                var response = await _httpClient.PostAsJsonAsync("api/sequence", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? $"Sequence {name} 登録失敗";
+                    Log.Warning("[Api] UpsertSequence failed: {Err}", _lastError);
+                }
+                else
+                {
+                    Log.Information("[Api] UpsertSequence: name={Name}, steps={Count}",
+                        name, steps.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] UpsertSequence HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RecordLatency(startTs);
+                RaiseStatusChanged();
+            }
+        }
+
+        /// <summary>
+        /// シーケンス再生開始（POST /api/sequence/play）
+        /// </summary>
+        public async Task PlaySequenceAsync(string name, CancellationToken ct = default)
+        {
+            if (ShouldDropCommand("Sequence.Play")) return;
+
+            var startTs = Stopwatch.GetTimestamp();
+            try
+            {
+                var request = new { name = name };
+                var response = await _httpClient.PostAsJsonAsync("api/sequence/play", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? $"Sequence {name} 再生失敗";
+                    Log.Warning("[Api] PlaySequence failed: {Err}", _lastError);
+                }
+                else
+                {
+                    Log.Information("[Api] PlaySequence: name={Name}, msg={Msg}",
+                        name, result.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] PlaySequence HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RecordLatency(startTs);
+                RaiseStatusChanged();
+            }
+        }
+
+        /// <summary>
+        /// シーケンス停止（POST /api/sequence/stop）
+        /// </summary>
+        public async Task StopSequenceAsync(CancellationToken ct = default)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync("api/sequence/stop", null, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+                Log.Information("[Api] StopSequence: {Msg}", result.Message);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] StopSequence HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RaiseStatusChanged();
+            }
+        }
+
+        /// <summary>
+        /// 再生状態取得（GET /api/sequence/play/status）
+        /// </summary>
+        public async Task<(bool IsPlaying, string? Name)> GetSequencePlayStatusAsync(
+            CancellationToken ct = default)
+        {
+            try
+            {
+                using var response = await _httpClient.GetAsync("api/sequence/play/status", ct);
+                if (!response.IsSuccessStatusCode) return (false, null);
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+                if (!doc.RootElement.TryGetProperty("data", out var data)) return (false, null);
+
+                var isPlaying = data.TryGetProperty("isPlaying", out var ip) && ip.GetBoolean();
+                string? name = null;
+                if (data.TryGetProperty("sequenceName", out var n) && n.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    name = n.GetString();
+                }
+                return (isPlaying, name);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Api] GetSequencePlayStatus failed: {Err}", ex.Message);
+                return (false, null);
+            }
+        }
+
+        /// <summary>
+        /// 登録済みシーケンス名一覧（GET /api/sequence）
+        /// </summary>
+        public async Task<IReadOnlyList<string>> ListSequenceNamesAsync(
+            CancellationToken ct = default)
+        {
+            try
+            {
+                using var response = await _httpClient.GetAsync("api/sequence", ct);
+                if (!response.IsSuccessStatusCode) return Array.Empty<string>();
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+                if (!doc.RootElement.TryGetProperty("data", out var data)) return Array.Empty<string>();
+                if (!data.TryGetProperty("names", out var names)) return Array.Empty<string>();
+
+                var list = new List<string>();
+                foreach (var item in names.EnumerateArray())
+                {
+                    if (item.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var s = item.GetString();
+                        if (!string.IsNullOrEmpty(s)) list.Add(s);
+                    }
+                }
+                return list;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Api] ListSequenceNames failed: {Err}", ex.Message);
+                return Array.Empty<string>();
+            }
+        }
+
+        /// <summary>
+        /// シーケンス削除（DELETE /api/sequence/{name}）
+        /// </summary>
+        public async Task DeleteSequenceFromApiAsync(string name, CancellationToken ct = default)
+        {
+            try
+            {
+                var encoded = Uri.EscapeDataString(name);
+                using var response = await _httpClient.DeleteAsync($"api/sequence/{encoded}", ct);
+                var result = await ReadApiResponseAsync(response, ct);
+                Log.Information("[Api] DeleteSequence: name={Name}, msg={Msg}",
+                    name, result.Message);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] DeleteSequence HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                RaiseStatusChanged();
+            }
+        }
         #endregion 制御
 
         #region 内部メソッド

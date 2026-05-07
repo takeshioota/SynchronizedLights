@@ -387,32 +387,73 @@
                             MinHeight="34" Width="140"/>
                 </StackPanel>
 
-                <!-- 保存・破棄 -->
-                <StackPanel Grid.Row="6"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            Margin="0,12,0,0">
-                    <Button Content="編集破棄"
-                            Command="{Binding DiscardChangesCommand}"
-                            IsEnabled="{Binding HasSelectedSequence}"
-                            Style="{StaticResource GrandMaButtonStyle}"
-                            MinHeight="38" Width="120"
-                            Margin="0,0,8,0"/>
-                    <Button Content="保存"
-                            Command="{Binding SaveSequenceCommand}"
-                            IsEnabled="{Binding HasSelectedSequence}"
-                            Style="{StaticResource GrandMaButtonStyle}"
-                            MinHeight="38" Width="120"/>
+                <!-- 保存・破棄・再生 -->
+                <Grid Grid.Row="6" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 左：再生 / API 同期 -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button Content="{Binding PlayButtonText}"
+                                Command="{Binding PlayOrStopCommand}"
+                                IsEnabled="{Binding IsApiEnabled}"
+                                Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                Tag="{Binding IsPlaying}"
+                                MinHeight="38" Width="130"
+                                Margin="0,0,8,0"
+                                ToolTip="現在のシーケンスを API 経由で再生 / 停止します"/>
+                        <Button Content="API 同期"
+                                Command="{Binding SyncToApiCommand}"
+                                IsEnabled="{Binding IsApiEnabled}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="38" Width="120"
+                                ToolTip="編集中の内容を API サーバーへ Upsert（再生せず登録のみ）"/>
+                    </StackPanel>
+
+                    <!-- 右：編集破棄 / 保存 -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="編集破棄"
+                                Command="{Binding DiscardChangesCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="38" Width="120"
+                                Margin="0,0,8,0"/>
+                        <Button Content="保存"
+                                Command="{Binding SaveSequenceCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="38" Width="120"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 状態メッセージ + 再生中表示 -->
+                <StackPanel Grid.Row="7" Orientation="Vertical" Margin="0,8,0,0">
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="#FFC107"
+                               FontStyle="Italic"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <TextBlock FontSize="11"
+                               Foreground="#7CFF7C"
+                               FontWeight="Bold"
+                               Margin="0,4,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        <Run Text="● 再生中: "/>
+                        <Run Text="{Binding PlayingSequenceName}"/>
+                    </TextBlock>
                 </StackPanel>
 
-                <!-- 状態メッセージ -->
-                <TextBlock Grid.Row="7"
-                           Text="{Binding StatusMessage}"
-                           Foreground="#FFC107"
-                           FontStyle="Italic"
-                           FontSize="12"
-                           TextWrapping="Wrap"
-                           Margin="0,8,0,0"/>
             </Grid>
         </Border>
     </Grid>

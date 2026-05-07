@@ -93,4 +93,42 @@ public interface ILightingFacade
     /// 実行中のエフェクトを停止する（Effect API: POST /api/effect/stop）
     /// </summary>
     Task StopEffectAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// シーケンスを登録または上書き保存する（POST /api/sequence）
+    /// 概要：UI で編集した時間ベースシーケンスを API サーバー側に登録する。
+    ///       同名のシーケンスが既に存在すれば上書きされる。
+    /// </summary>
+    /// <param name="name">シーケンス名（API 側では一意キー）</param>
+    /// <param name="steps">API 形式に変換済みのステップ列</param>
+    Task UpsertSequenceAsync(
+        string name,
+        IReadOnlyList<Lib.Application.Models.SequenceApiStep> steps,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// 登録済みシーケンスの再生を開始する（POST /api/sequence/play）
+    /// </summary>
+    Task PlaySequenceAsync(string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// 再生中シーケンスを停止する（POST /api/sequence/stop）
+    /// </summary>
+    Task StopSequenceAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// 再生状態を取得する（GET /api/sequence/play/status）
+    /// </summary>
+    /// <returns>(isPlaying, currentSequenceName)</returns>
+    Task<(bool IsPlaying, string? Name)> GetSequencePlayStatusAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// API サーバー上のシーケンス名一覧を取得する（GET /api/sequence）
+    /// </summary>
+    Task<IReadOnlyList<string>> ListSequenceNamesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// API サーバー上のシーケンスを削除する（DELETE /api/sequence/{name}）
+    /// </summary>
+    Task DeleteSequenceFromApiAsync(string name, CancellationToken ct = default);
 }

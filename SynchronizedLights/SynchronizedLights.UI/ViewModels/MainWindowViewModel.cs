@@ -144,6 +144,8 @@ namespace SynchronizedLights.UI.ViewModels
                     AppState.SpeedValueMs = clamped;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(CurrentSpeedLabel));
+                    OnPropertyChanged(nameof(ComputedFadeSteps));
+                    OnPropertyChanged(nameof(ComputedFadeStepsLabel));
                     RefreshSpeedSelection();
                     StatusMessage = $"Speed set : {CurrentSpeedLabel}";
 
@@ -190,6 +192,8 @@ namespace SynchronizedLights.UI.ViewModels
                     AppState.SpeedValueMs = n;
                     OnPropertyChanged(nameof(EditableSpeedValueMs));
                     OnPropertyChanged(nameof(CurrentSpeedLabel));
+                    OnPropertyChanged(nameof(ComputedFadeSteps));
+                    OnPropertyChanged(nameof(ComputedFadeStepsLabel));
                     RefreshSpeedSelection();
                     StatusMessage = $"Speed set : {CurrentSpeedLabel}";
                 }
@@ -212,6 +216,8 @@ namespace SynchronizedLights.UI.ViewModels
                 {
                     AppState.InterpolationIntervalMs = clamped;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(ComputedFadeSteps));
+                    OnPropertyChanged(nameof(ComputedFadeStepsLabel));
                     StatusMessage = $"補間間隔 set : {clamped} ms";
                     EditableInterpolationIntervalText = clamped.ToString();
                 }
@@ -251,6 +257,8 @@ namespace SynchronizedLights.UI.ViewModels
                 {
                     AppState.InterpolationIntervalMs = n;
                     OnPropertyChanged(nameof(EditableInterpolationIntervalMs));
+                    OnPropertyChanged(nameof(ComputedFadeSteps));
+                    OnPropertyChanged(nameof(ComputedFadeStepsLabel));
                     StatusMessage = $"補間間隔 set : {n} ms";
                 }
             }
@@ -637,7 +645,7 @@ namespace SynchronizedLights.UI.ViewModels
                 UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
                 UiCategory.Setting => CreateSettingViewModel(),
-                UiCategory.TimeSeq => new TimeSequenceViewModel(),
+                UiCategory.TimeSeq => new TimeSequenceViewModel(_lighting),
                 _ => CreatePresetViewModel()
             };
         }
@@ -1184,6 +1192,30 @@ namespace SynchronizedLights.UI.ViewModels
         }
 
         /// <summary>
+        /// 補間ステップ数（計算値）
+        /// 概要：Fade 総時間 ÷ 補間間隔 の整数値（最低 1）。
+        ///       Effect API（fadeSteps 引数）に渡される。
+        ///       例：1000ms / 50ms = 20 ステップ
+        /// </summary>
+        public int ComputedFadeSteps
+        {
+            get
+            {
+                var interval = AppState.InterpolationIntervalMs;
+                if (interval <= 0) return 1;
+                return Math.Max(1, AppState.SpeedValueMs / interval);
+            }
+        }
+
+        /// <summary>
+        /// Fade 補間表示用ラベル（UI 表示）
+        /// 例："Fade補間: 20 ステップ (1000ms ÷ 50ms)"
+        /// </summary>
+        public string ComputedFadeStepsLabel
+            => $"Fade補間: {ComputedFadeSteps} ステップ "
+             + $"({AppState.SpeedValueMs}ms ÷ {AppState.InterpolationIntervalMs}ms)";
+
+        /// <summary>
         /// 単発/連続モード切替フラグ
         /// 概要：true=連続、false=単発。ContinuousModeButtonText とトグル連動。
         /// </summary>
@@ -1324,7 +1356,7 @@ namespace SynchronizedLights.UI.ViewModels
                     color: AppState.SelectedColor,
                     cycleDurationMs: cycleDurationMs,
                     flashIntervalMs: flashIntervalMs,
-                    fadeSteps: 20,
+                    fadeSteps: ComputedFadeSteps,
                     continuous: IsContinuousMode);
 
                 SetActiveEffect(effectType);

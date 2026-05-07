@@ -396,6 +396,77 @@ namespace Lib.Application.Facades
             RaiseStatusChanged();
             return Task.CompletedTask;
         }
+
+        // Dummy 内で「再生中シーケンス名」を保持して GetSequencePlayStatusAsync で返す
+        private string? _dummyPlayingSequence;
+        // Dummy 上の「サーバー登録済みシーケンス名」を疑似的に保持
+        private readonly System.Collections.Generic.HashSet<string> _dummyRegistered = new();
+
+        /// <summary>
+        /// シーケンスを登録/上書き（Dummy 疑似実装：ログのみ）
+        /// </summary>
+        public Task UpsertSequenceAsync(
+            string name,
+            IReadOnlyList<Lib.Application.Models.SequenceApiStep> steps,
+            CancellationToken ct = default)
+        {
+            Log.Information("[Dummy] UpsertSequence: name={Name}, steps={Count}", name, steps.Count);
+            _dummyRegistered.Add(name);
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// シーケンス再生開始（Dummy 疑似実装：ログのみ）
+        /// </summary>
+        public Task PlaySequenceAsync(string name, CancellationToken ct = default)
+        {
+            Log.Information("[Dummy] PlaySequence: name={Name}", name);
+            _dummyPlayingSequence = name;
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// シーケンス停止（Dummy 疑似実装：ログのみ）
+        /// </summary>
+        public Task StopSequenceAsync(CancellationToken ct = default)
+        {
+            Log.Information("[Dummy] StopSequence");
+            _dummyPlayingSequence = null;
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// 再生状態取得（Dummy 疑似実装）
+        /// </summary>
+        public Task<(bool IsPlaying, string? Name)> GetSequencePlayStatusAsync(
+            CancellationToken ct = default)
+        {
+            return Task.FromResult((_dummyPlayingSequence != null, _dummyPlayingSequence));
+        }
+
+        /// <summary>
+        /// 登録済みシーケンス名一覧（Dummy 疑似実装）
+        /// </summary>
+        public Task<IReadOnlyList<string>> ListSequenceNamesAsync(CancellationToken ct = default)
+        {
+            IReadOnlyList<string> list = new System.Collections.Generic.List<string>(_dummyRegistered);
+            return Task.FromResult(list);
+        }
+
+        /// <summary>
+        /// シーケンス削除（Dummy 疑似実装）
+        /// </summary>
+        public Task DeleteSequenceFromApiAsync(string name, CancellationToken ct = default)
+        {
+            Log.Information("[Dummy] DeleteSequence: name={Name}", name);
+            _dummyRegistered.Remove(name);
+            if (_dummyPlayingSequence == name) _dummyPlayingSequence = null;
+            RaiseStatusChanged();
+            return Task.CompletedTask;
+        }
         #endregion 即時制御
 
         #region 内部処理

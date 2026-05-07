@@ -40,11 +40,21 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>
         /// Transport 接続状態
         /// 概要：ILightingFacade.IsConnected を追跡。
-        /// Disconnect ボタンの有効/無効判定に使用。
+        /// Connect / Disconnect ボタン および COM チェックボックスの
+        /// 有効/無効判定に使用。
         /// </summary>
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
+        [NotifyPropertyChangedFor(nameof(IsNotConnected))]
         private bool isConnected;
+
+        /// <summary>
+        /// 未接続フラグ（IsConnected の反転、XAML IsEnabled バインド用）
+        /// 概要：未接続時 true、接続中 false。
+        ///       Connect ボタン、Refresh ボタン、COM チェックボックスの
+        ///       IsEnabled に使用する。
+        /// </summary>
+        public bool IsNotConnected => !IsConnected;
 
         /// <summary>
         /// ポート状態表示文字列

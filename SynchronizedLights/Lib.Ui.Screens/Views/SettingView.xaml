@@ -36,6 +36,8 @@
                                 <CheckBox Grid.Column="0"
                                           Content="{Binding PortName}"
                                           IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          IsEnabled="{Binding DataContext.IsNotConnected,
+                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                           Style="{StaticResource GrandMaCheckBoxStyle}"
                                           VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1"
@@ -53,6 +55,7 @@
                 <Button x:Name="BtnRefreshPorts"
                         Content="更新 / Refresh"
                         Command="{Binding RefreshPortsCommand}"
+                        IsEnabled="{Binding IsNotConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="160"
                         MinHeight="44"
@@ -60,6 +63,7 @@
                 <Button x:Name="BtnOpenPorts"
                         Content="接続 / Connect"
                         Command="{Binding ConnectCommand}"
+                        IsEnabled="{Binding IsNotConnected}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinWidth="160"
                         MinHeight="44"
@@ -212,7 +216,7 @@
                             Opacity="0.75"
                             TextWrapping="Wrap"
                             Margin="0,0,0,8"/>
-        
+
                     <!-- ヘッダー行 -->
                     <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
@@ -230,7 +234,7 @@
                         <TextBlock Grid.Column="4" Text="" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
                         <TextBlock Grid.Column="5" Text="状態" FontWeight="SemiBold" Opacity="0.8" Margin="10,0,0,0"/>
                     </Grid>
-        
+
                     <!-- Zones データバインド（MainWindowViewModel.Zones へ） -->
                     <ItemsControl ItemsSource="{Binding DataContext.Zones,
                                         RelativeSource={RelativeSource AncestorType=Window}}">
@@ -245,13 +249,13 @@
                                         <ColumnDefinition Width="100"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-        
+
                                     <!-- ゾーン名 -->
                                     <TextBlock Grid.Column="0"
                                             Text="{Binding ZoneName}"
                                             VerticalAlignment="Center"
                                             FontWeight="SemiBold"/>
-        
+
                                     <!-- ポート選択 ComboBox -->
                                     <ComboBox Grid.Column="1"
                                             x:Name="CmbZonePort"
@@ -260,7 +264,7 @@
                                             Style="{StaticResource GrandMaComboBoxStyle}"
                                             MinHeight="30"
                                             Margin="10,0,0,0"/>
-        
+
                                     <!-- CH TextBox -->
                                     <TextBox Grid.Column="2"
                                             x:Name="TxtZoneCh"
@@ -284,7 +288,7 @@
                                             </Style>
                                         </TextBox.Style>
                                     </TextBox>
-        
+
                                     <!-- Pwr TextBox -->
                                     <TextBox Grid.Column="3"
                                             x:Name="TxtZonePwr"
@@ -308,7 +312,7 @@
                                             </Style>
                                         </TextBox.Style>
                                     </TextBox>
-        
+
                                     <!-- 適用ボタン -->
                                     <Button Grid.Column="4"
                                             x:Name="BtnZoneInit"
@@ -318,7 +322,7 @@
                                             MinWidth="80"
                                             MinHeight="30"
                                             Margin="10,0,0,0"/>
-        
+
                                     <!-- 状態表示 -->
                                     <TextBlock Grid.Column="5"
                                             Text="{Binding ZoneStatusMessage}"

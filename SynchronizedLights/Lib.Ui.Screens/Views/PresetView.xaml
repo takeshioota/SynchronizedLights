@@ -84,61 +84,6 @@
                        FontWeight="Bold"
                        Foreground="{StaticResource TextBrushMain}" />
 
-            <!-- 速度スライダー + 数値入力 -->
-            <StackPanel Grid.Row="6" Orientation="Vertical">
-                <TextBlock Text="Speed (ms)  範囲: 0 – 10000"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Foreground="{StaticResource TextBrushMain}"
-                           Margin="0,0,0,6"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="110"/>
-                    </Grid.ColumnDefinitions>
-                    <Slider x:Name="SldSpeed"
-                            Grid.Column="0"
-                            Minimum="0"
-                            Maximum="10000"
-                            SmallChange="50"
-                            LargeChange="500"
-                            TickFrequency="1000"
-                            TickPlacement="BottomRight"
-                            IsSnapToTickEnabled="False"
-                            VerticalAlignment="Center"
-                            MinHeight="36"
-                            Value="{Binding DataContext.EditableSpeedValueMs,
-                                    RelativeSource={RelativeSource AncestorType=Window},
-                                    Mode=TwoWay,
-                                    UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBox x:Name="NumSpeed"
-                             Grid.Column="1"
-                             Margin="10,0,0,0"
-                             HorizontalContentAlignment="Right"
-                             Text="{Binding DataContext.EditableSpeedText,
-                                    RelativeSource={RelativeSource AncestorType=Window},
-                                    Mode=TwoWay,
-                                    UpdateSourceTrigger=PropertyChanged}">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox"
-                                   BasedOn="{StaticResource GrandMaTextBoxStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding DataContext.IsSpeedValid,
-                                                           RelativeSource={RelativeSource AncestorType=Window}}"
-                                                 Value="False">
-                                        <Setter Property="BorderBrush" Value="#DC3545"/>
-                                        <Setter Property="BorderThickness" Value="2"/>
-                                        <Setter Property="ToolTip"
-                                                Value="Speed は 0〜10000 の整数で入力してください。"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBox.Style>
-                    </TextBox>
-
-                </Grid>
-            </StackPanel>
-
             <!-- 命令名 + ポート選択 -->
             <Grid Grid.Row="8">
                 <Grid.ColumnDefinitions>

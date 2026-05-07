@@ -2,9 +2,13 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Lib.Application.Interfaces;
 using Lib.Application.Models;
 using Lib.Application.Services;
 using Serilog;
@@ -24,15 +28,36 @@ namespace Lib.Ui.Screens.ViewModels
         #region フィールド
         private readonly TimeBasedSequenceStore _store;
         private TimeBasedSequence? _editingSequence;  // 編集中シーケンスの実体
+        private readonly ILightingFacade? _lighting;       // 再生エンジン（null 許容：旧コンストラクタ互換）
+        private readonly DispatcherTimer? _statusTimer;    // 再生状態ポーリング Timer
         #endregion
 
         #region コンストラクタ
-        public TimeSequenceViewModel()
+        /// <summary>旧コンストラクタ（API 連携なし、Lighting=null）</summary>
+        public TimeSequenceViewModel() : this(null)
+        {
+        }
+
+        /// <summary>新コンストラクタ：ILightingFacade を受け取って API 再生エンジンと連携</summary>
+        public TimeSequenceViewModel(ILightingFacade? lighting)
         {
             _store = new TimeBasedSequenceStore();
+            _lighting = lighting;
+
             Sequences = new ObservableCollection<TimeBasedSequence>();
             EditingSteps = new ObservableCollection<SequenceStepWrapper>();
             ReloadSequences();
+
+            if (_lighting != null)
+            {
+                // 1.5 秒ごとに再生状態をポーリング（軽量）
+                _statusTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1.5),
+                };
+                _statusTimer.Tick += async (_, _) => await PollStatusAsync();
+                _statusTimer.Start();
+            }
         }
         #endregion
 
@@ -71,6 +96,20 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>保存先ディレクトリのパス（情報表示用）</summary>
         public string StoreDirectoryPath => _store.GetStoreDirectoryPath();
 
+        /// <summary>API 連携が有効か（ILightingFacade 注入有無）</summary>
+        public bool IsApiEnabled => _lighting != null;
+
+        /// <summary>シーケンス再生中かどうか（API 状態ポーリング由来）</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(PlayButtonText))]
+        private bool isPlaying;
+
+        /// <summary>再生中シーケンス名（API 状態ポーリング由来）</summary>
+        [ObservableProperty]
+        private string? playingSequenceName;
+
+        /// <summary>再生ボタン表示テキスト（実行中は "■ 停止"）</summary>
+        public string PlayButtonText => IsPlaying ? "■ 停止" : "▶ 再生";
         #endregion
 
         #region SelectedSequence 変更時：編集ペインに反映
@@ -207,6 +246,132 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = "編集を破棄して最後の保存状態に戻しました。";
         }
 
+        /// <summary>
+        /// 再生/停止トグル（API 経由）
+        /// 概要：未再生時 → API に Upsert + Play 指示
+        ///       再生中    → Stop 指示
+        /// </summary>
+        [RelayCommand]
+        private async Task PlayOrStopAsync()
+        {
+            if (_lighting == null)
+            {
+                StatusMessage = "API 連携が無効のため再生できません。";
+                return;
+            }
+
+            // 既に再生中なら停止
+            if (IsPlaying)
+            {
+                try
+                {
+                    await _lighting.StopSequenceAsync();
+                    StatusMessage = "シーケンスを停止しました。";
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"停止失敗: {ex.Message}";
+                    Log.Warning(ex, "TimeSequence Stop failed");
+                }
+                finally
+                {
+                    await PollStatusAsync();
+                }
+                return;
+            }
+
+            // 未再生 → 現在のシーケンスを再生
+            if (SelectedSequence == null || _editingSequence == null)
+            {
+                StatusMessage = "再生対象のシーケンスを選択してください。";
+                return;
+            }
+
+            // 未保存編集があれば確認
+            if (HasUnsavedEdits())
+            {
+                var ans = MessageBox.Show(
+                    "編集内容が未保存です。保存してから再生しますか？",
+                    "未保存の編集",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+                if (ans == MessageBoxResult.Cancel) return;
+                if (ans == MessageBoxResult.Yes) SaveSequence();
+            }
+
+            try
+            {
+                // 1) UI モデル → API 形式 に変換
+                var apiSteps = SequenceApiMapper.ToApiSteps(_editingSequence);
+
+                // 2) API へ Upsert（同名上書き）
+                await _lighting.UpsertSequenceAsync(_editingSequence.Name, apiSteps);
+
+                // 3) 再生開始
+                await _lighting.PlaySequenceAsync(_editingSequence.Name);
+
+                StatusMessage = $"再生開始: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"再生失敗: {ex.Message}";
+                Log.Warning(ex, "TimeSequence Play failed");
+            }
+            finally
+            {
+                await PollStatusAsync();
+            }
+        }
+
+        /// <summary>
+        /// 編集中シーケンスを API へ同期（Upsert のみ・再生しない）
+        /// </summary>
+        [RelayCommand]
+        private async Task SyncToApiAsync()
+        {
+            if (_lighting == null || _editingSequence == null)
+            {
+                StatusMessage = "同期対象がありません。";
+                return;
+            }
+
+            try
+            {
+                // 編集中の値を Steps に書き戻し
+                _editingSequence.Steps = EditingSteps.Select(w => w.ToModel()).ToList();
+                var apiSteps = SequenceApiMapper.ToApiSteps(_editingSequence);
+                await _lighting.UpsertSequenceAsync(_editingSequence.Name, apiSteps);
+                StatusMessage = $"API へ同期完了: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"同期失敗: {ex.Message}";
+                Log.Warning(ex, "TimeSequence SyncToApi failed");
+            }
+        }
+
+        /// <summary>未保存編集の有無を判定</summary>
+        private bool HasUnsavedEdits()
+        {
+            if (_editingSequence == null) return false;
+            // 名前 / 説明 / ステップ数 / ステップ内容のいずれかが異なれば未保存
+            if (_editingSequence.Name != EditingName.Trim()) return true;
+            if ((_editingSequence.Description ?? "") != (EditingDescription ?? "")) return true;
+            if (_editingSequence.Steps.Count != EditingSteps.Count) return true;
+            // ステップごとの簡易ハッシュ比較
+            for (int i = 0; i < EditingSteps.Count; i++)
+            {
+                var a = _editingSequence.Steps[i];
+                var b = EditingSteps[i];
+                if (a.TimeMs != b.TimeMs) return true;
+                if (a.Command != b.Command) return true;
+                if (a.ColorR != b.ColorR || a.ColorG != b.ColorG || a.ColorB != b.ColorB) return true;
+                if (a.DurationMs != b.DurationMs) return true;
+                if (a.RetransmitCount != b.RetransmitCount) return true;
+                if (a.InterpolationIntervalMs != b.InterpolationIntervalMs) return true;
+            }
+            return false;
+        }
         #endregion
 
         #region コマンド：ステップ編集
@@ -280,6 +445,23 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>API 再生状態をポーリング更新</summary>
+        private async Task PollStatusAsync()
+        {
+            if (_lighting == null) return;
+            try
+            {
+                var (playing, name) = await _lighting.GetSequencePlayStatusAsync();
+                IsPlaying = playing;
+                PlayingSequenceName = name;
+            }
+            catch
+            {
+                // ポーリングは失敗しても黙殺（接続切れ等）
+                IsPlaying = false;
+                PlayingSequenceName = null;
+            }
+        }
         #endregion
     }
 
