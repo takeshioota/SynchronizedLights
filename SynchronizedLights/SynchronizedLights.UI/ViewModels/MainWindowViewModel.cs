@@ -8,9 +8,7 @@ using Lib.Domain.States;
 using Lib.Domain.ValueObjects;
 using Lib.Ui.Screens.ViewModels;
 using Lib.Ui.Screens.Views;
-using System.Windows;
 using Lib.Application.Models;
-using Lib.Application.Services;
 using System.Collections.ObjectModel;
 namespace SynchronizedLights.UI.ViewModels
 {
@@ -39,6 +37,9 @@ namespace SynchronizedLights.UI.ViewModels
         /// エラートースト表示時間（秒）
         /// </summary>
         private const int ErrorToastDurationSeconds = 5;
+
+        /// <summary>シーケンス編集ウィンドウのインスタンス（多重起動防止）</summary>
+        private SequenceEditorWindow? _sequenceEditorWindow;
 
         /// <summary>
         /// カラーピッカー表示コマンド
@@ -297,7 +298,7 @@ namespace SynchronizedLights.UI.ViewModels
         /// <summary>
         /// TimeSeqカテゴリが選択中かどうか
         /// </summary>
-        public bool IsTimeSeqSelected => CurrentCategory == UiCategory.TimeSeq;
+        public bool IsTimeSeqSelected => false;
         #endregion カテゴリ
 
         #region ターゲット
@@ -639,7 +640,6 @@ namespace SynchronizedLights.UI.ViewModels
                 UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
                 UiCategory.Setting => CreateSettingViewModel(),
-                UiCategory.TimeSeq => new TimeSequenceViewModel(_lighting),
                 _ => CreatePresetViewModel()
             };
         }
@@ -1057,11 +1057,56 @@ namespace SynchronizedLights.UI.ViewModels
         private void ShowSetting() => CurrentCategory = UiCategory.Setting;
 
         /// <summary>
-        /// TimeSeq画面表示コマンド
-        /// 概要：現在の画面カテゴリを TimeSeq（時間ベースシーケンス編集）に切り替える。
+        /// シーケンス編集ウィンドウを開く
+        /// 概要：TimeSeq カテゴリボタンは押すとシーケンス編集ウィンドウを起動。
+        ///       メイン画面のカテゴリは変更しない。多重起動は防止する。
         /// </summary>
         [RelayCommand]
-        private void ShowTimeSeq() => CurrentCategory = UiCategory.TimeSeq;
+        private void ShowTimeSeq()
+        {
+            try
+            {
+                Serilog.Log.Information("ShowTimeSeq: コマンド開始");
+
+                if (_sequenceEditorWindow != null && _sequenceEditorWindow.IsLoaded)
+                {
+                    Serilog.Log.Information("ShowTimeSeq: 既存ウィンドウを前面化");
+                    if (_sequenceEditorWindow.WindowState == System.Windows.WindowState.Minimized)
+                        _sequenceEditorWindow.WindowState = System.Windows.WindowState.Normal;
+                    _sequenceEditorWindow.Activate();
+                    return;
+                }
+
+                Serilog.Log.Information("ShowTimeSeq: ViewModel 生成");
+                var vm = new SequenceEditorViewModel(_lighting);
+
+                Serilog.Log.Information("ShowTimeSeq: Window 生成");
+                _sequenceEditorWindow = new SequenceEditorWindow
+                {
+                    DataContext = vm,
+                    Owner = System.Windows.Application.Current.MainWindow
+                };
+
+                _sequenceEditorWindow.Closed += (_, _) => _sequenceEditorWindow = null;
+
+                Serilog.Log.Information("ShowTimeSeq: Window.Show()");
+                _sequenceEditorWindow.Show();
+
+                Serilog.Log.Information("ShowTimeSeq: 完了 (Visible={V}, Left={L}, Top={T})",
+                    _sequenceEditorWindow.IsVisible,
+                    _sequenceEditorWindow.Left,
+                    _sequenceEditorWindow.Top);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error(ex, "ShowTimeSeq failed");
+                System.Windows.MessageBox.Show(
+                    $"シーケンス編集ウィンドウの起動に失敗しました：\n\n{ex.GetType().Name}\n{ex.Message}\n\nスタックトレース：\n{ex.StackTrace}",
+                    "エラー",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+        }
 
         /// <summary>
         /// ALL選択コマンド

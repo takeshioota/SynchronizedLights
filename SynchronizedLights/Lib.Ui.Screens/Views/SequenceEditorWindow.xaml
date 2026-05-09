@@ -1,0 +1,516 @@
+﻿<Window x:Class="Lib.Ui.Screens.Views.SequenceEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        mc:Ignorable="d"
+        Title="シーケンス編集"
+        Width="1280"
+        Height="800"
+        MinWidth="1024"
+        MinHeight="600"
+        ResizeMode="CanResize"
+        WindowStartupLocation="Manual"
+        Background="{StaticResource AppBgBrush}"
+        Foreground="{StaticResource TextBrushMain}"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <!-- コマンド種別ドロップダウン用 -->
+        <x:Array x:Key="CommandOptions" Type="sys:String">
+            <sys:String>SetColor</sys:String>
+            <sys:String>FadeIn</sys:String>
+            <sys:String>FadeOut</sys:String>
+            <sys:String>Flash</sys:String>
+            <sys:String>Breath</sys:String>
+            <sys:String>Off</sys:String>
+            <sys:String>SevenColor</sys:String>
+        </x:Array>
+
+        <!-- DataGrid GrandMA2 風スタイル -->
+        <Style x:Key="GrandMaDataGridColumnHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource BorderBrushAmber}"/>
+            <Setter Property="Foreground" Value="#111111"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="BorderBrush" Value="#111111"/>
+            <Setter Property="BorderThickness" Value="0,0,1,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="GrandMaDataGridCellStyle" TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#F2F2F2"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="BorderBrush" Value="#3A3A3A"/>
+            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ButtonSelectedBorderBrush}"/>
+                    <Setter Property="Foreground" Value="#111111"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="GrandMaDataGridRowStyle" TargetType="DataGridRow">
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="Background" Value="#1A1A1A"/>
+            <Setter Property="BorderBrush" Value="#2A2A2A"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Style.Triggers>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#1F1F1F"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#3A2E00"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource ButtonSelectedBorderBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="GrandMaDataGridStyle" TargetType="DataGrid">
+            <Setter Property="Background" Value="#0F0F0F"/>
+            <Setter Property="Foreground" Value="#F2F2F2"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrushAmber}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="GridLinesVisibility" Value="None"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="RowHeaderWidth" Value="0"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserDeleteRows" Value="False"/>
+            <Setter Property="CanUserResizeColumns" Value="True"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="CanUserSortColumns" Value="False"/>
+            <Setter Property="AlternationCount" Value="2"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ColumnHeaderStyle" Value="{StaticResource GrandMaDataGridColumnHeaderStyle}"/>
+            <Setter Property="CellStyle" Value="{StaticResource GrandMaDataGridCellStyle}"/>
+            <Setter Property="RowStyle" Value="{StaticResource GrandMaDataGridRowStyle}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <!-- 0: ヘッダ（シーケンス選択 + 名前 + 説明）-->
+            <RowDefinition Height="Auto"/>
+            <!-- 1: 上半分（DataGrid + ステップ実行）-->
+            <RowDefinition Height="*"/>
+            <!-- 2: 区切り -->
+            <RowDefinition Height="8"/>
+            <!-- 3: 下半分（プリセット選択）-->
+            <RowDefinition Height="Auto"/>
+            <!-- 4: ステータスバー -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============ ヘッダ：シーケンス選択 + 名前・説明 ============ -->
+        <Border Grid.Row="0"
+                Style="{StaticResource GrandMaPanelBorderStyle}"
+                Padding="8"
+                Margin="0,0,0,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- シーケンス選択 + 操作ボタン -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock Text="シーケンス："
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <ComboBox Width="280"
+                              ItemsSource="{Binding Sequences}"
+                              SelectedItem="{Binding SelectedSequence, Mode=TwoWay}"
+                              DisplayMemberPath="Name"
+                              VerticalAlignment="Center"
+                              Margin="0,0,8,0"/>
+                    <Button Content="新規"
+                            Command="{Binding NewSequenceCommand}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="80"
+                            Margin="0,0,4,0"/>
+                    <Button Content="削除"
+                            Command="{Binding DeleteSequenceCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="80"
+                            Margin="0,0,16,0"/>
+                    <Button Content="編集破棄"
+                            Command="{Binding DiscardChangesCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="100"
+                            Margin="0,0,4,0"/>
+                    <Button Content="保存"
+                            Command="{Binding SaveSequenceCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="80"
+                            Margin="0,0,16,0"/>
+                    <Button Content="API 同期"
+                            Command="{Binding SyncToApiCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="100"
+                            Margin="0,0,4,0"/>
+                    <Button Content="{Binding PlayButtonText}"
+                            Command="{Binding PlayOrStopCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsPlaying}"
+                            MinHeight="32" Width="120"
+                            ToolTip="シーケンス全体を API 経由で一括自動再生"/>
+                </StackPanel>
+
+                <!-- 名前 -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="名前 :"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding EditingName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding HasSelectedSequence}"
+                             Style="{StaticResource GrandMaTextBoxStyle}"
+                             MinHeight="26"/>
+                </Grid>
+
+                <!-- 説明 -->
+                <Grid Grid.Row="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="説明 :"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding EditingDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding HasSelectedSequence}"
+                             Style="{StaticResource GrandMaTextBoxStyle}"
+                             MinHeight="26"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ============ 上半分：シーケンスステップ DataGrid + ステップ実行 ============ -->
+        <Border Grid.Row="1"
+                Style="{StaticResource GrandMaPanelBorderStyle}"
+                Padding="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ステップ実行コントロール -->
+                <Grid Grid.Row="0" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="ステップ一覧"
+                               FontWeight="Bold" FontSize="14"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding CurrentStepLabel}"
+                               Foreground="#FFC107"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Content="⬆ 前 (←)"
+                                Command="{Binding PreviousStepCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="100"
+                                Margin="0,0,4,0"
+                                ToolTip="←/↑ キーでも操作可"/>
+                        <Button Content="▶ 実行 (Space)"
+                                Command="{Binding ExecuteCurrentStepCommand}"
+                                Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                Tag="True"
+                                MinHeight="32" Width="120"
+                                Margin="0,0,4,0"
+                                ToolTip="Space/Enter キーでも実行可"/>
+                        <Button Content="次 ⬇ (→)"
+                                Command="{Binding NextStepCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="100"
+                                Margin="0,0,4,0"
+                                ToolTip="→/↓ キーでも操作可"/>
+                        <Button Content="⏹ 停止 (Esc)"
+                                Command="{Binding StopExecutionCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="100"
+                                ToolTip="Esc キーでも停止可"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- DataGrid -->
+                <DataGrid x:Name="StepDataGrid"
+                          Grid.Row="1"
+                          Style="{StaticResource GrandMaDataGridStyle}"
+                          ItemsSource="{Binding EditingSteps}"
+                          SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
+                          SelectedIndex="{Binding CurrentStepIndex, Mode=TwoWay}"
+                          IsEnabled="{Binding HasSelectedSequence}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="#"
+                                            Binding="{Binding StepNumber, Mode=OneWay}"
+                                            Width="40" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="時刻(秒)"
+                                            Binding="{Binding TimeSec, StringFormat={}{0:F2}}"
+                                            Width="80"/>
+                        <DataGridComboBoxColumn Header="コマンド"
+                                                ItemsSource="{StaticResource CommandOptions}"
+                                                SelectedValueBinding="{Binding Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Width="110"/>
+                        <DataGridTextColumn Header="R" Binding="{Binding ColorR}" Width="50"/>
+                        <DataGridTextColumn Header="G" Binding="{Binding ColorG}" Width="50"/>
+                        <DataGridTextColumn Header="B" Binding="{Binding ColorB}" Width="50"/>
+                        <DataGridTextColumn Header="所要(秒)"
+                                            Binding="{Binding DurationSec, StringFormat={}{0:F2}}"
+                                            Width="80"/>
+                        <DataGridTextColumn Header="再送" Binding="{Binding RetransmitCount}" Width="50"/>
+                        <DataGridTextColumn Header="補間(ms)" Binding="{Binding InterpolationIntervalMs}" Width="80"/>
+                        <DataGridTextColumn Header="メモ" Binding="{Binding Note}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- 行操作 -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="行追加"
+                            Command="{Binding AddStepCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="100"
+                            Margin="0,0,4,0"/>
+                    <Button Content="行削除"
+                            Command="{Binding RemoveStepCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="100"
+                            Margin="0,0,4,0"/>
+                    <Button Content="時刻順ソート"
+                            Command="{Binding SortStepsCommand}"
+                            IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="32" Width="120"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============ 下半分：プリセット選択（色 + 動作）+ 行追加 ============ -->
+        <Border Grid.Row="3"
+                Style="{StaticResource GrandMaPanelBorderStyle}"
+                Padding="8"
+                Margin="0,0,0,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Text="プリセット選択（色＋動作を選んで「行追加」）"
+                           FontWeight="Bold" FontSize="14"/>
+
+                <!-- 色プリセット -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="色:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <ItemsControl Grid.Column="1" ItemsSource="{Binding ColorPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.SelectColorPresetCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                        Tag="{Binding IsSelected}"
+                                        MinWidth="90" MinHeight="36"
+                                        Margin="0,0,4,4"
+                                        Padding="0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Fill="{Binding Hex}"
+                                                 Width="12" Height="12"
+                                                 Stroke="#FFFFFF" StrokeThickness="1"
+                                                 Margin="6,0,4,0"
+                                                 VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,6,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- 動作プリセット -->
+                <Grid Grid.Row="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="動作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+
+                    <ItemsControl Grid.Column="1" ItemsSource="{Binding ActionPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.SelectActionPresetCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                        Tag="{Binding IsSelected}"
+                                        MinWidth="100" MinHeight="36"
+                                        Margin="0,0,4,4"
+                                        Padding="0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Rectangle Fill="{Binding AccentHex}"
+                                                   Width="4"
+                                                   Margin="6,4,4,4"
+                                                   RadiusX="2" RadiusY="2"
+                                                   VerticalAlignment="Stretch"/>
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,6,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 行追加コントロール -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="時刻(秒):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60"
+                                 Text="{Binding NewStepTimeSec, StringFormat={}{0:F2}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}"
+                                 HorizontalContentAlignment="Right"
+                                 MinHeight="30"/>
+                        <TextBlock Text="所要(秒):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60"
+                                 Text="{Binding NewStepDurationSec, StringFormat={}{0:F2}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}"
+                                 HorizontalContentAlignment="Right"
+                                 MinHeight="30"/>
+                        <TextBlock Text="メモ:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="120"
+                                 Text="{Binding NewStepNote, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}"
+                                 MinHeight="30"/>
+                        <Button Content="➕ 行追加"
+                                Command="{Binding AddStepFromPresetCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                Tag="True"
+                                MinHeight="32" Width="120"
+                                Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ============ ステータスバー ============ -->
+        <Border Grid.Row="4"
+                Background="#0F0F0F"
+                BorderBrush="{StaticResource AccentAmberBrush}"
+                BorderThickness="0,1,0,0"
+                Padding="8,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusMessage}"
+                           Foreground="#FFC107"
+                           FontStyle="Italic"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" FontSize="11"
+                           Foreground="#7CFF7C"
+                           FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                    <Run Text="● 一括再生中: "/>
+                    <Run Text="{Binding PlayingSequenceName}"/>
+                </TextBlock>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
