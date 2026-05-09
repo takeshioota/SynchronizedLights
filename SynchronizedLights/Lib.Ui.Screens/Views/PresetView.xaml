@@ -32,49 +32,194 @@
                        FontWeight="Bold"
                        Foreground="{StaticResource TextBrushMain}" />
 
-            <!-- 色選択（4色固定パレット + カスタムピッカー起動） -->
-            <StackPanel Grid.Row="2"
-                        Orientation="Horizontal">
-                <Button x:Name="BtnColorRed"
-                        Content="Red"
-                        Command="{Binding SelectRedCommand}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsColorRedSelected}"
-                        MinWidth="110"
-                        MinHeight="56"
-                        Margin="0,0,10,0" />
-                <Button x:Name="BtnColorGreen"
-                        Content="Green"
-                        Command="{Binding SelectGreenCommand}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsColorGreenSelected}"
-                        MinWidth="110"
-                        MinHeight="56"
-                        Margin="0,0,10,0" />
-                <Button x:Name="BtnColorBlue"
-                        Content="Blue"
-                        Command="{Binding SelectBlueCommand}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsColorBlueSelected}"
-                        MinWidth="110"
-                        MinHeight="56"
-                        Margin="0,0,10,0" />
-                <Button x:Name="BtnColorWhite"
-                        Content="White"
-                        Command="{Binding SelectWhiteCommand}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsColorWhiteSelected}"
-                        MinWidth="110"
-                        MinHeight="56"
-                        Margin="0,0,20,0" />
-                <Button x:Name="BtnColorSwatch"
-                        Content="Custom..."
-                        Command="{Binding DataContext.OpenColorPickerCommand,
-                                 RelativeSource={RelativeSource AncestorType=Window}}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsColorCustomSelected}"
-                        MinWidth="130"
-                        MinHeight="56" />
+            <!-- 色選択（12 色固定パレット + カスタムピッカー起動）-->
+            <StackPanel Grid.Row="2" Orientation="Vertical">
+                <!-- 上段：Red / Orange / Yellow / Lime / Green / Cyan -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button x:Name="BtnColorRed"
+                            Command="{Binding SelectRedCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorRedSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FF0000" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Red" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorOrange"
+                            Command="{Binding SelectOrangeCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorOrangeSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FF8000" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Orange" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorYellow"
+                            Command="{Binding SelectYellowCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorYellowSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FFFF00" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Yellow" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorLime"
+                            Command="{Binding SelectLimeCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorLimeSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#80FF00" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Lime" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorGreen"
+                            Command="{Binding SelectGreenCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorGreenSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#00FF00" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Green" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorCyan"
+                            Command="{Binding SelectCyanCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorCyanSelected}"
+                            MinWidth="100" MinHeight="48">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#00FFFF" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Cyan" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- 下段：Sky / Blue / Purple / Magenta / Pink / White -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button x:Name="BtnColorSky"
+                            Command="{Binding SelectSkyCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorSkySelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#0080FF" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Sky" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorBlue"
+                            Command="{Binding SelectBlueCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorBlueSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#0000FF" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Blue" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorPurple"
+                            Command="{Binding SelectPurpleCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorPurpleSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#8000FF" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Purple" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorMagenta"
+                            Command="{Binding SelectMagentaCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorMagentaSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FF00FF" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Magenta" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorPink"
+                            Command="{Binding SelectPinkCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorPinkSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FF80C0" Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="Pink" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnColorWhite"
+                            Command="{Binding SelectWhiteCommand}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorWhiteSelected}"
+                            MinWidth="100" MinHeight="48"
+                            Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Fill="#FFFFFF" Width="14" Height="14"
+                                     Stroke="#888888" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="White" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <!-- Custom ボタン（虹色グラデーションで「任意色」を表現）-->
+                    <Button x:Name="BtnColorSwatch"
+                            Command="{Binding DataContext.OpenColorPickerCommand,
+                                     RelativeSource={RelativeSource AncestorType=Window}}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}"
+                            Tag="{Binding IsColorCustomSelected}"
+                            MinWidth="130" MinHeight="48">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="14" Height="14"
+                                     Stroke="#FFFFFF" StrokeThickness="1"
+                                     Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Ellipse.Fill>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF0000" Offset="0.00"/>
+                                        <GradientStop Color="#FFFF00" Offset="0.25"/>
+                                        <GradientStop Color="#00FF00" Offset="0.50"/>
+                                        <GradientStop Color="#00FFFF" Offset="0.75"/>
+                                        <GradientStop Color="#FF00FF" Offset="1.00"/>
+                                    </LinearGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <TextBlock Text="Custom..." VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
             </StackPanel>
 
             <!-- 現在色表示 -->
@@ -85,7 +230,7 @@
                        Foreground="{StaticResource TextBrushMain}" />
 
             <!-- 命令名 + ポート選択 -->
-            <Grid Grid.Row="8">
+            <Grid Grid.Row="6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="20"/>
@@ -163,7 +308,7 @@
             </Grid>
 
             <!-- アクション：点灯/消灯/実行/終了 -->
-            <StackPanel Grid.Row="10"
+            <StackPanel Grid.Row="8"
                         Orientation="Horizontal">
                 <Button x:Name="BtnTurnOn"
                         Content="Turn On"
@@ -197,14 +342,14 @@
             </StackPanel>
 
             <!-- 状態表示 -->
-            <TextBlock Grid.Row="12"
+            <TextBlock Grid.Row="10"
                        Text="{Binding StatusText}"
                        FontSize="18"
                        FontWeight="Bold"
                        Foreground="{StaticResource TextBrushMain}" />
 
             <!-- キュー表示 -->
-            <TextBlock Grid.Row="14"
+            <TextBlock Grid.Row="12"
                        Text="{Binding QueueText}"
                        FontSize="16"
                        Foreground="{StaticResource TextBrushMain}" />

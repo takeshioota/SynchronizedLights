@@ -105,15 +105,55 @@ namespace Lib.Ui.Screens.ViewModels
         public bool IsColorWhiteSelected
             => CurrentColor.R == 255 && CurrentColor.G == 255 && CurrentColor.B == 255;
 
+        /// <summary>橙選択中</summary>
+        public bool IsColorOrangeSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 128 && CurrentColor.B == 0;
+
+        /// <summary>黄選択中</summary>
+        public bool IsColorYellowSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 255 && CurrentColor.B == 0;
+
+        /// <summary>ライム（黄緑）選択中</summary>
+        public bool IsColorLimeSelected
+            => CurrentColor.R == 128 && CurrentColor.G == 255 && CurrentColor.B == 0;
+
+        /// <summary>シアン（水色）選択中</summary>
+        public bool IsColorCyanSelected
+            => CurrentColor.R == 0 && CurrentColor.G == 255 && CurrentColor.B == 255;
+
+        /// <summary>スカイブルー選択中</summary>
+        public bool IsColorSkySelected
+            => CurrentColor.R == 0 && CurrentColor.G == 128 && CurrentColor.B == 255;
+
+        /// <summary>紫選択中</summary>
+        public bool IsColorPurpleSelected
+            => CurrentColor.R == 128 && CurrentColor.G == 0 && CurrentColor.B == 255;
+
+        /// <summary>マゼンタ選択中</summary>
+        public bool IsColorMagentaSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 0 && CurrentColor.B == 255;
+
+        /// <summary>ピンク選択中</summary>
+        public bool IsColorPinkSelected
+            => CurrentColor.R == 255 && CurrentColor.G == 128 && CurrentColor.B == 192;
+
         /// <summary>
-        /// カスタム色選択中かどうか（固定 5 色以外）
-        /// 概要：Red/Green/Blue/White のいずれでもない色が選択されているとき true。
+        /// カスタム色選択中かどうか（固定 12 色以外）
+        /// 概要：12 色プリセットのいずれでもない色が選択されているとき true。
         /// ユーザーが DlgColorPicker で選んだ任意色のとき Custom ボタンが光る。
         /// </summary>
         public bool IsColorCustomSelected
             => !IsColorRedSelected
+            && !IsColorOrangeSelected
+            && !IsColorYellowSelected
+            && !IsColorLimeSelected
             && !IsColorGreenSelected
+            && !IsColorCyanSelected
+            && !IsColorSkySelected
             && !IsColorBlueSelected
+            && !IsColorPurpleSelected
+            && !IsColorMagentaSelected
+            && !IsColorPinkSelected
             && !IsColorWhiteSelected;
 
         /// <summary>
@@ -160,8 +200,16 @@ namespace Lib.Ui.Screens.ViewModels
         {
             OnPropertyChanged(nameof(CurrentColorLabel));
             OnPropertyChanged(nameof(IsColorRedSelected));
+            OnPropertyChanged(nameof(IsColorOrangeSelected));
+            OnPropertyChanged(nameof(IsColorYellowSelected));
+            OnPropertyChanged(nameof(IsColorLimeSelected));
             OnPropertyChanged(nameof(IsColorGreenSelected));
+            OnPropertyChanged(nameof(IsColorCyanSelected));
+            OnPropertyChanged(nameof(IsColorSkySelected));
             OnPropertyChanged(nameof(IsColorBlueSelected));
+            OnPropertyChanged(nameof(IsColorPurpleSelected));
+            OnPropertyChanged(nameof(IsColorMagentaSelected));
+            OnPropertyChanged(nameof(IsColorPinkSelected));
             OnPropertyChanged(nameof(IsColorWhiteSelected));
             OnPropertyChanged(nameof(IsColorCustomSelected));
             ColorChanged?.Invoke(value);
@@ -209,6 +257,38 @@ namespace Lib.Ui.Screens.ViewModels
         {
             CurrentColor = new Rgb(255, 255, 255);
         }
+
+        /// <summary>橙色選択コマンド</summary>
+        [RelayCommand]
+        private void SelectOrange() => CurrentColor = new Rgb(255, 128, 0);
+
+        /// <summary>黄色選択コマンド</summary>
+        [RelayCommand]
+        private void SelectYellow() => CurrentColor = new Rgb(255, 255, 0);
+
+        /// <summary>ライム（黄緑）選択コマンド</summary>
+        [RelayCommand]
+        private void SelectLime() => CurrentColor = new Rgb(128, 255, 0);
+
+        /// <summary>シアン（水色）選択コマンド</summary>
+        [RelayCommand]
+        private void SelectCyan() => CurrentColor = new Rgb(0, 255, 255);
+
+        /// <summary>スカイブルー選択コマンド</summary>
+        [RelayCommand]
+        private void SelectSky() => CurrentColor = new Rgb(0, 128, 255);
+
+        /// <summary>紫色選択コマンド</summary>
+        [RelayCommand]
+        private void SelectPurple() => CurrentColor = new Rgb(128, 0, 255);
+
+        /// <summary>マゼンタ選択コマンド</summary>
+        [RelayCommand]
+        private void SelectMagenta() => CurrentColor = new Rgb(255, 0, 255);
+
+        /// <summary>ピンク選択コマンド</summary>
+        [RelayCommand]
+        private void SelectPink() => CurrentColor = new Rgb(255, 128, 192);
 
         /// <summary>
         /// 点灯コマンド
