@@ -6,19 +6,21 @@
         mc:Ignorable="d"
         Title="{Binding WindowTitle}"
         WindowState="Maximized"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
+        MinWidth="1280"
+        MinHeight="800"
         Background="{StaticResource AppBgBrush}"
         Foreground="{StaticResource TextBrushMain}"
         >
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="80"/>
+            <RowDefinition Height="72"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="110"/>
-            <RowDefinition Height="80"/>
-            <RowDefinition Height="110"/>
-            <RowDefinition Height="120"/>
-            <RowDefinition Height="44"/>
+            <RowDefinition Height="96"/>
+            <RowDefinition Height="72"/>
+            <RowDefinition Height="96"/>
+            <RowDefinition Height="96"/>
+            <RowDefinition Height="36"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>

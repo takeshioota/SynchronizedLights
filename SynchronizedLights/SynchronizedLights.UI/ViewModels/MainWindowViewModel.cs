@@ -1207,7 +1207,7 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ContinuousModeButtonText))]
-        private bool isContinuousMode = false;
+        private bool isContinuousMode = true;
 
         /// <summary>
         /// 単発/連続モード ボタンの表示テキスト
