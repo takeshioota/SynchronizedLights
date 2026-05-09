@@ -171,12 +171,6 @@
                         Tag="{Binding IsPresetSelected}"
                         MinHeight="56"
                         Margin="0,0,0,10" />
-                <Button Content="Mode"
-                        Command="{Binding ShowModeCommand}"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsModeSelected}"
-                        MinHeight="56"
-                        Margin="0,0,0,10" />
                 <Button Content="Animation"
                         Command="{Binding ShowAnimationCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
@@ -455,61 +449,213 @@
                 <TextBlock Grid.Column="0"
                             Text="EFFECT"
                             Style="{StaticResource GrandMaSectionTitleStyle}" />
+                <!-- 単発/連続 トグル：単発=グレー / 連続=アンバー（動的） -->
                 <Button x:Name="BtnFxToggleContinuous"
                         Grid.Column="1"
-                        Content="{Binding ContinuousModeButtonText}"
                         Command="{Binding ToggleContinuousModeCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsContinuousMode}"
-                        MinWidth="100"
+                        MinWidth="120"
                         MinHeight="48"
                         Margin="10,0,0,0"
-                        ToolTip="ON の間、Flash / FadeIn / FadeOut / Breath / 7Color が連続再生されます" />
+                        Padding="0"
+                        ToolTip="ON の間、Flash / FadeIn / FadeOut / Breath / 7Color が連続再生されます">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3">
+                            <Rectangle.Style>
+                                <Style TargetType="Rectangle">
+                                    <Setter Property="Fill" Value="#9E9E9E"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsContinuousMode}" Value="True">
+                                            <Setter Property="Fill" Value="#FFC107"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Rectangle.Style>
+                        </Rectangle>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ContinuousModeButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
+
+                <!-- Flash：ゴールドイエロー -->
                 <Button x:Name="BtnFxFlash"
                         Grid.Column="2"
-                        Content="{Binding FlashButtonText}"
                         Command="{Binding ExecuteFlashCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsFlashRunning}"
-                        MinWidth="120"
+                        MinWidth="130"
                         MinHeight="48"
-                        Margin="10,0,0,0" />
+                        Margin="10,0,0,0"
+                        Padding="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Fill="#FFD740"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding FlashButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
+
+                <!-- FadeIn：マゼンタ -->
                 <Button x:Name="BtnFxFadeIn"
                         Grid.Column="3"
-                        Content="{Binding FadeInButtonText}"
                         Command="{Binding ExecuteFadeInCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsFadeInRunning}"
-                        MinWidth="120"
+                        MinWidth="130"
                         MinHeight="48"
-                        Margin="10,0,0,0" />
+                        Margin="10,0,0,0"
+                        Padding="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Fill="#FF4FC3"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding FadeInButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
+
+                <!-- FadeOut：ライム -->
                 <Button x:Name="BtnFxFadeOut"
                         Grid.Column="4"
-                        Content="{Binding FadeOutButtonText}"
                         Command="{Binding ExecuteFadeOutCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsFadeOutRunning}"
-                        MinWidth="120"
+                        MinWidth="130"
                         MinHeight="48"
-                        Margin="10,0,0,0" />
+                        Margin="10,0,0,0"
+                        Padding="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Fill="#A3FF12"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding FadeOutButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
+
+                <!-- Breath：パープル -->
                 <Button x:Name="BtnFxBreath"
                         Grid.Column="5"
-                        Content="{Binding BreathButtonText}"
                         Command="{Binding ExecuteBreathCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsBreathRunning}"
                         MinWidth="130"
                         MinHeight="48"
-                        Margin="10,0,0,0" />
+                        Margin="10,0,0,0"
+                        Padding="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Fill="#B388FF"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding BreathButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
+
+                <!-- 7Color： シアン -->
                 <Button x:Name="BtnFx7Color"
                         Grid.Column="6"
-                        Content="{Binding SevenColorButtonText}"
                         Command="{Binding ExecuteSevenColorCommand}"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsSevenColorRunning}"
-                        MinWidth="130"
+                        MinWidth="140"
                         MinHeight="48"
-                        Margin="10,0,0,0" />
+                        Margin="10,0,0,0"
+                        Padding="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Grid.Column="0"
+                                   Width="6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Stretch"
+                                   Margin="0,8,0,8"
+                                   RadiusX="3"
+                                   RadiusY="3">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#FF0000" Offset="0.00"/>
+                                    <GradientStop Color="#FF8000" Offset="0.16"/>
+                                    <GradientStop Color="#FFFF00" Offset="0.33"/>
+                                    <GradientStop Color="#00FF00" Offset="0.50"/>
+                                    <GradientStop Color="#00FFFF" Offset="0.66"/>
+                                    <GradientStop Color="#0000FF" Offset="0.83"/>
+                                    <GradientStop Color="#FF00FF" Offset="1.00"/>
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding SevenColorButtonText}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </Grid>
+                </Button>
             </Grid>
         </Border>
 

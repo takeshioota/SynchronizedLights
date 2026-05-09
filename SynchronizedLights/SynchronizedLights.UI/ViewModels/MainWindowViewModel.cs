@@ -285,11 +285,6 @@ namespace SynchronizedLights.UI.ViewModels
         public bool IsPresetSelected => CurrentCategory == UiCategory.Preset;
 
         /// <summary>
-        /// Modeカテゴリが選択中かどうか
-        /// </summary>
-        public bool IsModeSelected => CurrentCategory == UiCategory.Mode;
-
-        /// <summary>
         /// Animationカテゴリが選択中かどうか
         /// </summary>
         public bool IsAnimationSelected => CurrentCategory == UiCategory.Animation;
@@ -641,7 +636,6 @@ namespace SynchronizedLights.UI.ViewModels
             CurrentViewModel = CurrentCategory switch
             {
                 UiCategory.Preset => CreatePresetViewModel(),
-                UiCategory.Mode => new ModeViewModel(),
                 UiCategory.Animation => new AnimationViewModel(_lighting),
                 UiCategory.Sequence => new SequenceViewModel(),
                 UiCategory.Setting => CreateSettingViewModel(),
@@ -729,7 +723,6 @@ namespace SynchronizedLights.UI.ViewModels
         private void RefreshCategorySelection()
         {
             OnPropertyChanged(nameof(IsPresetSelected));
-            OnPropertyChanged(nameof(IsModeSelected));
             OnPropertyChanged(nameof(IsAnimationSelected));
             OnPropertyChanged(nameof(IsSettingSelected));
             OnPropertyChanged(nameof(IsTimeSeqSelected));
@@ -1041,13 +1034,6 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         [RelayCommand]
         private void ShowPreset() => CurrentCategory = UiCategory.Preset;
-
-        /// <summary>
-        /// Mode画面表示コマンド
-        /// 概要：現在の画面カテゴリをModeに切り替える。
-        /// </summary>
-        [RelayCommand]
-        private void ShowMode() => CurrentCategory = UiCategory.Mode;
 
         /// <summary>
         /// Animation画面表示コマンド
