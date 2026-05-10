@@ -310,6 +310,197 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = "ステップを削除しました。";
         }
 
+        /// <summary>
+        /// 選択中の行を直後に複製する
+        /// 概要：内容（コマンド・色・エフェクト・メモ等）はそのままコピーし、時刻のみ +1000ms ずらす。
+        ///       複製先の行が新たに選択状態となる。
+        /// </summary>
+        [RelayCommand]
+        private void DuplicateStep()
+        {
+            if (SelectedStep == null)
+            {
+                StatusMessage = "複製する行を選択してください。";
+                return;
+            }
+
+            var src = SelectedStep.ToModel();
+            var newStep = new SequenceStep
+            {
+                TimeMs = src.TimeMs + 1000,
+                CommandType = src.CommandType,
+                EffectType = src.EffectType,
+                ColorR = src.ColorR,
+                ColorG = src.ColorG,
+                ColorB = src.ColorB,
+                EffectCycleDurationMs = src.EffectCycleDurationMs,
+                FadeSteps = src.FadeSteps,
+                RetransmitCount = src.RetransmitCount,
+                Note = src.Note
+            };
+            var wrapper = new SequenceStepWrapper(newStep);
+
+            int insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
+            EditingSteps.Insert(insertIndex, wrapper);
+
+            // 複製は内容コピーであり実行はしないため自動実行を抑制
+            _suppressAutoExecute = true;
+            try
+            {
+                SelectedStep = wrapper;
+                CurrentStepIndex = insertIndex;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = $"行を複製しました（位置 {insertIndex + 1}）。";
+        }
+
+        /// <summary>
+        /// 選択中の行を 1 つ上に移動
+        /// </summary>
+        [RelayCommand]
+        private void MoveStepUp()
+        {
+            if (SelectedStep == null)
+            {
+                StatusMessage = "移動する行を選択してください。";
+                return;
+            }
+            var idx = EditingSteps.IndexOf(SelectedStep);
+            if (idx <= 0)
+            {
+                StatusMessage = "これより上には移動できません。";
+                return;
+            }
+
+            _suppressAutoExecute = true;
+            try
+            {
+                EditingSteps.Move(idx, idx - 1);
+                CurrentStepIndex = idx - 1;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = $"行を上に移動：{idx + 1} → {idx}";
+        }
+
+        /// <summary>
+        /// 選択中の行を 1 つ下に移動
+        /// </summary>
+        [RelayCommand]
+        private void MoveStepDown()
+        {
+            if (SelectedStep == null)
+            {
+                StatusMessage = "移動する行を選択してください。";
+                return;
+            }
+            var idx = EditingSteps.IndexOf(SelectedStep);
+            if (idx >= EditingSteps.Count - 1)
+            {
+                StatusMessage = "これより下には移動できません。";
+                return;
+            }
+
+            _suppressAutoExecute = true;
+            try
+            {
+                EditingSteps.Move(idx, idx + 1);
+                CurrentStepIndex = idx + 1;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = $"行を下に移動：{idx + 1} → {idx + 2}";
+        }
+
+        /// <summary>
+        /// 全ステップを TimeMs 昇順でソート
+        /// </summary>
+        [RelayCommand]
+        private void SortByTime()
+        {
+            if (EditingSteps.Count == 0)
+            {
+                StatusMessage = "ソート対象のステップがありません。";
+                return;
+            }
+
+            _suppressAutoExecute = true;
+            try
+            {
+                var sorted = EditingSteps.OrderBy(w => w.TimeMs).ToList();
+                EditingSteps.Clear();
+                foreach (var w in sorted) EditingSteps.Add(w);
+
+                if (EditingSteps.Count > 0)
+                {
+                    CurrentStepIndex = 0;
+                    SelectedStep = EditingSteps[0];
+                }
+                else
+                {
+                    CurrentStepIndex = -1;
+                    SelectedStep = null;
+                }
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = $"時刻順にソートしました（{EditingSteps.Count} 件）。";
+        }
+
+        /// <summary>
+        /// 全ステップをクリア（確認ダイアログあり）
+        /// 概要：UI 上のみクリアし、JSON への書き込みは「保存」が押されるまで行わない。
+        ///       「編集破棄」で元の状態に戻すことができる。
+        /// </summary>
+        [RelayCommand]
+        private void ClearAllSteps()
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "シーケンスを選択してください。";
+                return;
+            }
+            if (EditingSteps.Count == 0)
+            {
+                StatusMessage = "ステップは既に空です。";
+                return;
+            }
+
+            var ans = MessageBox.Show(
+                $"全てのステップ（{EditingSteps.Count} 件）を削除しますか？\n\n「保存」を押すまでは未確定です。元に戻したい場合は「編集破棄」でリセットできます。",
+                "全クリア確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (ans != MessageBoxResult.Yes) return;
+
+            _suppressAutoExecute = true;
+            try
+            {
+                EditingSteps.Clear();
+                SelectedStep = null;
+                CurrentStepIndex = -1;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = "全ステップをクリアしました。「保存」を押すと確定、「編集破棄」で元に戻せます。";
+        }
+
         #endregion
 
         #region コマンド：プリセット選択

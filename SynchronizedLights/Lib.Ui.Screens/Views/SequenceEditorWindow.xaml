@@ -499,39 +499,72 @@
                     </ItemsControl>
                 </Grid>
 
-                <!-- 操作行：空行追加 / 行削除 + 操作ガイド -->
+                <!-- 操作行：行操作ボタン群 -->
                 <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="操作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
 
-                    <TextBlock Grid.Column="1"
-                               Text="「+ 追加」で空行挿入 → 上の色/動作ボタンで内容を確定（動作確定で次の空行が自動挿入されます）"
-                               VerticalAlignment="Center"
-                               Foreground="#888888"
-                               FontStyle="Italic"
-                               TextWrapping="Wrap"
-                               Margin="0,0,8,0"/>
-
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
                         <Button Content="+ 追加"
                                 Command="{Binding AddEmptyStepCommand}"
                                 IsEnabled="{Binding HasSelectedSequence}"
                                 Style="{StaticResource GrandMaSelectableButtonStyle}"
                                 Tag="True"
-                                MinHeight="36" Width="120"
+                                MinHeight="34" Width="90"
                                 FontWeight="Bold"
-                                FontSize="14"
                                 Margin="0,0,4,0"
-                                ToolTip="選択中の行の直後に空行を挿入します"/>
+                                ToolTip="選択中の行の直後に空行を挿入"/>
+                        <Button Content="複製"
+                                Command="{Binding DuplicateStepCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="34" Width="70"
+                                Margin="0,0,4,0"
+                                ToolTip="選択中の行を直後に複製（時刻は +1000ms）"/>
+                        <Button Content="▲"
+                                Command="{Binding MoveStepUpCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="34" Width="40"
+                                FontWeight="Bold"
+                                Margin="0,0,2,0"
+                                ToolTip="選択中の行を 1 つ上へ移動"/>
+                        <Button Content="▼"
+                                Command="{Binding MoveStepDownCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="34" Width="40"
+                                FontWeight="Bold"
+                                Margin="0,0,4,0"
+                                ToolTip="選択中の行を 1 つ下へ移動"/>
+                        <Button Content="時刻順ソート"
+                                Command="{Binding SortByTimeCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="34" Width="100"
+                                Margin="0,0,4,0"
+                                ToolTip="全ステップを開始時刻（ms）で昇順にソート"/>
+                        <Button Content="全クリア"
+                                Command="{Binding ClearAllStepsCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="34" Width="80"
+                                Foreground="#FF5252"
+                                Margin="0,0,4,0"
+                                ToolTip="全ステップを削除（確認ダイアログあり、保存前なら編集破棄で復元可能）"/>
                         <Button Content="行削除"
                                 Command="{Binding RemoveStepCommand}"
                                 IsEnabled="{Binding HasSelectedSequence}"
                                 Style="{StaticResource GrandMaButtonStyle}"
-                                MinHeight="36" Width="100"/>
+                                MinHeight="34" Width="80"
+                                Foreground="#FF5252"
+                                ToolTip="選択中の行を削除"/>
                     </StackPanel>
                 </Grid>
             </Grid>
