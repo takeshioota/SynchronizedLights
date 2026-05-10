@@ -13,9 +13,9 @@ namespace Lib.Ui.Screens.Views
     ///   - 起動時はプライマリ画面中央へ配置
     ///
     /// キーボードショートカット：
-    ///   Space / Enter   : 現在ステップを実行（次へ自動移動）
-    ///   →     / ↓      : 次ステップへ移動（実行はしない）
-    ///   ←     / ↑      : 前ステップへ移動 + 実行
+    ///   Space / Enter   : 次ステップへ移動（移動先は ViewModel 側の自動実行で発火）
+    ///   →     / ↓      : 次ステップへ移動（同上）
+    ///   ←     / ↑      : 前ステップへ移動（同上）
     ///   Esc            : 実行中エフェクトを停止
     ///   Ctrl+S         : 保存
     ///   Ctrl+N         : 新規シーケンス
@@ -94,9 +94,9 @@ namespace Lib.Ui.Screens.Views
             {
                 case Key.Space:
                 case Key.Enter:
-                    e.Handled = true;     // ← 先に Handled を立てる（DataGrid の二重処理防止）
+                    e.Handled = true;     // 先に Handled を立てる（DataGrid の二重処理防止）
                     if (vm.ExecuteCurrentStepCommand.CanExecute(null))
-                        vm.ExecuteCurrentStepCommand.Execute(null);    // fire-and-forget
+                        vm.ExecuteCurrentStepCommand.Execute(null);
                     break;
 
                 case Key.Right:
@@ -110,7 +110,7 @@ namespace Lib.Ui.Screens.Views
                 case Key.Up:
                     e.Handled = true;
                     if (vm.PreviousStepCommand.CanExecute(null))
-                        vm.PreviousStepCommand.Execute(null);    // 内部で async 実行 + 自動 advance なし
+                        vm.PreviousStepCommand.Execute(null);
                     break;
 
                 case Key.Escape:

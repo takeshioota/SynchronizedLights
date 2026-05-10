@@ -40,6 +40,13 @@ namespace Lib.Ui.Screens.ViewModels
         private readonly DispatcherTimer? _statusTimer;
         private TimeBasedSequence? _editingSequence;
 
+        /// <summary>
+        /// 選択行変更時の自動実行を一時的に抑制するフラグ
+        /// 概要：シーケンス切替・空行追加・行削除・一覧再読込などプログラムから
+        ///       選択を変更する場合は本フラグを立てて、不要な自動実行を防ぐ。
+        /// </summary>
+        private bool _suppressAutoExecute;
+
         #endregion
 
         #region コンストラクタ
@@ -135,28 +142,57 @@ namespace Lib.Ui.Screens.ViewModels
 
         partial void OnSelectedSequenceChanged(TimeBasedSequence? value)
         {
-            if (value == null)
+            // シーケンス切替時は全行を入れ替えるため、自動実行を抑制
+            _suppressAutoExecute = true;
+            try
             {
-                EditingName = "";
-                EditingDescription = "";
-                EditingSteps.Clear();
-                _editingSequence = null;
-                CurrentStepIndex = -1;
-                StatusMessage = "シーケンスを選択するか、「新規」で作成してください。";
-                return;
-            }
+                if (value == null)
+                {
+                    EditingName = "";
+                    EditingDescription = "";
+                    EditingSteps.Clear();
+                    SelectedStep = null;
+                    _editingSequence = null;
+                    CurrentStepIndex = -1;
+                    StatusMessage = "シーケンスを選択するか、「新規」で作成してください。";
+                    return;
+                }
 
-            _editingSequence = value;
-            EditingName = value.Name;
-            EditingDescription = value.Description;
-            EditingSteps.Clear();
-            foreach (var step in value.SortedSteps)
-            {
-                EditingSteps.Add(new SequenceStepWrapper(step));
+                _editingSequence = value;
+                EditingName = value.Name;
+                EditingDescription = value.Description;
+                EditingSteps.Clear();
+                foreach (var step in value.SortedSteps)
+                {
+                    EditingSteps.Add(new SequenceStepWrapper(step));
+                }
+                CurrentStepIndex = EditingSteps.Count > 0 ? 0 : -1;
+                SelectedStep = CurrentStepIndex >= 0 ? EditingSteps[CurrentStepIndex] : null;
+                OnPropertyChanged(nameof(CurrentStepLabel));
+                StatusMessage = $"編集中: {value.Name}（{EditingSteps.Count} ステップ）";
             }
-            CurrentStepIndex = EditingSteps.Count > 0 ? 0 : -1;
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+        }
+
+        /// <summary>
+        /// 選択行変更時の自動実行（クリック・矢印キー・Enter での移動で発火）
+        /// 概要：ユーザー操作で SelectedStep が変わった瞬間に、その行の動作を即時実行する。
+        ///       プログラムから選択を変更する場合は <see cref="_suppressAutoExecute"/> で抑制される。
+        /// </summary>
+        partial void OnSelectedStepChanged(SequenceStepWrapper? value)
+        {
+            if (_suppressAutoExecute) return;
+            if (value == null) return;
+            if (_lighting == null || !_lighting.IsConnected) return;
+
+            // CurrentStepLabel を更新（インデックスがバインド経由で同期するまでに少しズレる場合があるため）
             OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"編集中: {value.Name}（{EditingSteps.Count} ステップ）";
+
+            // 即時実行（fire-and-forget、内部で例外は捕捉される）
+            _ = ExecuteStepWithoutAdvanceAsync();
         }
 
         #endregion
@@ -255,12 +291,21 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (SelectedStep == null) { StatusMessage = "削除する行を選択してください。"; return; }
             var idx = EditingSteps.IndexOf(SelectedStep);
-            EditingSteps.Remove(SelectedStep);
-            if (CurrentStepIndex >= EditingSteps.Count) CurrentStepIndex = EditingSteps.Count - 1;
-            // 削除位置の次の行を新たに選択
-            if (idx < EditingSteps.Count) SelectedStep = EditingSteps[idx];
-            else if (EditingSteps.Count > 0) SelectedStep = EditingSteps.Last();
-            else SelectedStep = null;
+
+            // 削除に伴う選択遷移は誤操作防止のため自動実行を抑制
+            _suppressAutoExecute = true;
+            try
+            {
+                EditingSteps.Remove(SelectedStep);
+                if (CurrentStepIndex >= EditingSteps.Count) CurrentStepIndex = EditingSteps.Count - 1;
+                if (idx < EditingSteps.Count) SelectedStep = EditingSteps[idx];
+                else if (EditingSteps.Count > 0) SelectedStep = EditingSteps.Last();
+                else SelectedStep = null;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
             OnPropertyChanged(nameof(CurrentStepLabel));
             StatusMessage = "ステップを削除しました。";
         }
@@ -324,9 +369,15 @@ namespace Lib.Ui.Screens.ViewModels
                 }
             }
 
+            // 動作確定の手応えとして、当該行を即時実行（接続中のみ）
+            if (_lighting != null && _lighting.IsConnected)
+            {
+                _ = ExecuteStepWithoutAdvanceAsync();
+            }
+
             StatusMessage = $"動作を確定：{item.DisplayName} → 次の空行を自動挿入";
 
-            // 連続入力のため次の空行を自動挿入する
+            // 連続入力のため次の空行を自動挿入する（AddEmptyStep 内で抑制される）
             AddEmptyStep();
         }
 
@@ -396,69 +447,66 @@ namespace Lib.Ui.Screens.ViewModels
             var wrapper = new SequenceStepWrapper(step);
             EditingSteps.Insert(insertIndex, wrapper);
 
-            SelectedStep = wrapper;
-            CurrentStepIndex = insertIndex;
+            // 空行は実行する意味がないため、自動実行を抑制
+            _suppressAutoExecute = true;
+            try
+            {
+                SelectedStep = wrapper;
+                CurrentStepIndex = insertIndex;
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
             OnPropertyChanged(nameof(CurrentStepLabel));
             StatusMessage = $"空行を挿入（位置 {insertIndex + 1}）。色や動作のボタンをクリックして内容を確定してください。";
         }
 
-        /// <summary>
-        /// 旧 UI プリセット（ActionPreset.Command 文字列）を
-        /// 新モデル（CommandType + EffectType）にマップする。
-        /// 旧："SetColor" / "Off" / "Flash" / "FadeIn" / "FadeOut" / "Breath" / "SevenColor"
-        /// </summary>
-        private static (string CommandType, string? EffectType) MapPresetActionToNewModel(string? legacyCommand)
-        {
-            return legacyCommand switch
-            {
-                "SetColor" => ("Color", null),
-                "Off" => ("Off", null),
-                "Flash" => ("Effect", "Flash"),
-                "FadeIn" => ("Effect", "FadeIn"),
-                "FadeOut" => ("Effect", "FadeOut"),
-                "Breath" => ("Effect", "Breathing"),
-                "SevenColor" => ("Effect", "SevenColor"),
-                _ => ("Color", null),
-            };
-        }
-
         #endregion
 
-        #region コマンド：ステップ実行（v2.1 新仕様）
+        #region コマンド：ステップ実行
 
         /// <summary>
-        /// 現在ステップを実行 → 次ステップへ自動移動（Enter キー）
+        /// 現在ステップを実行 + 次ステップへ移動（Enter / Space キー）
+        /// 概要：本コマンドは選択行の移動のみを行う。
+        ///       実行は <see cref="OnSelectedStepChanged"/> による自動実行に任せる。
         /// </summary>
         [RelayCommand]
-        private async Task ExecuteCurrentStepAsync()
+        private void ExecuteCurrentStep()
         {
-            if (CurrentStepIndex < 0 || CurrentStepIndex >= EditingSteps.Count)
+            if (EditingSteps.Count == 0)
             {
                 StatusMessage = "実行するステップがありません。";
                 return;
             }
 
-            var stepIndex = CurrentStepIndex;
-            await ExecuteStepWithoutAdvanceAsync();
-
-            StatusMessage = $"実行: ステップ {stepIndex + 1} → 次へ移動";
-
-            // 実行後、自動的に次ステップへ移動
-            if (CurrentStepIndex < EditingSteps.Count - 1)
+            // 未選択時は先頭行を選択（OnSelectedStepChanged が自動実行する）
+            if (CurrentStepIndex < 0)
             {
-                CurrentStepIndex++;
-                if (CurrentStepIndex < EditingSteps.Count)
-                {
-                    SelectedStep = EditingSteps[CurrentStepIndex];
-                }
+                CurrentStepIndex = 0;
+                SelectedStep = EditingSteps[0];
+                return;
             }
+
+            // 末尾の場合は移動しない
+            if (CurrentStepIndex >= EditingSteps.Count - 1)
+            {
+                StatusMessage = "最後のステップです。";
+                return;
+            }
+
+            // 次行へ移動（OnSelectedStepChanged が自動実行する）
+            var newIndex = CurrentStepIndex + 1;
+            CurrentStepIndex = newIndex;
+            SelectedStep = EditingSteps[newIndex];
+            StatusMessage = $"実行: ステップ {newIndex + 1} / {EditingSteps.Count}";
         }
 
         /// <summary>
-        /// 前ステップに移動 + 実行（← キー、v2.1 新仕様）
+        /// 前ステップへ移動（← / ↑ キー）
         /// </summary>
         [RelayCommand]
-        private async Task PreviousStepAsync()
+        private void PreviousStep()
         {
             if (EditingSteps.Count == 0) return;
             if (CurrentStepIndex <= 0)
@@ -467,36 +515,27 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
-            // 1 つ前へ戻る
-            CurrentStepIndex--;
-            if (CurrentStepIndex < EditingSteps.Count)
-            {
-                SelectedStep = EditingSteps[CurrentStepIndex];
-            }
-            StatusMessage = $"前ステップ + 実行：{CurrentStepIndex + 1}/{EditingSteps.Count}";
-
-            // 戻った先の行を実行（advance はしない、その行に留まる）
-            await ExecuteStepWithoutAdvanceAsync();
+            var newIndex = CurrentStepIndex - 1;
+            CurrentStepIndex = newIndex;
+            SelectedStep = EditingSteps[newIndex];
+            StatusMessage = $"前ステップ：{newIndex + 1} / {EditingSteps.Count}";
         }
 
-        /// <summary>次ステップに移動（実行はしない、→ キー）</summary>
+        /// <summary>次ステップへ移動（→ / ↓ キー）</summary>
         [RelayCommand]
         private void NextStep()
         {
             if (EditingSteps.Count == 0) return;
-            if (CurrentStepIndex < EditingSteps.Count - 1)
-            {
-                CurrentStepIndex++;
-                if (CurrentStepIndex < EditingSteps.Count)
-                {
-                    SelectedStep = EditingSteps[CurrentStepIndex];
-                }
-                StatusMessage = $"次ステップへ移動：{CurrentStepIndex + 1}/{EditingSteps.Count}";
-            }
-            else
+            if (CurrentStepIndex >= EditingSteps.Count - 1)
             {
                 StatusMessage = "最後のステップです。";
+                return;
             }
+
+            var newIndex = CurrentStepIndex + 1;
+            CurrentStepIndex = newIndex;
+            SelectedStep = EditingSteps[newIndex];
+            StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
         }
 
         /// <summary>実行中エフェクトを停止（Esc キー）</summary>
@@ -526,9 +565,10 @@ namespace Lib.Ui.Screens.ViewModels
                 StatusMessage = "未接続のため実行できません。";
                 return;
             }
-            if (CurrentStepIndex < 0 || CurrentStepIndex >= EditingSteps.Count) return;
+            // SelectedStep を直接参照することで、CurrentStepIndex のバインド同期タイミングに左右されない
+            var wrapper = SelectedStep;
+            if (wrapper == null) return;
 
-            var wrapper = EditingSteps[CurrentStepIndex];
             var step = wrapper.ToModel();
             var color = new Rgb(step.ColorR, step.ColorG, step.ColorB);
             var target = Target.All;
@@ -652,10 +692,20 @@ namespace Lib.Ui.Screens.ViewModels
         private void RefreshList()
         {
             var currentId = SelectedSequence?.Id;
-            ReloadSequences();
-            if (!string.IsNullOrEmpty(currentId))
+
+            // 再読込に伴う選択遷移は自動実行を抑制
+            _suppressAutoExecute = true;
+            try
             {
-                SelectedSequence = Sequences.FirstOrDefault(s => s.Id == currentId);
+                ReloadSequences();
+                if (!string.IsNullOrEmpty(currentId))
+                {
+                    SelectedSequence = Sequences.FirstOrDefault(s => s.Id == currentId);
+                }
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
             }
             StatusMessage = $"一覧を更新しました（{Sequences.Count} 件）。";
         }
