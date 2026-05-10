@@ -20,14 +20,15 @@ namespace Lib.Ui.Screens.ViewModels
     /// <summary>
     /// シーケンス編集ウィンドウ用 ViewModel
     /// 概要：時刻ベースシーケンスの編集・保存・再生・ステップ実行を提供する。
-    ///       - 上半分：シーケンスステップ DataGrid + ステップ実行（コンサート進行向け）
-    ///       - 下半分：プリセット選択パネル（12 色 + 動作）
-    ///       - キーボードショートカット対応
     ///
-    /// 使い方：
-    ///   var vm = new SequenceEditorViewModel(lighting);
-    ///   var window = new SequenceEditorWindow { DataContext = vm };
-    ///   window.Show();
+    ///   ワークフロー：
+    ///     ① 下半分でプリセット（色 + 動作）を選択 → 「Save（追加）」で
+    ///        DataGrid の選択行の直後に新規行を挿入
+    ///     ② DataGrid で各セルを直接編集（時刻・色・所要等）
+    ///     ③ 実行モード：
+    ///        Enter → 現在行を実行 + 次行へ移動
+    ///        ←     → 前行へ移動 + 実行
+    ///        各ステップは continuous=true で実行（次の Enter まで継続、Stop 不要）
     /// </summary>
     public partial class SequenceEditorViewModel : ObservableObject
     {
@@ -42,8 +43,6 @@ namespace Lib.Ui.Screens.ViewModels
 
         #region コンストラクタ
 
-        /// <summary>シーケンス編集 ViewModel を生成する</summary>
-        /// <param name="lighting">ILightingFacade（API 連携用、null 不可）</param>
         public SequenceEditorViewModel(ILightingFacade lighting)
         {
             _store = new TimeBasedSequenceStore();
@@ -53,12 +52,11 @@ namespace Lib.Ui.Screens.ViewModels
             EditingSteps = new ObservableCollection<SequenceStepWrapper>();
             ColorPresets = CreateColorPresets();
             ActionPresets = CreateActionPresets();
-            SelectedColorPreset = ColorPresets.First();   // Red を初期選択
-            SelectedActionPreset = ActionPresets.First(); // SetColor を初期選択
+            SelectedColorPreset = ColorPresets.First();
+            SelectedActionPreset = ActionPresets.First();
 
             ReloadSequences();
 
-            // 1.5 秒ごとに API の再生状態をポーリング
             _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
             _statusTimer.Tick += async (_, _) => await PollStatusAsync();
             _statusTimer.Start();
@@ -66,103 +64,82 @@ namespace Lib.Ui.Screens.ViewModels
 
         #endregion
 
-        #region プロパティ：シーケンス管理（既存 TimeSequenceViewModel から継承）
+        #region プロパティ：シーケンス管理
 
-        /// <summary>シーケンス一覧</summary>
         public ObservableCollection<TimeBasedSequence> Sequences { get; }
 
-        /// <summary>選択中シーケンス</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasSelectedSequence))]
         private TimeBasedSequence? selectedSequence;
 
-        /// <summary>選択中があるかどうか</summary>
         public bool HasSelectedSequence => SelectedSequence != null;
 
-        /// <summary>編集中シーケンス名</summary>
         [ObservableProperty]
         private string editingName = "";
 
-        /// <summary>編集中シーケンスの説明</summary>
         [ObservableProperty]
         private string editingDescription = "";
 
-        /// <summary>編集中ステップ一覧</summary>
         public ObservableCollection<SequenceStepWrapper> EditingSteps { get; }
 
-        /// <summary>選択中ステップ（行削除用）</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CurrentStepLabel))]
         private SequenceStepWrapper? selectedStep;
 
-        /// <summary>状態メッセージ</summary>
         [ObservableProperty]
         private string statusMessage = "シーケンスを選択するか、「新規」で作成してください。";
 
         #endregion
 
-        #region プロパティ：ステップ実行モード（v2.1 新規）
+        #region プロパティ：ステップ実行モード
 
-        /// <summary>現在ステップのインデックス（0 始まり、-1 = 未選択）</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CurrentStepLabel))]
         private int currentStepIndex = -1;
 
-        /// <summary>現在ステップの位置表示（"3 / 10" など）</summary>
         public string CurrentStepLabel
             => EditingSteps.Count == 0
                 ? "ステップなし"
-                : $"現在ステップ: {(CurrentStepIndex < 0 ? 0 : CurrentStepIndex + 1)} / {EditingSteps.Count}";
+                : $"ステップ: {(CurrentStepIndex < 0 ? 0 : CurrentStepIndex + 1)} / {EditingSteps.Count}";
 
         #endregion
 
-        #region プロパティ：プリセット選択（v2.1 新規）
+        #region プロパティ：プリセット選択
 
-        /// <summary>色プリセット一覧</summary>
         public ObservableCollection<ColorPresetItem> ColorPresets { get; }
-
-        /// <summary>動作プリセット一覧</summary>
         public ObservableCollection<ActionPresetItem> ActionPresets { get; }
 
-        /// <summary>選択中の色プリセット</summary>
         [ObservableProperty]
         private ColorPresetItem? selectedColorPreset;
 
-        /// <summary>選択中の動作プリセット</summary>
         [ObservableProperty]
         private ActionPresetItem? selectedActionPreset;
 
-        /// <summary>新規ステップ用：時刻（秒）</summary>
         [ObservableProperty]
         private double newStepTimeSec = 0.0;
 
-        /// <summary>新規ステップ用：所要時間（秒）</summary>
         [ObservableProperty]
         private double newStepDurationSec = 1.0;
 
-        /// <summary>新規ステップ用：メモ</summary>
         [ObservableProperty]
         private string newStepNote = "";
 
         #endregion
 
-        #region プロパティ：API 連携（既存 TimeSequenceViewModel から継承）
+        #region プロパティ：API 連携
 
-        /// <summary>シーケンス再生中かどうか</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(PlayButtonText))]
         private bool isPlaying;
 
-        /// <summary>再生中シーケンス名</summary>
         [ObservableProperty]
         private string? playingSequenceName;
 
-        /// <summary>再生ボタン表示テキスト</summary>
         public string PlayButtonText => IsPlaying ? "■ 停止" : "▶ 一括再生";
 
         #endregion
 
-        #region SelectedSequence 変更時：編集ペインに反映
+        #region SelectedSequence 変更時
 
         partial void OnSelectedSequenceChanged(TimeBasedSequence? value)
         {
@@ -194,7 +171,6 @@ namespace Lib.Ui.Screens.ViewModels
 
         #region コマンド：シーケンス管理
 
-        /// <summary>新規シーケンス作成</summary>
         [RelayCommand]
         private void NewSequence()
         {
@@ -211,20 +187,11 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = $"新規作成: {newSeq.Name}";
         }
 
-        /// <summary>選択中シーケンスを保存</summary>
         [RelayCommand]
         private void SaveSequence()
         {
-            if (_editingSequence == null)
-            {
-                StatusMessage = "保存対象が選択されていません。";
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(EditingName))
-            {
-                StatusMessage = "シーケンス名を入力してください。";
-                return;
-            }
+            if (_editingSequence == null) { StatusMessage = "保存対象が選択されていません。"; return; }
+            if (string.IsNullOrWhiteSpace(EditingName)) { StatusMessage = "シーケンス名を入力してください。"; return; }
             if (_store.ExistsByName(EditingName, _editingSequence.Id))
             {
                 StatusMessage = $"「{EditingName}」という名前のシーケンスが既に存在します。";
@@ -251,15 +218,10 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
-        /// <summary>選択中シーケンスを削除</summary>
         [RelayCommand]
         private void DeleteSequence()
         {
-            if (SelectedSequence == null)
-            {
-                StatusMessage = "削除対象が選択されていません。";
-                return;
-            }
+            if (SelectedSequence == null) { StatusMessage = "削除対象が選択されていません。"; return; }
 
             var name = SelectedSequence.Name;
             var result = MessageBox.Show(
@@ -281,7 +243,6 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
-        /// <summary>編集破棄（最後の保存状態に戻す）</summary>
         [RelayCommand]
         private void DiscardChanges()
         {
@@ -296,78 +257,34 @@ namespace Lib.Ui.Screens.ViewModels
 
         #region コマンド：ステップ編集
 
-        /// <summary>ステップ追加（末尾に追加、デフォルト値）</summary>
-        [RelayCommand]
-        private void AddStep()
-        {
-            if (_editingSequence == null)
-            {
-                StatusMessage = "シーケンスを選択するか新規作成してください。";
-                return;
-            }
-
-            var lastTimeMs = EditingSteps.Count > 0
-                ? EditingSteps.Max(s => s.TimeMs)
-                : -1000;
-
-            var step = new SequenceStep
-            {
-                TimeMs = lastTimeMs + 1000,
-                Command = "SetColor",
-                ColorR = 255,
-                ColorG = 255,
-                ColorB = 255,
-                DurationMs = 1000,
-                RetransmitCount = 3,
-                InterpolationIntervalMs = 50,
-                Note = ""
-            };
-            EditingSteps.Add(new SequenceStepWrapper(step));
-            OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"ステップ追加（時刻 {step.TimeMs / 1000.0:F1}s）。";
-        }
-
         /// <summary>選択中ステップを削除</summary>
         [RelayCommand]
         private void RemoveStep()
         {
-            if (SelectedStep == null)
-            {
-                StatusMessage = "削除する行を選択してください。";
-                return;
-            }
+            if (SelectedStep == null) { StatusMessage = "削除する行を選択してください。"; return; }
+            var idx = EditingSteps.IndexOf(SelectedStep);
             EditingSteps.Remove(SelectedStep);
             if (CurrentStepIndex >= EditingSteps.Count) CurrentStepIndex = EditingSteps.Count - 1;
+            // 削除位置の次の行を新たに選択
+            if (idx < EditingSteps.Count) SelectedStep = EditingSteps[idx];
+            else if (EditingSteps.Count > 0) SelectedStep = EditingSteps.Last();
+            else SelectedStep = null;
             OnPropertyChanged(nameof(CurrentStepLabel));
             StatusMessage = "ステップを削除しました。";
         }
 
-        /// <summary>ステップを時刻順にソート</summary>
-        [RelayCommand]
-        private void SortSteps()
-        {
-            var sorted = EditingSteps.OrderBy(s => s.TimeMs).ToList();
-            EditingSteps.Clear();
-            foreach (var s in sorted) EditingSteps.Add(s);
-            OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"時刻順にソートしました（{EditingSteps.Count} ステップ）。";
-        }
-
         #endregion
 
-        #region コマンド：プリセット選択（v2.1 新規）
+        #region コマンド：プリセット選択
 
-        /// <summary>色プリセット選択</summary>
         [RelayCommand]
         private void SelectColorPreset(ColorPresetItem? item)
         {
             if (item == null) return;
             SelectedColorPreset = item;
-            // 排他選択（IsSelected を更新）
             foreach (var p in ColorPresets) p.IsSelected = p == item;
         }
 
-        /// <summary>動作プリセット選択</summary>
         [RelayCommand]
         private void SelectActionPreset(ActionPresetItem? item)
         {
@@ -376,7 +293,9 @@ namespace Lib.Ui.Screens.ViewModels
             foreach (var p in ActionPresets) p.IsSelected = p == item;
         }
 
-        /// <summary>プリセットの内容で新規ステップを追加</summary>
+        /// <summary>
+        /// プリセットの内容で新規ステップを追加（v2.1：選択行の直後に挿入）
+        /// </summary>
         [RelayCommand]
         private void AddStepFromPreset()
         {
@@ -403,106 +322,90 @@ namespace Lib.Ui.Screens.ViewModels
                 InterpolationIntervalMs = 50,
                 Note = NewStepNote ?? ""
             };
-            EditingSteps.Add(new SequenceStepWrapper(step));
-            OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"プリセット追加：{SelectedActionPreset.DisplayName} / {SelectedColorPreset.Name}";
+            var wrapper = new SequenceStepWrapper(step);
 
-            // 次回追加用に時刻と所要時間を進める
-            NewStepTimeSec = step.TimeMs / 1000.0 + step.DurationMs / 1000.0;
+            // 選択中の行があればその直後に挿入、なければ末尾に追加
+            int insertIndex;
+            if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
+            {
+                insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
+            }
+            else
+            {
+                insertIndex = EditingSteps.Count;
+            }
+            EditingSteps.Insert(insertIndex, wrapper);
+
+            // 追加された行を選択状態に
+            SelectedStep = wrapper;
+            CurrentStepIndex = insertIndex;
+
+            OnPropertyChanged(nameof(CurrentStepLabel));
+            StatusMessage = $"追加：{SelectedActionPreset.DisplayName} / {SelectedColorPreset.Name}（位置 {insertIndex + 1}）";
+
+            // 次回追加用に時刻と所要時間を進める（連続追加時の利便性）
+            NewStepTimeSec = (step.TimeMs + step.DurationMs) / 1000.0;
             NewStepNote = "";
         }
 
         #endregion
 
-        #region コマンド：ステップ実行（v2.1 新規）
+        #region コマンド：ステップ実行（v2.1 新仕様）
 
-        /// <summary>現在ステップを実行</summary>
+        /// <summary>
+        /// 現在ステップを実行 → 次ステップへ自動移動（Enter キー）
+        /// </summary>
         [RelayCommand]
         private async Task ExecuteCurrentStepAsync()
         {
-            if (_lighting == null || !_lighting.IsConnected)
-            {
-                StatusMessage = "未接続のため実行できません。";
-                return;
-            }
             if (CurrentStepIndex < 0 || CurrentStepIndex >= EditingSteps.Count)
             {
                 StatusMessage = "実行するステップがありません。";
                 return;
             }
 
-            var wrapper = EditingSteps[CurrentStepIndex];
-            var step = wrapper.ToModel();   // SequenceStepWrapper → SequenceStep に変換（CalculateInterpolationSteps を使うため）
-            var color = new Rgb(step.ColorR, step.ColorG, step.ColorB);
-            var target = Target.All;
+            var stepIndex = CurrentStepIndex;
+            await ExecuteStepWithoutAdvanceAsync();
 
-            try
+            StatusMessage = $"実行: ステップ {stepIndex + 1} → 次へ移動";
+
+            // 実行後、自動的に次ステップへ移動
+            if (CurrentStepIndex < EditingSteps.Count - 1)
             {
-                switch (step.Command)
+                CurrentStepIndex++;
+                if (CurrentStepIndex < EditingSteps.Count)
                 {
-                    case "SetColor":
-                        await _lighting.SetColorAsync(target, color);
-                        break;
-                    case "Off":
-                        await _lighting.SetColorAsync(target, new Rgb(0, 0, 0));
-                        break;
-                    case "Flash":
-                        await _lighting.StartEffectAsync(
-                            "Flash", color,
-                            cycleDurationMs: step.DurationMs,
-                            flashIntervalMs: Math.Max(50, step.DurationMs / 2),
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: false);
-                        break;
-                    case "FadeIn":
-                        await _lighting.StartEffectAsync(
-                            "FadeIn", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: false);
-                        break;
-                    case "FadeOut":
-                        await _lighting.StartEffectAsync(
-                            "FadeOut", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: false);
-                        break;
-                    case "Breath":
-                        await _lighting.StartEffectAsync(
-                            "Breathing", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: false);
-                        break;
-                    case "SevenColor":
-                        await _lighting.StartEffectAsync(
-                            "SevenColor", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: false);
-                        break;
-                    default:
-                        StatusMessage = $"未対応コマンド: {step.Command}";
-                        return;
+                    SelectedStep = EditingSteps[CurrentStepIndex];
                 }
-
-                StatusMessage = $"実行: {step.Command} ({color.R},{color.G},{color.B}) → ステップ {CurrentStepIndex + 1}/{EditingSteps.Count}";
-
-                // 実行後、自動的に次ステップへ移動
-                if (CurrentStepIndex < EditingSteps.Count - 1)
-                {
-                    CurrentStepIndex++;
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"実行失敗: {ex.Message}";
-                Log.Warning(ex, "ExecuteCurrentStep failed");
             }
         }
 
-        /// <summary>次ステップに移動（実行はしない）</summary>
+        /// <summary>
+        /// 前ステップに移動 + 実行（← キー、v2.1 新仕様）
+        /// </summary>
+        [RelayCommand]
+        private async Task PreviousStepAsync()
+        {
+            if (EditingSteps.Count == 0) return;
+            if (CurrentStepIndex <= 0)
+            {
+                StatusMessage = "最初のステップです。";
+                return;
+            }
+
+            // 1 つ前へ戻る
+            CurrentStepIndex--;
+            if (CurrentStepIndex < EditingSteps.Count)
+            {
+                SelectedStep = EditingSteps[CurrentStepIndex];
+            }
+            StatusMessage = $"前ステップ + 実行：{CurrentStepIndex + 1}/{EditingSteps.Count}";
+
+            // 戻った先の行を実行（advance はしない、その行に留まる）
+            await ExecuteStepWithoutAdvanceAsync();
+        }
+
+        /// <summary>次ステップに移動（実行はしない、→ キー）</summary>
         [RelayCommand]
         private void NextStep()
         {
@@ -510,7 +413,11 @@ namespace Lib.Ui.Screens.ViewModels
             if (CurrentStepIndex < EditingSteps.Count - 1)
             {
                 CurrentStepIndex++;
-                StatusMessage = $"次ステップ：{CurrentStepIndex + 1}/{EditingSteps.Count}";
+                if (CurrentStepIndex < EditingSteps.Count)
+                {
+                    SelectedStep = EditingSteps[CurrentStepIndex];
+                }
+                StatusMessage = $"次ステップへ移動：{CurrentStepIndex + 1}/{EditingSteps.Count}";
             }
             else
             {
@@ -518,23 +425,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
-        /// <summary>前ステップに移動</summary>
-        [RelayCommand]
-        private void PreviousStep()
-        {
-            if (EditingSteps.Count == 0) return;
-            if (CurrentStepIndex > 0)
-            {
-                CurrentStepIndex--;
-                StatusMessage = $"前ステップ：{CurrentStepIndex + 1}/{EditingSteps.Count}";
-            }
-            else
-            {
-                StatusMessage = "最初のステップです。";
-            }
-        }
-
-        /// <summary>ステップ実行を停止（実行中のエフェクトを止める）</summary>
+        /// <summary>実行中エフェクトを停止（Esc キー）</summary>
         [RelayCommand]
         private async Task StopExecutionAsync()
         {
@@ -550,27 +441,89 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>
+        /// 現在ステップを実行する（共通ロジック、advance なし）
+        /// 概要：continuous=true で実行 → 次の Enter で上書き、Stop 不要
+        /// </summary>
+        private async Task ExecuteStepWithoutAdvanceAsync()
+        {
+            if (_lighting == null || !_lighting.IsConnected)
+            {
+                StatusMessage = "未接続のため実行できません。";
+                return;
+            }
+            if (CurrentStepIndex < 0 || CurrentStepIndex >= EditingSteps.Count) return;
+
+            var wrapper = EditingSteps[CurrentStepIndex];
+            var step = wrapper.ToModel();
+            var color = new Rgb(step.ColorR, step.ColorG, step.ColorB);
+            var target = Target.All;
+
+            try
+            {
+                switch (step.Command)
+                {
+                    case "SetColor":
+                        await _lighting.SetColorAsync(target, color);
+                        break;
+                    case "Off":
+                        await _lighting.SetColorAsync(target, new Rgb(0, 0, 0));
+                        break;
+                    case "Flash":
+                        await _lighting.StartEffectAsync("Flash", color,
+                            cycleDurationMs: step.DurationMs,
+                            flashIntervalMs: Math.Max(50, step.DurationMs / 2),
+                            fadeSteps: step.CalculateInterpolationSteps(),
+                            continuous: true);
+                        break;
+                    case "FadeIn":
+                        await _lighting.StartEffectAsync("FadeIn", color,
+                            cycleDurationMs: step.DurationMs,
+                            fadeSteps: step.CalculateInterpolationSteps(),
+                            continuous: true);
+                        break;
+                    case "FadeOut":
+                        await _lighting.StartEffectAsync("FadeOut", color,
+                            cycleDurationMs: step.DurationMs,
+                            fadeSteps: step.CalculateInterpolationSteps(),
+                            continuous: true);
+                        break;
+                    case "Breath":
+                        await _lighting.StartEffectAsync("Breathing", color,
+                            cycleDurationMs: step.DurationMs,
+                            fadeSteps: step.CalculateInterpolationSteps(),
+                            continuous: true);
+                        break;
+                    case "SevenColor":
+                        await _lighting.StartEffectAsync("SevenColor", color,
+                            cycleDurationMs: step.DurationMs,
+                            fadeSteps: step.CalculateInterpolationSteps(),
+                            continuous: true);
+                        break;
+                    default:
+                        StatusMessage = $"未対応コマンド: {step.Command}";
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"実行失敗: {ex.Message}";
+                Log.Warning(ex, "ExecuteStepWithoutAdvance failed");
+            }
+        }
+
         #endregion
 
-        #region コマンド：API 一括再生（既存 TimeSequenceViewModel から継承）
+        #region コマンド：API 一括再生
 
-        /// <summary>一括再生／停止トグル（API 経由でシーケンス全体を自動再生）</summary>
         [RelayCommand]
         private async Task PlayOrStopAsync()
         {
-            if (_lighting == null)
-            {
-                StatusMessage = "API 連携が無効のため再生できません。";
-                return;
-            }
+            if (_lighting == null) { StatusMessage = "API 連携が無効のため再生できません。"; return; }
 
             if (IsPlaying)
             {
-                try
-                {
-                    await _lighting.StopSequenceAsync();
-                    StatusMessage = "シーケンスを停止しました。";
-                }
+                try { await _lighting.StopSequenceAsync(); StatusMessage = "シーケンスを停止しました。"; }
                 catch (Exception ex) { StatusMessage = $"停止失敗: {ex.Message}"; }
                 finally { await PollStatusAsync(); }
                 return;
@@ -605,21 +558,13 @@ namespace Lib.Ui.Screens.ViewModels
                 StatusMessage = $"再生失敗: {ex.Message}";
                 Log.Warning(ex, "Sequence Play failed");
             }
-            finally
-            {
-                await PollStatusAsync();
-            }
+            finally { await PollStatusAsync(); }
         }
 
-        /// <summary>API へ同期（再生はしない）</summary>
         [RelayCommand]
         private async Task SyncToApiAsync()
         {
-            if (_lighting == null || _editingSequence == null)
-            {
-                StatusMessage = "同期対象がありません。";
-                return;
-            }
+            if (_lighting == null || _editingSequence == null) { StatusMessage = "同期対象がありません。"; return; }
             try
             {
                 _editingSequence.Steps = EditingSteps.Select(w => w.ToModel()).ToList();
@@ -683,7 +628,6 @@ namespace Lib.Ui.Screens.ViewModels
             return false;
         }
 
-        /// <summary>12 色プリセットを生成</summary>
         private static ObservableCollection<ColorPresetItem> CreateColorPresets() => new()
         {
             new("Red",     255,   0,   0, "#FF0000"),
@@ -700,7 +644,6 @@ namespace Lib.Ui.Screens.ViewModels
             new("White",   255, 255, 255, "#FFFFFF"),
         };
 
-        /// <summary>動作プリセットを生成</summary>
         private static ObservableCollection<ActionPresetItem> CreateActionPresets() => new()
         {
             new("SetColor",   "色固定",     "#FFC107"),
@@ -716,7 +659,6 @@ namespace Lib.Ui.Screens.ViewModels
     }
 
 
-    /// <summary>色プリセット 1 件</summary>
     public partial class ColorPresetItem : ObservableObject
     {
         public ColorPresetItem(string name, byte r, byte g, byte b, string hex)
@@ -727,13 +669,12 @@ namespace Lib.Ui.Screens.ViewModels
         public byte R { get; }
         public byte G { get; }
         public byte B { get; }
-        public string Hex { get; }   // "#FF0000" 形式（XAML バインド用）
+        public string Hex { get; }
 
         [ObservableProperty]
         private bool isSelected;
     }
 
-    /// <summary>動作プリセット 1 件</summary>
     public partial class ActionPresetItem : ObservableObject
     {
         public ActionPresetItem(string command, string displayName, string accentHex)
@@ -742,9 +683,9 @@ namespace Lib.Ui.Screens.ViewModels
             DisplayName = displayName;
             AccentHex = accentHex;
         }
-        public string Command { get; }       // 内部値 "SetColor" / "FadeIn" 等
-        public string DisplayName { get; }   // 表示名 "色固定" / "Fade In" 等
-        public string AccentHex { get; }     // アクセント色 "#FFC107" 等
+        public string Command { get; }
+        public string DisplayName { get; }
+        public string AccentHex { get; }
 
         [ObservableProperty]
         private bool isSelected;
