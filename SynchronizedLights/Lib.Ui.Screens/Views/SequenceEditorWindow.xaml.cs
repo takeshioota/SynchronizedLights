@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Specialized;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Lib.Ui.Screens.ViewModels;
 
@@ -119,6 +121,26 @@ namespace Lib.Ui.Screens.Views
                         vm.StopExecutionCommand.Execute(null);
                     break;
             }
+        }
+
+        /// <summary>
+        /// 送信ログ ListBox の Loaded ハンドラ：新エントリ追加時に最下部へ自動スクロール
+        /// </summary>
+        private void LogListBox_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is not ListBox listBox) return;
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            vm.LogEntries.CollectionChanged += (_, args) =>
+            {
+                if (args.Action != NotifyCollectionChangedAction.Add) return;
+                listBox.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (listBox.Items.Count == 0) return;
+                    var lastItem = listBox.Items[listBox.Items.Count - 1];
+                    if (lastItem != null) listBox.ScrollIntoView(lastItem);
+                }));
+            };
         }
     }
 }
