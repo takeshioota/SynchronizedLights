@@ -123,6 +123,13 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private ActionPresetItem? selectedActionPreset;
 
+        /// <summary>
+        /// 簡単登録の時刻間隔（ms）
+        /// 概要：「簡単登録: 色 / OFF」ボタンで連続追加するときに直前ステップから何 ms ずらすか。
+        /// </summary>
+        [ObservableProperty]
+        private int easyIntervalMs = 500;
+
         #endregion
 
         #region プロパティ：API 連携
@@ -135,6 +142,40 @@ namespace Lib.Ui.Screens.ViewModels
         private string? playingSequenceName;
 
         public string PlayButtonText => IsPlaying ? "■ 停止" : "▶ 一括再生";
+
+        #endregion
+
+        #region プロパティ：送信ログ
+
+        /// <summary>
+        /// 送信ログのエントリ列（時系列で末尾追加、上限超過分は先頭から削除）
+        /// </summary>
+        public ObservableCollection<LogEntry> LogEntries { get; } = new();
+
+        /// <summary>送信ログ上限（メモリ節約のため超過分は古いものから削除）</summary>
+        private const int LogEntryLimit = 500;
+
+        /// <summary>
+        /// 送信ログにエントリを追加する
+        /// </summary>
+        /// <param name="type">"TX" / "RX" / "INFO" / "ERR"</param>
+        private void AppendLog(string type, string message)
+        {
+            LogEntries.Add(new LogEntry { Type = type, Message = message });
+            while (LogEntries.Count > LogEntryLimit)
+            {
+                LogEntries.RemoveAt(0);
+            }
+        }
+
+        /// <summary>
+        /// 送信ログをクリアする
+        /// </summary>
+        [RelayCommand]
+        private void ClearLog()
+        {
+            LogEntries.Clear();
+        }
 
         #endregion
 
@@ -170,6 +211,7 @@ namespace Lib.Ui.Screens.ViewModels
                 SelectedStep = CurrentStepIndex >= 0 ? EditingSteps[CurrentStepIndex] : null;
                 OnPropertyChanged(nameof(CurrentStepLabel));
                 StatusMessage = $"編集中: {value.Name}（{EditingSteps.Count} ステップ）";
+                AppendLog("INFO", $"編集中: {value.Name} ({EditingSteps.Count} ステップ)");
             }
             finally
             {
@@ -213,6 +255,7 @@ namespace Lib.Ui.Screens.ViewModels
             ReloadSequences();
             SelectedSequence = Sequences.FirstOrDefault(s => s.Id == newSeq.Id);
             StatusMessage = $"新規作成: {newSeq.Name}";
+            AppendLog("INFO", $"新規作成: {newSeq.Name}");
         }
 
         [RelayCommand]
@@ -239,10 +282,12 @@ namespace Lib.Ui.Screens.ViewModels
                 ReloadSequences();
                 SelectedSequence = Sequences.FirstOrDefault(s => s.Id == savedId);
                 StatusMessage = $"保存完了: {savedName}（{savedStepCount} ステップ）";
+                AppendLog("INFO", $"保存: {savedName} ({savedStepCount} ステップ)");
             }
             else
             {
                 StatusMessage = "保存に失敗しました。ログを確認してください。";
+                AppendLog("ERR", $"保存失敗: {savedName}");
             }
         }
 
@@ -262,12 +307,14 @@ namespace Lib.Ui.Screens.ViewModels
             if (_store.Delete(SelectedSequence.Id))
             {
                 StatusMessage = $"削除完了: {name}";
+                AppendLog("INFO", $"削除: {name}");
                 ReloadSequences();
                 SelectedSequence = null;
             }
             else
             {
                 StatusMessage = $"削除に失敗しました: {name}";
+                AppendLog("ERR", $"削除失敗: {name}");
             }
         }
 
@@ -499,6 +546,208 @@ namespace Lib.Ui.Screens.ViewModels
             }
             OnPropertyChanged(nameof(CurrentStepLabel));
             StatusMessage = "全ステップをクリアしました。「保存」を押すと確定、「編集破棄」で元に戻せます。";
+        }
+
+        /// <summary>
+        /// 既存ステップ列の末尾にテンプレート由来のステップ群を追加する共通ヘルパー
+        /// 概要：直前ステップの TimeMs に intervalMs を加算した値を 1 件目の開始時刻とし、
+        ///       以降は intervalMs ずつ加算していく。
+        ///       追加された 1 件目を選択状態にする（自動実行は抑制）。
+        /// </summary>
+        private void AppendStepsToTail(IReadOnlyList<SequenceStep> steps, int intervalMs)
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "シーケンスを選択するか新規作成してください。";
+                return;
+            }
+            if (steps == null || steps.Count == 0) return;
+
+            int interval = Math.Max(0, intervalMs);
+            int baseTimeMs = EditingSteps.Count > 0
+                ? EditingSteps.Last().TimeMs + (interval > 0 ? interval : 1000)
+                : 0;
+            int firstIndex = EditingSteps.Count;
+
+            _suppressAutoExecute = true;
+            try
+            {
+                foreach (var step in steps)
+                {
+                    step.TimeMs = baseTimeMs;
+                    if (step.RetransmitCount <= 0) step.RetransmitCount = 3;
+                    EditingSteps.Add(new SequenceStepWrapper(step));
+                    baseTimeMs += interval;
+                }
+
+                if (firstIndex < EditingSteps.Count)
+                {
+                    CurrentStepIndex = firstIndex;
+                    SelectedStep = EditingSteps[firstIndex];
+                }
+            }
+            finally
+            {
+                _suppressAutoExecute = false;
+            }
+            OnPropertyChanged(nameof(CurrentStepLabel));
+        }
+
+        /// <summary>
+        /// 簡単登録：選択中の色プリセットで Color ステップを末尾に追加（時刻は EasyIntervalMs ずらす）
+        /// </summary>
+        [RelayCommand]
+        private void EasyAddColor()
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "シーケンスを選択するか新規作成してください。";
+                return;
+            }
+            if (SelectedColorPreset == null)
+            {
+                StatusMessage = "上の色プリセットを選択してから「簡単登録: 色」を押してください。";
+                return;
+            }
+
+            var step = new SequenceStep
+            {
+                CommandType = "Color",
+                EffectType = null,
+                ColorR = SelectedColorPreset.R,
+                ColorG = SelectedColorPreset.G,
+                ColorB = SelectedColorPreset.B,
+                Note = $"簡単登録: {SelectedColorPreset.Name}"
+            };
+            AppendStepsToTail(new[] { step }, EasyIntervalMs);
+            StatusMessage = $"簡単登録：{SelectedColorPreset.Name} を追加（間隔 {EasyIntervalMs}ms）。";
+        }
+
+        /// <summary>
+        /// 簡単登録：Off ステップを末尾に追加
+        /// </summary>
+        [RelayCommand]
+        private void EasyAddOff()
+        {
+            if (_editingSequence == null)
+            {
+                StatusMessage = "シーケンスを選択するか新規作成してください。";
+                return;
+            }
+
+            var step = new SequenceStep
+            {
+                CommandType = "Off",
+                EffectType = null,
+                ColorR = 0, ColorG = 0, ColorB = 0,
+                Note = "簡単登録: OFF"
+            };
+            AppendStepsToTail(new[] { step }, EasyIntervalMs);
+            StatusMessage = $"簡単登録：OFF を追加（間隔 {EasyIntervalMs}ms）。";
+        }
+
+        /// <summary>
+        /// テンプレート：色変更（7色を 1000ms 間隔で切り替える Color ステップ 7 件を末尾に追加）
+        /// </summary>
+        [RelayCommand]
+        private void ApplyTemplateColorChange()
+        {
+            var palette = new (string Name, byte R, byte G, byte B)[]
+            {
+                ("Red",     255,   0,   0),
+                ("Orange",  255, 128,   0),
+                ("Yellow",  255, 255,   0),
+                ("Green",     0, 255,   0),
+                ("Cyan",      0, 255, 255),
+                ("Blue",      0,   0, 255),
+                ("Magenta", 255,   0, 255),
+            };
+            var steps = palette.Select(c => new SequenceStep
+            {
+                CommandType = "Color",
+                EffectType = null,
+                ColorR = c.R, ColorG = c.G, ColorB = c.B,
+                Note = $"色変更: {c.Name}"
+            }).ToList();
+
+            AppendStepsToTail(steps, intervalMs: 1000);
+            StatusMessage = "テンプレ：色変更（7 色 × 1000ms）を追加しました。";
+        }
+
+        /// <summary>
+        /// テンプレート：呼吸（Breathing 1 件）
+        /// </summary>
+        [RelayCommand]
+        private void ApplyTemplateBreathing()
+        {
+            var step = new SequenceStep
+            {
+                CommandType = "Effect",
+                EffectType = "Breathing",
+                ColorR = 255, ColorG = 255, ColorB = 255,
+                EffectCycleDurationMs = 3000,
+                FadeSteps = 30,
+                Note = "テンプレ: 呼吸"
+            };
+            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            StatusMessage = "テンプレ：呼吸（Breathing / 周期 3000ms / Fade 30）を追加しました。";
+        }
+
+        /// <summary>
+        /// テンプレート：Flash（Flash 1 件）
+        /// </summary>
+        [RelayCommand]
+        private void ApplyTemplateFlash()
+        {
+            var step = new SequenceStep
+            {
+                CommandType = "Effect",
+                EffectType = "Flash",
+                ColorR = 255, ColorG = 255, ColorB = 255,
+                EffectCycleDurationMs = 500,
+                FadeSteps = 0,
+                Note = "テンプレ: Flash"
+            };
+            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            StatusMessage = "テンプレ：Flash（周期 500ms）を追加しました。";
+        }
+
+        /// <summary>
+        /// テンプレート：7 色（SevenColor 1 件）
+        /// </summary>
+        [RelayCommand]
+        private void ApplyTemplateSevenColor()
+        {
+            var step = new SequenceStep
+            {
+                CommandType = "Effect",
+                EffectType = "SevenColor",
+                ColorR = 255, ColorG = 0, ColorB = 0,
+                EffectCycleDurationMs = 7000,
+                FadeSteps = 20,
+                Note = "テンプレ: 7 色"
+            };
+            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            StatusMessage = "テンプレ：7 色（SevenColor / 周期 7000ms / Fade 20）を追加しました。";
+        }
+
+        /// <summary>
+        /// テンプレート：カウントダウン（5 → 1 を色変化で表現 + Off）
+        /// </summary>
+        [RelayCommand]
+        private void ApplyTemplateCountdown()
+        {
+            var steps = new[]
+            {
+                new SequenceStep { CommandType = "Color", ColorR = 255, ColorG =   0, ColorB =   0, Note = "カウントダウン: 5" },
+                new SequenceStep { CommandType = "Color", ColorR = 255, ColorG = 128, ColorB =   0, Note = "カウントダウン: 4" },
+                new SequenceStep { CommandType = "Color", ColorR = 255, ColorG = 255, ColorB =   0, Note = "カウントダウン: 3" },
+                new SequenceStep { CommandType = "Color", ColorR =   0, ColorG = 255, ColorB =   0, Note = "カウントダウン: 2" },
+                new SequenceStep { CommandType = "Color", ColorR = 255, ColorG = 255, ColorB = 255, Note = "カウントダウン: 1" },
+                new SequenceStep { CommandType = "Off",   ColorR =   0, ColorG =   0, ColorB =   0, Note = "カウントダウン: 0" },
+            };
+            AppendStepsToTail(steps, intervalMs: 1000);
+            StatusMessage = "テンプレ：カウントダウン（5 → 0、1 秒間隔）を追加しました。";
         }
 
         #endregion
@@ -738,10 +987,12 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 await _lighting.StopEffectAsync();
                 StatusMessage = "停止しました。";
+                AppendLog("TX", "EffectStop (Esc)");
             }
             catch (Exception ex)
             {
                 StatusMessage = $"停止失敗: {ex.Message}";
+                AppendLog("ERR", $"EffectStop 失敗: {ex.Message}");
             }
         }
 
@@ -770,10 +1021,12 @@ namespace Lib.Ui.Screens.ViewModels
                 {
                     case "Color":
                         await _lighting.SetColorAsync(target, color);
+                        AppendLog("TX", $"Color ({step.ColorR},{step.ColorG},{step.ColorB})");
                         break;
 
                     case "Off":
                         await _lighting.SetColorAsync(target, new Rgb(0, 0, 0));
+                        AppendLog("TX", "Off");
                         break;
 
                     case "Effect":
@@ -791,10 +1044,12 @@ namespace Lib.Ui.Screens.ViewModels
                                 : (int?)null,
                             fadeSteps: step.GetFadeStepsOrDefault(),
                             continuous: true);
+                        AppendLog("TX", $"Effect {step.EffectType} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()}");
                         break;
 
                     case "EffectStop":
                         await _lighting.StopEffectAsync();
+                        AppendLog("TX", "EffectStop");
                         break;
 
                     default:
@@ -805,6 +1060,7 @@ namespace Lib.Ui.Screens.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"実行失敗: {ex.Message}";
+                AppendLog("ERR", $"実行失敗: {ex.Message}");
                 Log.Warning(ex, "ExecuteStepWithoutAdvance failed");
             }
         }
@@ -820,8 +1076,17 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (IsPlaying)
             {
-                try { await _lighting.StopSequenceAsync(); StatusMessage = "シーケンスを停止しました。"; }
-                catch (Exception ex) { StatusMessage = $"停止失敗: {ex.Message}"; }
+                try
+                {
+                    await _lighting.StopSequenceAsync();
+                    StatusMessage = "シーケンスを停止しました。";
+                    AppendLog("TX", "Sequence Stop");
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"停止失敗: {ex.Message}";
+                    AppendLog("ERR", $"Sequence Stop 失敗: {ex.Message}");
+                }
                 finally { await PollStatusAsync(); }
                 return;
             }
@@ -849,10 +1114,12 @@ namespace Lib.Ui.Screens.ViewModels
                 await _lighting.UpsertSequenceAsync(_editingSequence.Name, apiSteps);
                 await _lighting.PlaySequenceAsync(_editingSequence.Name);
                 StatusMessage = $"再生開始: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
+                AppendLog("TX", $"Sequence Play: {_editingSequence.Name} ({apiSteps.Count} ステップ)");
             }
             catch (Exception ex)
             {
                 StatusMessage = $"再生失敗: {ex.Message}";
+                AppendLog("ERR", $"Sequence Play 失敗: {ex.Message}");
                 Log.Warning(ex, "Sequence Play failed");
             }
             finally { await PollStatusAsync(); }
@@ -868,10 +1135,12 @@ namespace Lib.Ui.Screens.ViewModels
                 var apiSteps = SequenceApiMapper.ToApiSteps(_editingSequence);
                 await _lighting.UpsertSequenceAsync(_editingSequence.Name, apiSteps);
                 StatusMessage = $"API へ同期完了: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
+                AppendLog("TX", $"Sequence Sync: {_editingSequence.Name} ({apiSteps.Count} ステップ)");
             }
             catch (Exception ex)
             {
                 StatusMessage = $"同期失敗: {ex.Message}";
+                AppendLog("ERR", $"Sequence Sync 失敗: {ex.Message}");
                 Log.Warning(ex, "SyncToApi failed");
             }
         }
@@ -1082,5 +1351,32 @@ namespace Lib.Ui.Screens.ViewModels
 
         [ObservableProperty]
         private bool isSelected;
+    }
+
+    /// <summary>
+    /// 送信ログのエントリ
+    /// 概要：時刻 + 種別タグ（TX/RX/INFO/ERR）+ メッセージで構成。
+    ///       UI では Display を 1 行ずつ ListBox で表示し、Color で種別を色分けする。
+    /// </summary>
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; init; } = DateTime.Now;
+
+        /// <summary>"TX" / "RX" / "INFO" / "ERR"</summary>
+        public string Type { get; init; } = "INFO";
+
+        public string Message { get; init; } = "";
+
+        /// <summary>UI 表示用の整形済みテキスト（HH:mm:ss [TYPE] message）</summary>
+        public string Display => $"{Timestamp:HH:mm:ss} [{Type}] {Message}";
+
+        /// <summary>種別ごとの表示色（Foreground にバインド）</summary>
+        public string Color => Type switch
+        {
+            "TX" => "#7CFF7C",
+            "RX" => "#80C0FF",
+            "ERR" => "#FF5252",
+            _ => "#FFC107",
+        };
     }
 }

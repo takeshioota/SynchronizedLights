@@ -277,7 +277,9 @@
                 <RowDefinition Height="*"/>
                 <!-- 3: プリセット -->
                 <RowDefinition Height="Auto"/>
-                <!-- 4: ステータスバー -->
+                <!-- 4: 送信ログ -->
+                <RowDefinition Height="Auto"/>
+                <!-- 5: ステータスバー -->
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
@@ -414,11 +416,15 @@
                 Padding="8" Margin="0,0,0,4">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>   <!-- 0: 色プリセット -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>   <!-- 2: 動作プリセット -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>   <!-- 4: 操作行 -->
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>   <!-- 6: 簡単登録 -->
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>   <!-- 8: テンプレ -->
                 </Grid.RowDefinitions>
 
                 <!-- 色プリセット -->
@@ -567,11 +573,156 @@
                                 ToolTip="選択中の行を削除"/>
                     </StackPanel>
                 </Grid>
+
+                <!-- 簡単登録：選択中の色プリセットで Color / Off ステップを末尾に追加 -->
+                <Grid Grid.Row="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="簡単登録:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="色"
+                                Command="{Binding EasyAddColorCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="60"
+                                Margin="0,0,4,0"
+                                ToolTip="上の色プリセットを選択中の色で Color ステップを末尾に追加"/>
+                        <Button Content="OFF"
+                                Command="{Binding EasyAddOffCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="60"
+                                Margin="0,0,12,0"
+                                ToolTip="Off ステップを末尾に追加"/>
+                        <TextBlock Text="間隔(ms):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBox Width="80"
+                                 Text="{Binding EasyIntervalMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}"
+                                 HorizontalContentAlignment="Right"
+                                 Padding="6,2"
+                                 MinHeight="28"
+                                 ToolTip="連続追加時の時刻間隔（既定 500ms）"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- テンプレ：複数ステップをまとめて末尾に追加 -->
+                <Grid Grid.Row="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="テンプレ:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="色変更"
+                                Command="{Binding ApplyTemplateColorChangeCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="80"
+                                Margin="0,0,4,0"
+                                ToolTip="7 色を 1 秒間隔で切り替える Color ステップ 7 件を末尾に追加"/>
+                        <Button Content="呼吸"
+                                Command="{Binding ApplyTemplateBreathingCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="70"
+                                Margin="0,0,4,0"
+                                ToolTip="Breathing エフェクト（周期 3000ms、Fade 30）を 1 件追加"/>
+                        <Button Content="Flash"
+                                Command="{Binding ApplyTemplateFlashCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="70"
+                                Margin="0,0,4,0"
+                                ToolTip="Flash エフェクト（周期 500ms）を 1 件追加"/>
+                        <Button Content="7 色"
+                                Command="{Binding ApplyTemplateSevenColorCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="60"
+                                Margin="0,0,4,0"
+                                ToolTip="SevenColor エフェクト（周期 7000ms、Fade 20）を 1 件追加"/>
+                        <Button Content="カウントダウン"
+                                Command="{Binding ApplyTemplateCountdownCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}"
+                                MinHeight="32" Width="120"
+                                Margin="0,0,4,0"
+                                ToolTip="5 → 0 を色変化で表現（赤 → 橙 → 黄 → 緑 → 白 → Off、1 秒間隔）"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ============ 送信ログパネル ============ -->
+        <Border Grid.Row="4"
+                Background="#0A0A0A"
+                BorderBrush="{StaticResource AccentAmberBrush}"
+                BorderThickness="1"
+                Margin="0,0,0,4"
+                Height="120">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- ヘッダ：タイトル + クリアボタン -->
+                <Grid Grid.Row="0" Background="#1A1A1A">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="送信ログ"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               VerticalAlignment="Center"
+                               Padding="8,4"/>
+                    <Button Grid.Column="1"
+                            Content="クリア"
+                            Command="{Binding ClearLogCommand}"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="24" Width="60"
+                            Margin="0,2,4,2"
+                            ToolTip="送信ログをすべて消去"/>
+                </Grid>
+
+                <!-- ログ表示 ListBox -->
+                <ListBox x:Name="LogListBox"
+                         Grid.Row="1"
+                         ItemsSource="{Binding LogEntries}"
+                         Background="#0A0A0A"
+                         BorderThickness="0"
+                         FontFamily="Consolas, Courier New, monospace"
+                         FontSize="11"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Loaded="LogListBox_Loaded">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="4,1"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}"
+                                       Foreground="{Binding Color}"
+                                       TextWrapping="NoWrap"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Grid>
         </Border>
 
         <!-- ============ ステータスバー ============ -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Background="#0F0F0F"
                 BorderBrush="{StaticResource AccentAmberBrush}"
                 BorderThickness="0,1,0,0"
