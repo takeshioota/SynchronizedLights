@@ -11,6 +11,14 @@ namespace Lib.Ui.Screens.ViewModels
     /// </summary>
     public partial class SettingViewModel : ObservableObject
     {
+
+        #region イベント
+        /// <summary>
+        /// 接続成功時に発火するイベント
+        /// </summary>
+        public event EventHandler? ConnectedSuccessfully;
+        #endregion イベント
+
         #region フィールド
 
         /// <summary>
@@ -138,19 +146,67 @@ namespace Lib.Ui.Screens.ViewModels
         #region コンストラクタ
 
         /// <summary>
-        /// Setting画面用ViewModelを生成する。
-        /// 概要：ILightingFacadeを受け取り、状態変化イベントを購読し、
-        /// 初期ポート一覧を非同期で取得する。
+        /// 自動接続を実行するか（v2.2 新規）
+        /// 概要：true の場合、起動時に COM ポートを自動検出・自動チェック・自動 Connect する。
+        /// 既定：true（オペレータの手間を最小化）
         /// </summary>
+        public bool AutoConnectOnStartup { get; set; } = true;
+
         public SettingViewModel(ILightingFacade lighting)
         {
             _lighting = lighting;
             _lighting.StatusChanged += OnFacadeStatusChanged;
-            IsConnected = _lighting.IsConnected; 
+            IsConnected = _lighting.IsConnected;
 
-            // 初期ポート読み込み（UI表示ブロックしない）
-            _ = RefreshPortsAsync();
+            // 初期ポート読み込み + 自動選択 + 自動接続
+            _ = StartupAutoConnectFlowAsync();
             LoadStatus();
+        }
+
+        /// <summary>
+        /// 起動時の自動接続フロー
+        /// 概要：
+        ///   ① ポート一覧を自動取得（RefreshPortsAsync）
+        ///   ② 検出された全 COM ポートを自動チェック
+        ///   ③ AutoConnectOnStartup=true なら自動 Connect 実行
+        /// </summary>
+        private async Task StartupAutoConnectFlowAsync()
+        {
+            try
+            {
+                // ① ポート一覧取得
+                await RefreshPortsAsync();
+
+                // 既に接続済みの場合はスキップ
+                if (_lighting.IsConnected) return;
+
+                // ② 検出された全 COM ポートを自動チェック
+                if (Ports.Count == 0)
+                {
+                    SettingStatusMessage = "COM ポートが検出されませんでした。USB 接続をご確認ください。";
+                    return;
+                }
+
+                foreach (var port in Ports)
+                {
+                    port.IsSelected = true;   // 全部チェック
+                }
+
+                SettingStatusMessage = $"検出された {Ports.Count} 個のポートを自動選択しました。";
+
+                // ③ 自動接続（任意）
+                if (AutoConnectOnStartup)
+                {
+                    // 0.5 秒待ってから接続（UI 描画が落ち着くまで）
+                    await Task.Delay(500);
+                    await ConnectAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "StartupAutoConnectFlow failed");
+                SettingStatusMessage = $"自動接続フロー失敗: {ex.Message}";
+            }
         }
 
         #endregion コンストラクタ
@@ -228,12 +284,14 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             IsBusy = true;
+            bool wasSuccess = false;
             try
             {
                 await _lighting.ConnectAsync(selected);
                 SettingStatusMessage = $"接続完了: {string.Join(", ", selected)}";
                 UpdatePortConnectionFlags();
                 LoadStatus();
+                wasSuccess = true;
             }
             catch (Exception ex)
             {
@@ -243,6 +301,12 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 IsConnected = _lighting.IsConnected;
                 IsBusy = false;
+            }
+
+            // 接続成功時はイベント発火（MainWindowViewModel が拾ってシーケンス編集ウィンドウを開く）
+            if (wasSuccess && IsConnected)
+            {
+                ConnectedSuccessfully?.Invoke(this, EventArgs.Empty);
             }
         }
 

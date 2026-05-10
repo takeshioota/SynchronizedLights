@@ -87,7 +87,7 @@ namespace SynchronizedLights.UI.ViewModels
         /// Preset / Mode / Animation / Sequence / Setting の切替に使用する。
         /// </summary>
         [ObservableProperty]
-        private UiCategory currentCategory = UiCategory.Preset;
+        private UiCategory currentCategory = UiCategory.Setting;
 
         /// <summary>
         /// アプリケーション共通状態
@@ -280,15 +280,6 @@ namespace SynchronizedLights.UI.ViewModels
         private string statusMessage = "Ready";
 
         #region カテゴリ
-        /// <summary>
-        /// Presetカテゴリが選択中かどうか
-        /// </summary>
-        public bool IsPresetSelected => CurrentCategory == UiCategory.Preset;
-
-        /// <summary>
-        /// Animationカテゴリが選択中かどうか
-        /// </summary>
-        public bool IsAnimationSelected => CurrentCategory == UiCategory.Animation;
 
         /// <summary>
         /// Settingカテゴリが選択中かどうか
@@ -689,7 +680,24 @@ namespace SynchronizedLights.UI.ViewModels
                 UpdateZoneAvailablePorts(names);
             };
 
+            // 接続成功時にシーケンス編集ウィンドウを自動オープン
+            vm.ConnectedSuccessfully += OnSettingConnected;
             return vm;
+        }
+
+        /// <summary>
+        /// Setting 画面で接続成功 → シーケンス編集ウィンドウ自動オープン
+        /// </summary>
+        private void OnSettingConnected(object? sender, EventArgs e)
+        {
+            // 既に開いていれば前面に
+            if (_sequenceEditorWindow != null && _sequenceEditorWindow.IsLoaded)
+            {
+                _sequenceEditorWindow.Activate();
+                return;
+            }
+            // ShowTimeSeq コマンドを再利用してウィンドウを開く
+            ShowTimeSeq();
         }
 
         /// <summary>
@@ -722,8 +730,6 @@ namespace SynchronizedLights.UI.ViewModels
         /// </summary>
         private void RefreshCategorySelection()
         {
-            OnPropertyChanged(nameof(IsPresetSelected));
-            OnPropertyChanged(nameof(IsAnimationSelected));
             OnPropertyChanged(nameof(IsSettingSelected));
             OnPropertyChanged(nameof(IsTimeSeqSelected));
         }
@@ -1028,19 +1034,6 @@ namespace SynchronizedLights.UI.ViewModels
         #endregion メソッド
 
         #region コマンド
-        /// <summary>
-        /// Preset画面表示コマンド
-        /// 概要：現在の画面カテゴリをPresetに切り替える。
-        /// </summary>
-        [RelayCommand]
-        private void ShowPreset() => CurrentCategory = UiCategory.Preset;
-
-        /// <summary>
-        /// Animation画面表示コマンド
-        /// 概要：現在の画面カテゴリをAnimationに切り替える。
-        /// </summary>
-        [RelayCommand]
-        private void ShowAnimation() => CurrentCategory = UiCategory.Animation;
 
         /// <summary>
         /// Sequence画面表示コマンド
