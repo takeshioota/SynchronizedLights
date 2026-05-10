@@ -123,6 +123,14 @@ public interface ILightingFacade
     Task<(bool IsPlaying, string? Name)> GetSequencePlayStatusAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// 再生状態を詳細取得する（GET /api/sequence/play/status）
+    /// 概要：再生中フラグ + シーケンス名 + 現在ステップ位置 + 総ステップ数を返す。
+    ///       連続再生中の DataGrid ハイライトに使用する。
+    /// </summary>
+    /// <returns>(isPlaying, sequenceName, currentStepIndex, totalStepCount)。未再生時は (false, null, -1, 0)。</returns>
+    Task<(bool IsPlaying, string? Name, int CurrentStepIndex, int TotalStepCount)> GetSequencePlayStatusDetailedAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// API サーバー上のシーケンス名一覧を取得する（GET /api/sequence）
     /// </summary>
     Task<IReadOnlyList<string>> ListSequenceNamesAsync(CancellationToken ct = default);

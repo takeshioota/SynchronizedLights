@@ -769,15 +769,25 @@ namespace Lib.Application.Facades
         public async Task<(bool IsPlaying, string? Name)> GetSequencePlayStatusAsync(
             CancellationToken ct = default)
         {
+            var (playing, name, _, _) = await GetSequencePlayStatusDetailedAsync(ct);
+            return (playing, name);
+        }
+
+        /// <summary>
+        /// 再生状態取得（詳細版）：再生中フラグ + 名前 + 現在ステップ位置 + 総ステップ数
+        /// </summary>
+        public async Task<(bool IsPlaying, string? Name, int CurrentStepIndex, int TotalStepCount)>
+            GetSequencePlayStatusDetailedAsync(CancellationToken ct = default)
+        {
             try
             {
                 using var response = await _httpClient.GetAsync("api/sequence/play/status", ct);
-                if (!response.IsSuccessStatusCode) return (false, null);
+                if (!response.IsSuccessStatusCode) return (false, null, -1, 0);
 
                 using var stream = await response.Content.ReadAsStreamAsync(ct);
                 using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
-                if (!doc.RootElement.TryGetProperty("data", out var data)) return (false, null);
+                if (!doc.RootElement.TryGetProperty("data", out var data)) return (false, null, -1, 0);
 
                 var isPlaying = data.TryGetProperty("isPlaying", out var ip) && ip.GetBoolean();
                 string? name = null;
@@ -785,12 +795,25 @@ namespace Lib.Application.Facades
                 {
                     name = n.GetString();
                 }
-                return (isPlaying, name);
+
+                int currentStepIndex = -1;
+                if (data.TryGetProperty("currentStepIndex", out var cs) && cs.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    currentStepIndex = cs.GetInt32();
+                }
+
+                int totalStepCount = 0;
+                if (data.TryGetProperty("totalStepCount", out var ts) && ts.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    totalStepCount = ts.GetInt32();
+                }
+
+                return (isPlaying, name, currentStepIndex, totalStepCount);
             }
             catch (Exception ex)
             {
-                Log.Debug("[Api] GetSequencePlayStatus failed: {Err}", ex.Message);
-                return (false, null);
+                Log.Debug("[Api] GetSequencePlayStatusDetailed failed: {Err}", ex.Message);
+                return (false, null, -1, 0);
             }
         }
 

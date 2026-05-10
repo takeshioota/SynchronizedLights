@@ -448,6 +448,16 @@ namespace Lib.Application.Facades
         }
 
         /// <summary>
+        /// 再生状態取得（詳細版・Dummy 疑似実装）
+        /// 概要：再生中フラグ + 名前のみ返し、ステップ位置は常に -1（Dummy はステップ追跡しない）
+        /// </summary>
+        public Task<(bool IsPlaying, string? Name, int CurrentStepIndex, int TotalStepCount)>
+            GetSequencePlayStatusDetailedAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult((_dummyPlayingSequence != null, _dummyPlayingSequence, -1, 0));
+        }
+
+        /// <summary>
         /// 登録済みシーケンス名一覧（Dummy 疑似実装）
         /// </summary>
         public Task<IReadOnlyList<string>> ListSequenceNamesAsync(CancellationToken ct = default)

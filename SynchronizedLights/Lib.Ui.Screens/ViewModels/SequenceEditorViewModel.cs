@@ -755,19 +755,57 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>停止中のポーリング間隔（軽量）</summary>
+        private static readonly TimeSpan PollIntervalIdle = TimeSpan.FromMilliseconds(1500);
+
+        /// <summary>連続再生中のポーリング間隔（高頻度・ハイライト追従用）</summary>
+        private static readonly TimeSpan PollIntervalPlaying = TimeSpan.FromMilliseconds(200);
+
         private async Task PollStatusAsync()
         {
             if (_lighting == null) return;
             try
             {
-                var (playing, name) = await _lighting.GetSequencePlayStatusAsync();
+                var (playing, name, currentIdx, _) = await _lighting.GetSequencePlayStatusDetailedAsync();
                 IsPlaying = playing;
                 PlayingSequenceName = name;
+
+                // 連続再生中の行ハイライト：currentIdx に一致する行のみ true、他は false
+                UpdatePlayingStepHighlight(playing ? currentIdx : -1);
+
+                // 再生中は高頻度、停止中は通常頻度に切替
+                AdjustPollingInterval(playing);
             }
             catch
             {
                 IsPlaying = false;
                 PlayingSequenceName = null;
+                UpdatePlayingStepHighlight(-1);
+                AdjustPollingInterval(false);
+            }
+        }
+
+        /// <summary>
+        /// 連続再生中の行ハイライトを更新
+        /// </summary>
+        private void UpdatePlayingStepHighlight(int currentIndex)
+        {
+            for (int i = 0; i < EditingSteps.Count; i++)
+            {
+                EditingSteps[i].IsCurrentlyPlaying = (i == currentIndex);
+            }
+        }
+
+        /// <summary>
+        /// ポーリング間隔を再生状態に応じて切替（再生中=200ms / 停止中=1500ms）
+        /// </summary>
+        private void AdjustPollingInterval(bool playing)
+        {
+            if (_statusTimer == null) return;
+            var desired = playing ? PollIntervalPlaying : PollIntervalIdle;
+            if (_statusTimer.Interval != desired)
+            {
+                _statusTimer.Interval = desired;
             }
         }
 

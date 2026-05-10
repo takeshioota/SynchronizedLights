@@ -114,6 +114,12 @@
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{StaticResource ButtonSelectedBorderBrush}"/>
                 </Trigger>
+                <!-- 連続再生中の現在ステップを強調表示（緑色 + 太枠） -->
+                <DataTrigger Binding="{Binding IsCurrentlyPlaying}" Value="True">
+                    <Setter Property="Background" Value="#1B5E20"/>
+                    <Setter Property="BorderBrush" Value="#7CFF7C"/>
+                    <Setter Property="BorderThickness" Value="0,2,0,2"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style x:Key="GrandMaDataGridStyle" TargetType="DataGrid">

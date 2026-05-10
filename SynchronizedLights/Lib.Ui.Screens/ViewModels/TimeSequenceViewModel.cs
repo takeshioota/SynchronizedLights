@@ -577,6 +577,14 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private string note = "";
 
+        /// <summary>
+        /// 連続再生中の現在ステップかどうか（DataGrid のハイライト表示に使用）
+        /// 概要：API 側の play status から取得した currentStepIndex に該当する行で true。
+        ///       永続化対象外（[JsonIgnore] 相当だが、ToModel に含めないことで JSON 出力されない）。
+        /// </summary>
+        [ObservableProperty]
+        private bool isCurrentlyPlaying;
+
         /// <summary>永続化用 SequenceStep に変換</summary>
         public SequenceStep ToModel()
         {
