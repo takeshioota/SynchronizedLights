@@ -116,15 +116,6 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private ActionPresetItem? selectedActionPreset;
 
-        [ObservableProperty]
-        private double newStepTimeSec = 0.0;
-
-        [ObservableProperty]
-        private double newStepDurationSec = 1.0;
-
-        [ObservableProperty]
-        private string newStepNote = "";
-
         #endregion
 
         #region プロパティ：API 連携
@@ -278,102 +269,137 @@ namespace Lib.Ui.Screens.ViewModels
 
         #region コマンド：プリセット選択
 
+        /// <summary>
+        /// 色プリセットボタン押下：選択中の行に色を反映する（CommandType は変更しない）
+        /// </summary>
         [RelayCommand]
         private void SelectColorPreset(ColorPresetItem? item)
         {
             if (item == null) return;
             SelectedColorPreset = item;
             foreach (var p in ColorPresets) p.IsSelected = p == item;
+
+            if (SelectedStep == null)
+            {
+                StatusMessage = "色を反映する行を先に選択してください。";
+                return;
+            }
+
+            SelectedStep.ColorR = item.R;
+            SelectedStep.ColorG = item.G;
+            SelectedStep.ColorB = item.B;
+            StatusMessage = $"色を反映：{item.Name}（{item.R}, {item.G}, {item.B}）";
         }
 
+        /// <summary>
+        /// 動作プリセットボタン押下：選択中の行のコマンド種別を確定し、続けて空行を自動挿入する
+        /// </summary>
         [RelayCommand]
         private void SelectActionPreset(ActionPresetItem? item)
         {
             if (item == null) return;
             SelectedActionPreset = item;
             foreach (var p in ActionPresets) p.IsSelected = p == item;
+
+            if (SelectedStep == null)
+            {
+                StatusMessage = "動作を反映する行を先に選択してください。";
+                return;
+            }
+
+            var (cmdType, effType) = MapActionToCommand(item.Command);
+            SelectedStep.CommandType = cmdType;
+            SelectedStep.EffectType = effType ?? "";
+
+            // Effect の場合は周期・Fade のデフォルト値を補完
+            if (cmdType == "Effect")
+            {
+                if (SelectedStep.EffectCycleDurationMs <= 0)
+                {
+                    SelectedStep.EffectCycleDurationMs = 1000;
+                }
+                if (SelectedStep.FadeSteps <= 0)
+                {
+                    SelectedStep.FadeSteps = 20;
+                }
+            }
+
+            StatusMessage = $"動作を確定：{item.DisplayName} → 次の空行を自動挿入";
+
+            // 連続入力のため次の空行を自動挿入する
+            AddEmptyStep();
         }
 
         /// <summary>
-        /// プリセットの内容で新規ステップを追加（v2.1：選択行の直後に挿入）
+        /// プリセットボタンの動作名を内部モデル（CommandType + EffectType）に変換
+        /// </summary>
+        private static (string CommandType, string? EffectType) MapActionToCommand(string? presetCommand)
+        {
+            return presetCommand switch
+            {
+                "SetColor" => ("Color", null),
+                "Off" => ("Off", null),
+                "Flash" => ("Effect", "Flash"),
+                "FadeIn" => ("Effect", "FadeIn"),
+                "FadeOut" => ("Effect", "FadeOut"),
+                "Breath" => ("Effect", "Breathing"),
+                "SevenColor" => ("Effect", "SevenColor"),
+                _ => ("Color", null),
+            };
+        }
+
+        /// <summary>
+        /// 選択中の行の直後に空行を 1 行挿入する
+        /// 概要：時刻は直前行 + 1000ms、コマンドは Color、色は白、エフェクト関連は未指定。
+        ///       挿入後はその空行が選択状態となり、ユーザーが色や動作を選んで埋めていくワークフロー。
         /// </summary>
         [RelayCommand]
-        private void AddStepFromPreset()
+        private void AddEmptyStep()
         {
             if (_editingSequence == null)
             {
                 StatusMessage = "シーケンスを選択するか新規作成してください。";
                 return;
             }
-            if (SelectedColorPreset == null || SelectedActionPreset == null)
-            {
-                StatusMessage = "色と動作を選択してください。";
-                return;
-            }
 
-            // ① 旧プリセット名を新モデル（CommandType + EffectType）にマップ
-            string commandType = "Color";
-            string? effectType = null;
-            switch (SelectedActionPreset.Command)
-            {
-                case "SetColor": commandType = "Color"; effectType = null; break;
-                case "Off": commandType = "Off"; effectType = null; break;
-                case "Flash": commandType = "Effect"; effectType = "Flash"; break;
-                case "FadeIn": commandType = "Effect"; effectType = "FadeIn"; break;
-                case "FadeOut": commandType = "Effect"; effectType = "FadeOut"; break;
-                case "Breath": commandType = "Effect"; effectType = "Breathing"; break;
-                case "SevenColor": commandType = "Effect"; effectType = "SevenColor"; break;
-                default: commandType = "Color"; effectType = null; break;
-            }
-
-            // ② 所要時間（ms）を計算
-            int durationMsLocal = (int)Math.Max(0, Math.Round(NewStepDurationSec * 1000));
-
-            // ③ Effect 時のみ EffectCycleDurationMs / FadeSteps を設定（型は明示的に int? でキャスト）
-            int? effectCycle = (commandType == "Effect" && durationMsLocal > 0)
-                ? (int?)durationMsLocal
-                : null;
-            int? fadeStepsLocal = (commandType == "Effect" && durationMsLocal > 0)
-                ? (int?)Math.Max(1, durationMsLocal / 50)
-                : null;
-
-            var step = new SequenceStep
-            {
-                TimeMs = (int)Math.Max(0, Math.Round(NewStepTimeSec * 1000)),
-                CommandType = commandType,
-                EffectType = effectType,
-                ColorR = SelectedColorPreset.R,
-                ColorG = SelectedColorPreset.G,
-                ColorB = SelectedColorPreset.B,
-                EffectCycleDurationMs = effectCycle,
-                FadeSteps = fadeStepsLocal,
-                RetransmitCount = 3,
-                Note = NewStepNote ?? ""
-            };
-            var wrapper = new SequenceStepWrapper(step);
-
-            // 選択中の行があればその直後に挿入、なければ末尾に追加
             int insertIndex;
+            int newTimeMs;
             if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
             {
                 insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
+                newTimeMs = SelectedStep.TimeMs + 1000;
+            }
+            else if (EditingSteps.Count > 0)
+            {
+                insertIndex = EditingSteps.Count;
+                newTimeMs = EditingSteps.Last().TimeMs + 1000;
             }
             else
             {
-                insertIndex = EditingSteps.Count;
+                insertIndex = 0;
+                newTimeMs = 0;
             }
+
+            var step = new SequenceStep
+            {
+                TimeMs = newTimeMs,
+                CommandType = "Color",
+                EffectType = null,
+                ColorR = 255,
+                ColorG = 255,
+                ColorB = 255,
+                EffectCycleDurationMs = null,
+                FadeSteps = null,
+                RetransmitCount = 3,
+                Note = ""
+            };
+            var wrapper = new SequenceStepWrapper(step);
             EditingSteps.Insert(insertIndex, wrapper);
 
-            // 追加された行を選択状態に
             SelectedStep = wrapper;
             CurrentStepIndex = insertIndex;
-
             OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"追加：{SelectedActionPreset.DisplayName} / {SelectedColorPreset.Name}（位置 {insertIndex + 1}）";
-
-            // 次回追加用に時刻と所要時間を進める（連続追加時の利便性）
-            NewStepTimeSec = (step.TimeMs + (step.EffectCycleDurationMs ?? 0)) / 1000.0;
-            NewStepNote = "";
+            StatusMessage = $"空行を挿入（位置 {insertIndex + 1}）。色や動作のボタンをクリックして内容を確定してください。";
         }
 
         /// <summary>

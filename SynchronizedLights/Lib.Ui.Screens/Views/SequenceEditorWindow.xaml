@@ -493,51 +493,34 @@
                     </ItemsControl>
                 </Grid>
 
-                <!-- Save (追加) コントロール -->
+                <!-- 操作行：空行追加 / 行削除 + 操作ガイド -->
                 <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="入力:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Column="0" Text="操作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="時刻(秒):" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <TextBox Width="80"
-                                 Text="{Binding NewStepTimeSec, StringFormat={}{0:F2}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Style="{StaticResource GrandMaTextBoxStyle}"
-                                 HorizontalContentAlignment="Right"
-                                 Padding="6,2"
-                                 MinHeight="28"/>
-                        <TextBlock Text="所要(秒):" VerticalAlignment="Center" Margin="8,0,4,0"/>
-                        <TextBox Width="80"
-                                 Text="{Binding NewStepDurationSec, StringFormat={}{0:F2}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Style="{StaticResource GrandMaTextBoxStyle}"
-                                 HorizontalContentAlignment="Right"
-                                 Padding="6,2"
-                                 MinHeight="28"/>
-                        <TextBlock Text="メモ:" VerticalAlignment="Center" Margin="8,0,4,0"/>
-                        <TextBox Width="240"
-                                 Text="{Binding NewStepNote, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Style="{StaticResource GrandMaTextBoxStyle}"
-                                 Padding="6,2"
-                                 MinHeight="28"/>
-                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="「+ 追加」で空行挿入 → 上の色/動作ボタンで内容を確定（動作確定で次の空行が自動挿入されます）"
+                               VerticalAlignment="Center"
+                               Foreground="#888888"
+                               FontStyle="Italic"
+                               TextWrapping="Wrap"
+                               Margin="0,0,8,0"/>
 
-                    <!-- Save (追加) 大きめボタン + 行削除 -->
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="➕ Save (追加)"
-                                Command="{Binding AddStepFromPresetCommand}"
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="+ 追加"
+                                Command="{Binding AddEmptyStepCommand}"
                                 IsEnabled="{Binding HasSelectedSequence}"
                                 Style="{StaticResource GrandMaSelectableButtonStyle}"
                                 Tag="True"
-                                MinHeight="36" Width="160"
+                                MinHeight="36" Width="120"
                                 FontWeight="Bold"
                                 FontSize="14"
-                                Margin="8,0,4,0"
-                                ToolTip="選択中の行の直後に新規ステップを追加します"/>
+                                Margin="0,0,4,0"
+                                ToolTip="選択中の行の直後に空行を挿入します"/>
                         <Button Content="行削除"
                                 Command="{Binding RemoveStepCommand}"
                                 IsEnabled="{Binding HasSelectedSequence}"
