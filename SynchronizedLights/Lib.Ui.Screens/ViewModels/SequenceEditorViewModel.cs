@@ -619,6 +619,53 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>
+        /// シーケンス一覧を再読込（左ペインの「更新」ボタンから呼ばれる）
+        /// </summary>
+        [RelayCommand]
+        private void RefreshList()
+        {
+            var currentId = SelectedSequence?.Id;
+            ReloadSequences();
+            if (!string.IsNullOrEmpty(currentId))
+            {
+                SelectedSequence = Sequences.FirstOrDefault(s => s.Id == currentId);
+            }
+            StatusMessage = $"一覧を更新しました（{Sequences.Count} 件）。";
+        }
+
+        /// <summary>
+        /// 記録中かどうか（記録開始ボタンの表記切替に使用）
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RecordButtonText))]
+        private bool isRecording;
+
+        /// <summary>
+        /// 記録ボタンの表示テキスト（記録中は「■ 記録停止」）
+        /// </summary>
+        public string RecordButtonText => IsRecording ? "■ 記録停止" : "● 記録開始";
+
+        /// <summary>
+        /// 記録の開始/停止トグル
+        /// 概要：操作した色変更や Effect コマンドを順次シーケンスとして記録する。
+        ///       本格的な記録ロジックは別 Phase で実装予定（API の record/start, record/stop を利用）。
+        /// </summary>
+        [RelayCommand]
+        private void ToggleRecording()
+        {
+            if (!IsRecording)
+            {
+                IsRecording = true;
+                StatusMessage = "記録機能は別 Phase で実装予定です（ボタン状態のみ切替）。";
+            }
+            else
+            {
+                IsRecording = false;
+                StatusMessage = "記録停止しました。";
+            }
+        }
+
         #endregion
 
         #region 内部メソッド
