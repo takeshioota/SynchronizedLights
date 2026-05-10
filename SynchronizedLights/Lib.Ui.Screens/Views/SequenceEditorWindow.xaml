@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         mc:Ignorable="d"
         Title="シーケンス編集"
         Width="1280"
@@ -25,6 +25,22 @@
             <sys:String>Flash</sys:String>
             <sys:String>Breath</sys:String>
             <sys:String>Off</sys:String>
+            <sys:String>SevenColor</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="CommandTypeOptions" Type="sys:String">
+            <sys:String>Color</sys:String>
+            <sys:String>Off</sys:String>
+            <sys:String>Effect</sys:String>
+            <sys:String>EffectStop</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="EffectTypeOptions" Type="sys:String">
+            <x:Static Member="sys:String.Empty"/>
+            <sys:String>Flash</sys:String>
+            <sys:String>FadeIn</sys:String>
+            <sys:String>FadeOut</sys:String>
+            <sys:String>Breathing</sys:String>
             <sys:String>SevenColor</sys:String>
         </x:Array>
 
@@ -142,11 +158,11 @@
                 Style="{StaticResource GrandMaPanelBorderStyle}"
                 Padding="8,4" Margin="0,0,0,4">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="シーケンス："
+                <TextBlock Text="一覧："
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
                            Margin="0,0,8,0"/>
-                <ComboBox Width="280"
+                <ComboBox Width="220"
                           ItemsSource="{Binding Sequences}"
                           SelectedItem="{Binding SelectedSequence, Mode=TwoWay}"
                           DisplayMemberPath="Name"
@@ -162,9 +178,27 @@
                         IsEnabled="{Binding HasSelectedSequence}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinHeight="30" Width="70"
-                        Margin="0,0,16,0"/>
+                        Margin="0,0,12,0"/>
 
-                <Separator Width="1" Background="#444" Margin="0,4,16,4"/>
+                <Separator Width="1" Background="#444" Margin="0,4,12,4"/>
+
+                <!-- v2.2 新規：シーケンス名 編集 TextBox -->
+                <TextBlock Text="名前："
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="0,0,4,0"/>
+                <TextBox Width="220"
+                         Text="{Binding EditingName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         IsEnabled="{Binding HasSelectedSequence}"
+                         Style="{StaticResource GrandMaTextBoxStyle}"
+                         VerticalAlignment="Center"
+                         VerticalContentAlignment="Center"
+                         Padding="6,2"
+                         MinHeight="30"
+                         Margin="0,0,12,0"
+                         ToolTip="シーケンス名を編集して「保存」を押すと名称が変更されます"/>
+
+                <Separator Width="1" Background="#444" Margin="0,4,12,4"/>
 
                 <Button Content="編集破棄"
                         Command="{Binding DiscardChangesCommand}"
@@ -239,22 +273,49 @@
                   IsEnabled="{Binding HasSelectedSequence}"
                   Margin="0,0,0,4">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="時刻(秒)"
-                                    Binding="{Binding TimeSec, StringFormat={}{0:F2}}"
-                                    Width="80"/>
+                <DataGridTextColumn Header="開始(ms)"
+		                          Binding="{Binding TimeMs, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="80"/>
+
+                <DataGridTextColumn Header="(秒)"
+		                          Binding="{Binding TimeSec, StringFormat={}{0:F1}s, Mode=OneWay}"
+		                          Width="60" IsReadOnly="True"/>
+
                 <DataGridComboBoxColumn Header="コマンド"
-                                        ItemsSource="{StaticResource CommandOptions}"
-                                        SelectedValueBinding="{Binding Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                        Width="110"/>
-                <DataGridTextColumn Header="R" Binding="{Binding ColorR}" Width="50"/>
-                <DataGridTextColumn Header="G" Binding="{Binding ColorG}" Width="50"/>
-                <DataGridTextColumn Header="B" Binding="{Binding ColorB}" Width="50"/>
-                <DataGridTextColumn Header="所要(秒)"
-                                    Binding="{Binding DurationSec, StringFormat={}{0:F2}}"
-                                    Width="80"/>
-                <DataGridTextColumn Header="再送" Binding="{Binding RetransmitCount}" Width="50"/>
-                <DataGridTextColumn Header="補間(ms)" Binding="{Binding InterpolationIntervalMs}" Width="80"/>
-                <DataGridTextColumn Header="メモ" Binding="{Binding Note}" Width="*"/>
+		                              ItemsSource="{StaticResource CommandTypeOptions}"
+		                              SelectedValueBinding="{Binding CommandType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+		                              Width="100"/>
+
+                <DataGridTextColumn Header="R"
+		                          Binding="{Binding ColorR, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="50"/>
+                <DataGridTextColumn Header="G"
+		                          Binding="{Binding ColorG, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="50"/>
+                <DataGridTextColumn Header="B"
+		                          Binding="{Binding ColorB, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="50"/>
+
+                <DataGridTextColumn Header="再送"
+		                          Binding="{Binding RetransmitCount, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="50"/>
+
+                <DataGridComboBoxColumn Header="エフェクト"
+		                              ItemsSource="{StaticResource EffectTypeOptions}"
+		                              SelectedValueBinding="{Binding EffectType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+		                              Width="100"/>
+
+                <DataGridTextColumn Header="周期(ms)"
+		                          Binding="{Binding EffectCycleDurationMs, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="80"/>
+
+                <DataGridTextColumn Header="Fade"
+		                          Binding="{Binding FadeSteps, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="60"/>
+
+                <DataGridTextColumn Header="メモ"
+		                          Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="*"/>
             </DataGrid.Columns>
         </DataGrid>
 

@@ -1,13 +1,19 @@
 ﻿using System;
+using System.Text.Json.Serialization;
 
 namespace Lib.Application.Models
 {
     /// <summary>
     /// 時間ベースシーケンスの 1 ステップを表す
-    /// 構造：[シーケンス] ├ 時刻 ├ コマンド ├ 再送回数 ├ 補間設定
+    /// 構造：[シーケンス] ├ 時刻 ├ CommandType + EffectType ├ RGB ├ サイクル時間 / Fade ステップ ├ 再送回数 ├ メモ
     /// </summary>
+    /// <remarks>
+    /// API 仕様書 v20260510 で SequenceCommandType が 4 値化されたことを受け、
+    /// 内部モデルも CommandType + EffectType の 2 軸構造に変更。
+    /// </remarks>
     public class SequenceStep
     {
+
         /// <summary>
         /// 開始時刻（ミリ秒）— シーケンス開始からの相対時刻
         /// 例：0 = 開始直後、1000 = 1秒後、3000 = 3秒後
@@ -15,20 +21,18 @@ namespace Lib.Application.Models
         public int TimeMs { get; set; } = 0;
 
         /// <summary>
-        /// コマンド種別
-        /// 概要：実行する動作の種類を文字列で指定（Enumではなく文字列で永続化に強くする）。
-        ///       仕様書の例に基づくサポート値：
-        ///         "SetColor"  - 色変更（RGB指定）
-        ///         "FadeIn"    - フェードイン開始（DurationMs指定）
-        ///         "FadeOut"   - フェードアウト開始（DurationMs指定）
-        ///         "Flash"     - 単発フラッシュ
-        ///         "Breath"    - ブレス開始（DurationMs指定）
-        ///         "Off"       - 全体消灯
-        ///         "SevenColor"- 7色変化開始（DurationMs指定。1色あたり）
+        /// コマンドタイプ（API v20260510）
+        /// 値： "Color" / "Off" / "Effect" / "EffectStop"
         /// </summary>
-        public string Command { get; set; } = "SetColor";
+        public string CommandType { get; set; } = "Color";
 
-        /// <summary>色 R（0〜255）— Command が SetColor / Fade* / Flash / Breath 等のときに使用</summary>
+        /// <summary>
+        /// エフェクト種別（CommandType="Effect" 時のみ有効、それ以外は null）
+        /// 値： "Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor" / null
+        /// </summary>
+        public string? EffectType { get; set; } = null;
+
+        /// <summary>色 R（0〜255）</summary>
         public byte ColorR { get; set; } = 255;
 
         /// <summary>色 G（0〜255）</summary>
@@ -38,24 +42,22 @@ namespace Lib.Application.Models
         public byte ColorB { get; set; } = 255;
 
         /// <summary>
-        /// 演出所要時間（ミリ秒）— Fade / Breath 等で使用
-        /// 概要：SetColor / Off / Flash では無視される。Fade* / Breath では総時間として使用。
+        /// エフェクト サイクル時間（ms）— Effect コマンド時のみ意味を持つ
+        /// 例：Breathing で 3000 = 3 秒で 1 周期
         /// </summary>
-        public int DurationMs { get; set; } = 1000;
+        public int? EffectCycleDurationMs { get; set; } = null;
+
+        /// <summary>
+        /// フェードステップ数 — Effect コマンド時のみ意味を持つ
+        /// 例：FadeIn / FadeOut / Breathing で 20 = 20 段階の補間
+        /// </summary>
+        public int? FadeSteps { get; set; } = null;
 
         /// <summary>
         /// 再送回数（仕様書: 3〜5回）
         /// 概要：このステップ送信時に同一コマンドを何回繰り返すか。1なら再送なし。
-        ///       SendOptions.RetransmitCount として API に渡す。
         /// </summary>
         public int RetransmitCount { get; set; } = 3;
-
-        /// <summary>
-        /// 補間ステップ間隔（ミリ秒、20〜100）
-        /// 概要：Fade / Breath 等で「コマンド間の間隔」。FAB様回答の最速 20ms を最小値とする。
-        ///       SetColor / Off / Flash では使用されない（無視）。
-        /// </summary>
-        public int InterpolationIntervalMs { get; set; } = 50;
 
         /// <summary>
         /// メモ・コメント（任意）
@@ -64,14 +66,83 @@ namespace Lib.Application.Models
         public string Note { get; set; } = "";
 
         /// <summary>
-        /// 補間ステップ数の計算ヘルパー
-        /// 概要：DurationMs ÷ InterpolationIntervalMs（最低 1）
-        ///       例：1000ms / 50ms = 20 ステップ
+        /// 読み込み時は自動的に新モデルへマイグレートする。
         /// </summary>
-        public int CalculateInterpolationSteps()
+        [JsonPropertyName("Command")]
+        public string? Command
         {
-            if (InterpolationIntervalMs <= 0) return 1;
-            return Math.Max(1, DurationMs / InterpolationIntervalMs);
+            get => null;   // 出力時は出さない（新形式優先）
+            set
+            {
+                if (value == null) return;
+                switch (value)
+                {
+                    case "SetColor": CommandType = "Color"; EffectType = null; break;
+                    case "Off": CommandType = "Off"; EffectType = null; break;
+                    case "Flash": CommandType = "Effect"; EffectType = "Flash"; break;
+                    case "FadeIn": CommandType = "Effect"; EffectType = "FadeIn"; break;
+                    case "FadeOut": CommandType = "Effect"; EffectType = "FadeOut"; break;
+                    case "Breath": CommandType = "Effect"; EffectType = "Breathing"; break;
+                    case "SevenColor": CommandType = "Effect"; EffectType = "SevenColor"; break;
+                    default: CommandType = "Color"; EffectType = null; break;
+                }
+            }
         }
+
+        /// <summary>
+        /// 旧 DurationMs プロパティ。
+        /// <see cref="EffectCycleDurationMs"/> を使用。
+        /// </summary>
+        [JsonPropertyName("DurationMs")]
+        public int? DurationMs
+        {
+            get => null;
+            set
+            {
+                if (value.HasValue && value.Value > 0)
+                {
+                    // CommandType が Effect の場合のみ意味を持つが、
+                    // JSON 読込順序によっては Command より先に DurationMs が来る可能性があるため、
+                    // 値は素直に EffectCycleDurationMs に格納する。
+                    EffectCycleDurationMs = value.Value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 旧 InterpolationIntervalMs プロパティ。
+        /// <see cref="FadeSteps"/> を使用（FadeSteps = DurationMs / InterpolationIntervalMs）。
+        /// </summary>
+        [JsonPropertyName("InterpolationIntervalMs")]
+        public int? InterpolationIntervalMs
+        {
+            get => null;
+            set
+            {
+                // 旧データに InterpolationIntervalMs があれば、FadeSteps を計算して反映
+                if (value.HasValue && value.Value > 0 && EffectCycleDurationMs.HasValue)
+                {
+                    FadeSteps = Math.Max(1, EffectCycleDurationMs.Value / value.Value);
+                }
+            }
+        }
+
+        // ─── ヘルパーメソッド ───────────────────────────────────────────────
+
+        /// <summary>このステップが Effect コマンドかどうか</summary>
+        [JsonIgnore]
+        public bool IsEffect => CommandType == "Effect";
+
+        /// <summary>API 送信用：FadeSteps が未設定なら既定値（20）を返す</summary>
+        public int GetFadeStepsOrDefault() => FadeSteps ?? 20;
+
+        /// <summary>API 送信用：EffectCycleDurationMs が未設定なら既定値（1000）を返す</summary>
+        public int GetEffectCycleDurationOrDefault() => EffectCycleDurationMs ?? 1000;
+
+        /// <summary>
+        /// [互換] 補間ステップ数の計算ヘルパー（旧 API 互換）。
+        /// 新モデルでは <see cref="GetFadeStepsOrDefault"/> を推奨。
+        /// </summary>
+        public int CalculateInterpolationSteps() => GetFadeStepsOrDefault();
     }
 }

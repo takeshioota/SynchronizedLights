@@ -1,17 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lib.Application.Interfaces;
 using Lib.Application.Models;
 using Lib.Application.Services;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Data;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Threading;
 
 namespace Lib.Ui.Screens.ViewModels
 {
@@ -364,11 +365,12 @@ namespace Lib.Ui.Screens.ViewModels
                 var a = _editingSequence.Steps[i];
                 var b = EditingSteps[i];
                 if (a.TimeMs != b.TimeMs) return true;
-                if (a.Command != b.Command) return true;
+                if (a.CommandType != b.CommandType) return true;
+                if ((a.EffectType ?? "") != (b.EffectType ?? "")) return true;
                 if (a.ColorR != b.ColorR || a.ColorG != b.ColorG || a.ColorB != b.ColorB) return true;
-                if (a.DurationMs != b.DurationMs) return true;
+                if ((a.EffectCycleDurationMs ?? 0) != b.EffectCycleDurationMs) return true;
+                if ((a.FadeSteps ?? 0) != b.FadeSteps) return true;
                 if (a.RetransmitCount != b.RetransmitCount) return true;
-                if (a.InterpolationIntervalMs != b.InterpolationIntervalMs) return true;
             }
             return false;
         }
@@ -394,13 +396,14 @@ namespace Lib.Ui.Screens.ViewModels
             var step = new SequenceStep
             {
                 TimeMs = lastTimeMs + 1000,
-                Command = "SetColor",
+                CommandType = "Color",
+                EffectType = null,
                 ColorR = 255,
                 ColorG = 255,
                 ColorB = 255,
-                DurationMs = 1000,
+                EffectCycleDurationMs = null,
+                FadeSteps = null,
                 RetransmitCount = 3,
-                InterpolationIntervalMs = 50,
                 Note = ""
             };
             EditingSteps.Add(new SequenceStepWrapper(step));
@@ -465,33 +468,34 @@ namespace Lib.Ui.Screens.ViewModels
         #endregion
     }
 
-
     /// <summary>
     /// SequenceStep の DataGrid 編集用ラッパー
-    /// 概要：内部単位（ms, byte）を UI 表示用（秒、int）に変換しつつ INotifyPropertyChanged を提供。
+    /// 概要：CommandType + EffectType の 2 軸構造に対応。
     ///       ToModel() で永続化用 SequenceStep に戻す。
     /// </summary>
     public partial class SequenceStepWrapper : ObservableObject
     {
         private int _timeMs;
-        private int _durationMs;
+        private int _effectCycleDurationMs;
+        private int _fadeSteps;
 
         public SequenceStepWrapper() { }
 
         public SequenceStepWrapper(SequenceStep src)
         {
             _timeMs = src.TimeMs;
-            _durationMs = src.DurationMs;
-            command = src.Command;
+            commandType = string.IsNullOrEmpty(src.CommandType) ? "Color" : src.CommandType;
+            effectType = src.EffectType ?? "";
             colorR = src.ColorR;
             colorG = src.ColorG;
             colorB = src.ColorB;
+            _effectCycleDurationMs = src.EffectCycleDurationMs ?? 0;
+            _fadeSteps = src.FadeSteps ?? 0;
             retransmitCount = src.RetransmitCount;
-            interpolationIntervalMs = src.InterpolationIntervalMs;
-            note = src.Note;
+            note = src.Note ?? "";
         }
 
-        /// <summary>時刻（ミリ秒）— 内部値</summary>
+        /// <summary>開始時刻（ms）— 内部値</summary>
         public int TimeMs
         {
             get => _timeMs;
@@ -506,7 +510,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
-        /// <summary>時刻（秒、UI表示用）</summary>
+        /// <summary>開始時刻（秒、UI表示用）</summary>
         public double TimeSec
         {
             get => _timeMs / 1000.0;
@@ -522,8 +526,13 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>コマンド種別："Color" / "Off" / "Effect" / "EffectStop"</summary>
         [ObservableProperty]
-        private string command = "SetColor";
+        private string commandType = "Color";
+
+        /// <summary>エフェクト種別："Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor" / ""</summary>
+        [ObservableProperty]
+        private string effectType = "";
 
         [ObservableProperty]
         private byte colorR = 255;
@@ -534,42 +543,36 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private byte colorB = 255;
 
-        /// <summary>所要時間（ミリ秒）— 内部値</summary>
-        public int DurationMs
+        /// <summary>エフェクトサイクル時間（ms）— Effect 時のみ意味を持つ</summary>
+        public int EffectCycleDurationMs
         {
-            get => _durationMs;
+            get => _effectCycleDurationMs;
             set
             {
-                if (_durationMs != value)
+                if (_effectCycleDurationMs != value)
                 {
-                    _durationMs = Math.Max(0, value);
+                    _effectCycleDurationMs = Math.Max(0, value);
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(DurationSec));
                 }
             }
         }
 
-        /// <summary>所要時間（秒、UI表示用）</summary>
-        public double DurationSec
+        /// <summary>Fade ステップ数 — Effect 時のみ意味を持つ</summary>
+        public int FadeSteps
         {
-            get => _durationMs / 1000.0;
+            get => _fadeSteps;
             set
             {
-                var ms = (int)Math.Max(0, Math.Round(value * 1000));
-                if (_durationMs != ms)
+                if (_fadeSteps != value)
                 {
-                    _durationMs = ms;
+                    _fadeSteps = Math.Max(0, value);
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(DurationMs));
                 }
             }
         }
 
         [ObservableProperty]
         private int retransmitCount = 3;
-
-        [ObservableProperty]
-        private int interpolationIntervalMs = 50;
 
         [ObservableProperty]
         private string note = "";
@@ -580,15 +583,21 @@ namespace Lib.Ui.Screens.ViewModels
             return new SequenceStep
             {
                 TimeMs = TimeMs,
-                Command = Command ?? "SetColor",
+                CommandType = string.IsNullOrEmpty(CommandType) ? "Color" : CommandType,
+                EffectType = string.IsNullOrEmpty(EffectType) ? null : EffectType,
                 ColorR = ColorR,
                 ColorG = ColorG,
                 ColorB = ColorB,
-                DurationMs = DurationMs,
+                EffectCycleDurationMs = (CommandType == "Effect" && EffectCycleDurationMs > 0)
+                    ? EffectCycleDurationMs
+                    : (int?)null,
+                FadeSteps = (CommandType == "Effect" && FadeSteps > 0)
+                    ? FadeSteps
+                    : (int?)null,
                 RetransmitCount = RetransmitCount,
-                InterpolationIntervalMs = InterpolationIntervalMs,
                 Note = Note ?? ""
             };
         }
     }
+
 }

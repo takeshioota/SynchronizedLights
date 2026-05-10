@@ -1,12 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lib.Application.Interfaces;
 using Lib.Application.Models;
@@ -14,6 +6,15 @@ using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Drawing.Imaging;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Threading;
 
 namespace Lib.Ui.Screens.ViewModels
 {
@@ -310,16 +311,43 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // ① 旧プリセット名を新モデル（CommandType + EffectType）にマップ
+            string commandType = "Color";
+            string? effectType = null;
+            switch (SelectedActionPreset.Command)
+            {
+                case "SetColor": commandType = "Color"; effectType = null; break;
+                case "Off": commandType = "Off"; effectType = null; break;
+                case "Flash": commandType = "Effect"; effectType = "Flash"; break;
+                case "FadeIn": commandType = "Effect"; effectType = "FadeIn"; break;
+                case "FadeOut": commandType = "Effect"; effectType = "FadeOut"; break;
+                case "Breath": commandType = "Effect"; effectType = "Breathing"; break;
+                case "SevenColor": commandType = "Effect"; effectType = "SevenColor"; break;
+                default: commandType = "Color"; effectType = null; break;
+            }
+
+            // ② 所要時間（ms）を計算
+            int durationMsLocal = (int)Math.Max(0, Math.Round(NewStepDurationSec * 1000));
+
+            // ③ Effect 時のみ EffectCycleDurationMs / FadeSteps を設定（型は明示的に int? でキャスト）
+            int? effectCycle = (commandType == "Effect" && durationMsLocal > 0)
+                ? (int?)durationMsLocal
+                : null;
+            int? fadeStepsLocal = (commandType == "Effect" && durationMsLocal > 0)
+                ? (int?)Math.Max(1, durationMsLocal / 50)
+                : null;
+
             var step = new SequenceStep
             {
                 TimeMs = (int)Math.Max(0, Math.Round(NewStepTimeSec * 1000)),
-                Command = SelectedActionPreset.Command,
+                CommandType = commandType,
+                EffectType = effectType,
                 ColorR = SelectedColorPreset.R,
                 ColorG = SelectedColorPreset.G,
                 ColorB = SelectedColorPreset.B,
-                DurationMs = (int)Math.Max(0, Math.Round(NewStepDurationSec * 1000)),
+                EffectCycleDurationMs = effectCycle,
+                FadeSteps = fadeStepsLocal,
                 RetransmitCount = 3,
-                InterpolationIntervalMs = 50,
                 Note = NewStepNote ?? ""
             };
             var wrapper = new SequenceStepWrapper(step);
@@ -344,8 +372,28 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = $"追加：{SelectedActionPreset.DisplayName} / {SelectedColorPreset.Name}（位置 {insertIndex + 1}）";
 
             // 次回追加用に時刻と所要時間を進める（連続追加時の利便性）
-            NewStepTimeSec = (step.TimeMs + step.DurationMs) / 1000.0;
+            NewStepTimeSec = (step.TimeMs + (step.EffectCycleDurationMs ?? 0)) / 1000.0;
             NewStepNote = "";
+        }
+
+        /// <summary>
+        /// 旧 UI プリセット（ActionPreset.Command 文字列）を
+        /// 新モデル（CommandType + EffectType）にマップする。
+        /// 旧："SetColor" / "Off" / "Flash" / "FadeIn" / "FadeOut" / "Breath" / "SevenColor"
+        /// </summary>
+        private static (string CommandType, string? EffectType) MapPresetActionToNewModel(string? legacyCommand)
+        {
+            return legacyCommand switch
+            {
+                "SetColor" => ("Color", null),
+                "Off" => ("Off", null),
+                "Flash" => ("Effect", "Flash"),
+                "FadeIn" => ("Effect", "FadeIn"),
+                "FadeOut" => ("Effect", "FadeOut"),
+                "Breath" => ("Effect", "Breathing"),
+                "SevenColor" => ("Effect", "SevenColor"),
+                _ => ("Color", null),
+            };
         }
 
         #endregion
@@ -461,47 +509,39 @@ namespace Lib.Ui.Screens.ViewModels
 
             try
             {
-                switch (step.Command)
+                switch (step.CommandType)
                 {
-                    case "SetColor":
+                    case "Color":
                         await _lighting.SetColorAsync(target, color);
                         break;
+
                     case "Off":
                         await _lighting.SetColorAsync(target, new Rgb(0, 0, 0));
                         break;
-                    case "Flash":
-                        await _lighting.StartEffectAsync("Flash", color,
-                            cycleDurationMs: step.DurationMs,
-                            flashIntervalMs: Math.Max(50, step.DurationMs / 2),
-                            fadeSteps: step.CalculateInterpolationSteps(),
+
+                    case "Effect":
+                        if (string.IsNullOrEmpty(step.EffectType))
+                        {
+                            StatusMessage = "エフェクト種別が未設定です。";
+                            return;
+                        }
+                        await _lighting.StartEffectAsync(
+                            effectType: step.EffectType,
+                            color: color,
+                            cycleDurationMs: step.GetEffectCycleDurationOrDefault(),
+                            flashIntervalMs: step.EffectType == "Flash"
+                                ? Math.Max(50, step.GetEffectCycleDurationOrDefault() / 2)
+                                : (int?)null,
+                            fadeSteps: step.GetFadeStepsOrDefault(),
                             continuous: true);
                         break;
-                    case "FadeIn":
-                        await _lighting.StartEffectAsync("FadeIn", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: true);
+
+                    case "EffectStop":
+                        await _lighting.StopEffectAsync();
                         break;
-                    case "FadeOut":
-                        await _lighting.StartEffectAsync("FadeOut", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: true);
-                        break;
-                    case "Breath":
-                        await _lighting.StartEffectAsync("Breathing", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: true);
-                        break;
-                    case "SevenColor":
-                        await _lighting.StartEffectAsync("SevenColor", color,
-                            cycleDurationMs: step.DurationMs,
-                            fadeSteps: step.CalculateInterpolationSteps(),
-                            continuous: true);
-                        break;
+
                     default:
-                        StatusMessage = $"未対応コマンド: {step.Command}";
+                        StatusMessage = $"未対応コマンド: {step.CommandType}";
                         return;
                 }
             }
@@ -619,11 +659,12 @@ namespace Lib.Ui.Screens.ViewModels
                 var a = _editingSequence.Steps[i];
                 var b = EditingSteps[i];
                 if (a.TimeMs != b.TimeMs) return true;
-                if (a.Command != b.Command) return true;
+                if (a.CommandType != b.CommandType) return true;
+                if ((a.EffectType ?? "") != (b.EffectType ?? "")) return true;
                 if (a.ColorR != b.ColorR || a.ColorG != b.ColorG || a.ColorB != b.ColorB) return true;
-                if (a.DurationMs != b.DurationMs) return true;
+                if ((a.EffectCycleDurationMs ?? 0) != b.EffectCycleDurationMs) return true;
+                if ((a.FadeSteps ?? 0) != b.FadeSteps) return true;
                 if (a.RetransmitCount != b.RetransmitCount) return true;
-                if (a.InterpolationIntervalMs != b.InterpolationIntervalMs) return true;
             }
             return false;
         }

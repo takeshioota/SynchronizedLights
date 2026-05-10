@@ -60,16 +60,17 @@ namespace Lib.Application.Models
 
         /// <summary>
         /// シーケンス全体の所要時間（ミリ秒）
-        /// 概要：最後のステップの開始時刻 + DurationMs を返す。
-        ///       Fade等は終了まで時間がかかるためそれを加算する。
+        /// 概要：最後のステップの開始時刻 + EffectCycleDurationMs を返す。
+        ///       Effect 系は終了まで時間がかかるためそれを加算する。
+        ///       v2.2：新モデル準拠（DurationMs → EffectCycleDurationMs）。
         /// </summary>
         public int TotalDurationMs
         {
             get
             {
                 if (Steps.Count == 0) return 0;
-                var last = Steps.OrderByDescending(s => s.TimeMs + s.DurationMs).First();
-                return last.TimeMs + last.DurationMs;
+                var last = Steps.OrderByDescending(s => s.TimeMs + (s.EffectCycleDurationMs ?? 0)).First();
+                return last.TimeMs + (last.EffectCycleDurationMs ?? 0);
             }
         }
 
