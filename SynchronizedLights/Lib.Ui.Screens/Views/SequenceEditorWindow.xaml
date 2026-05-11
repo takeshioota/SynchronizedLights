@@ -591,7 +591,7 @@
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Right">
+                                HorizontalAlignment="Left">
                         <Button Content="+ 追加"
                                 Command="{Binding AddEmptyStepCommand}"
                                 IsEnabled="{Binding HasSelectedSequence}"
