@@ -30,7 +30,11 @@ namespace Lib.Ui.Screens.Views
         }
 
         /// <summary>
-        /// ウィンドウ Loaded 時：プライマリ画面中央に配置
+        /// ウィンドウ Loaded 時：プライマリ画面で最大化（XAML で WindowState=Maximized 指定済み）
+        /// 概要：オペレータが編集・本番ともシーケンス編集ウィンドウしか見ない運用前提のため、
+        ///       常時全画面表示とする。ユーザーが手動でサブモニタへ移したい場合は
+        ///       Restore → ドラッグ → Maximize の標準操作で対応可能。
+        ///       本ハンドラは Restore 状態（中央配置）のサイズ・位置をログに残すために使用。
         /// </summary>
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -38,16 +42,13 @@ namespace Lib.Ui.Screens.Views
             {
                 var primaryW = SystemParameters.PrimaryScreenWidth;
                 var primaryH = SystemParameters.PrimaryScreenHeight;
-                Left = (primaryW - Width) / 2;
-                Top = (primaryH - Height) / 2;
-
                 Serilog.Log.Information(
-                    "SequenceEditor Loaded: PrimaryScreen={PW}x{PH}, Window=({L},{T},{W}x{H})",
-                    primaryW, primaryH, Left, Top, Width, Height);
+                    "SequenceEditor Loaded: WindowState={State}, PrimaryScreen={PW}x{PH}, Restored=({W}x{H})",
+                    WindowState, primaryW, primaryH, Width, Height);
             }
             catch (Exception ex)
             {
-                Serilog.Log.Debug(ex, "SequenceEditor: 起動位置設定失敗（無視）");
+                Serilog.Log.Debug(ex, "SequenceEditor: Loaded ログ出力失敗（無視）");
             }
         }
 
@@ -141,6 +142,26 @@ namespace Lib.Ui.Screens.Views
                     if (lastItem != null) listBox.ScrollIntoView(lastItem);
                 }));
             };
+        }
+
+        /// <summary>
+        /// カスタム色プリセットの右クリック「色を編集...」メニューハンドラ
+        /// 概要：ContextMenu は Visual Tree 外のため通常の Binding が効かない。
+        ///       PlacementTarget（右クリックされた Button）の DataContext から
+        ///       対象のカスタム色アイテムを取得し、ViewModel のコマンドを実行する。
+        /// </summary>
+        private void CustomColorEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem) return;
+            if (menuItem.Parent is not ContextMenu contextMenu) return;
+            if (contextMenu.PlacementTarget is not FrameworkElement target) return;
+            if (target.DataContext is not CustomColorPresetItem item) return;
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            if (vm.EditCustomColorCommand.CanExecute(item))
+            {
+                vm.EditCustomColorCommand.Execute(item);
+            }
         }
     }
 }

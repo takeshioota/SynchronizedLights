@@ -10,8 +10,9 @@
         Height="800"
         MinWidth="1024"
         MinHeight="600"
+        WindowState="Maximized"
         ResizeMode="CanResize"
-        WindowStartupLocation="Manual"
+        WindowStartupLocation="CenterScreen"
         Background="{StaticResource AppBgBrush}"
         Foreground="{StaticResource TextBrushMain}"
         PreviewKeyDown="Window_KeyDown"
@@ -427,14 +428,16 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>   <!-- 0: 色プリセット -->
+                    <RowDefinition Height="4"/>
+                    <RowDefinition Height="Auto"/>   <!-- 2: Custom 色プリセット -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 2: 動作プリセット -->
+                    <RowDefinition Height="Auto"/>   <!-- 4: 動作プリセット -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 4: 操作行 -->
+                    <RowDefinition Height="Auto"/>   <!-- 6: 操作行 -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 6: 簡単登録 -->
+                    <RowDefinition Height="Auto"/>   <!-- 8: 簡単登録 -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 8: テンプレ -->
+                    <RowDefinition Height="Auto"/>   <!-- 10: テンプレ -->
                 </Grid.RowDefinitions>
 
                 <!-- 色プリセット -->
@@ -444,7 +447,9 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="色:" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                    <ItemsControl Grid.Column="1" ItemsSource="{Binding ColorPresets}">
+                    <ItemsControl Grid.Column="1"
+                                  ItemsSource="{Binding ColorPresets}"
+                                  HorizontalAlignment="Left">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
@@ -476,14 +481,74 @@
                     </ItemsControl>
                 </Grid>
 
-                <!-- 動作プリセット -->
+                <!-- Custom 色プリセット（右クリックで編集）-->
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="Custom:"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               ToolTip="現場で発色調整するための中間色枠（右クリックで色を編集）"/>
+                    <ItemsControl Grid.Column="1"
+                                  ItemsSource="{Binding CustomColorPresets}"
+                                  HorizontalAlignment="Left">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.SelectCustomColorPresetCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                        Tag="{Binding IsSelected}"
+                                        MinWidth="110" MinHeight="32"
+                                        Margin="0,0,4,4"
+                                        Padding="0"
+                                        ToolTip="クリック=選択行に色を反映 / 右クリック=色を編集">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="色を編集..."
+                                                      Click="CustomColorEdit_Click"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Fill="{Binding Hex}"
+                                                 Width="12" Height="12"
+                                                 Stroke="#FFFFFF" StrokeThickness="1"
+                                                 Margin="6,0,4,0"
+                                                 VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,4,0"/>
+                                        <TextBlock Text="✏"
+                                                   FontSize="10"
+                                                   Foreground="#888888"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,6,0"
+                                                   ToolTip="右クリックで色を編集"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- 動作プリセット -->
+                <Grid Grid.Row="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="動作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                    <ItemsControl Grid.Column="1" ItemsSource="{Binding ActionPresets}">
+                    <ItemsControl Grid.Column="1"
+                                  ItemsSource="{Binding ActionPresets}"
+                                  HorizontalAlignment="Left">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapPanel Orientation="Horizontal"/>
@@ -516,7 +581,7 @@
                 </Grid>
 
                 <!-- 操作行：行操作ボタン群 -->
-                <Grid Grid.Row="4">
+                <Grid Grid.Row="6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>
@@ -585,7 +650,7 @@
                 </Grid>
 
                 <!-- 簡単登録：選択中の色プリセットで Color / Off ステップを末尾に追加 -->
-                <Grid Grid.Row="6">
+                <Grid Grid.Row="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="Auto"/>
@@ -620,7 +685,7 @@
                 </Grid>
 
                 <!-- テンプレ：複数ステップをまとめて末尾に追加 -->
-                <Grid Grid.Row="8">
+                <Grid Grid.Row="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>

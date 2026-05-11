@@ -5,6 +5,7 @@ using Lib.Application.Models;
 using Lib.Application.Services;
 using Lib.Domain.Enums;
 using Lib.Domain.ValueObjects;
+using Lib.Ui.Screens.Views;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -36,6 +37,7 @@ namespace Lib.Ui.Screens.ViewModels
         #region フィールド
 
         private readonly TimeBasedSequenceStore _store;
+        private readonly CustomColorStore _customColorStore;
         private readonly ILightingFacade? _lighting;
         private readonly DispatcherTimer? _statusTimer;
         private TimeBasedSequence? _editingSequence;
@@ -66,12 +68,14 @@ namespace Lib.Ui.Screens.ViewModels
         public SequenceEditorViewModel(ILightingFacade lighting)
         {
             _store = new TimeBasedSequenceStore();
+            _customColorStore = new CustomColorStore();
             _lighting = lighting;
 
             Sequences = new ObservableCollection<TimeBasedSequence>();
             EditingSteps = new ObservableCollection<SequenceStepWrapper>();
             ColorPresets = CreateColorPresets();
             ActionPresets = CreateActionPresets();
+            CustomColorPresets = LoadCustomColorPresets();
             SelectedColorPreset = ColorPresets.First();
             SelectedActionPreset = ActionPresets.First();
 
@@ -80,6 +84,35 @@ namespace Lib.Ui.Screens.ViewModels
             _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
             _statusTimer.Tick += async (_, _) => await PollStatusAsync();
             _statusTimer.Start();
+        }
+
+        /// <summary>
+        /// 永続化されているカスタム色を ObservableCollection 化して読み込む
+        /// </summary>
+        private ObservableCollection<CustomColorPresetItem> LoadCustomColorPresets()
+        {
+            var entries = _customColorStore.LoadAll();
+            var collection = new ObservableCollection<CustomColorPresetItem>();
+            foreach (var e in entries)
+            {
+                collection.Add(new CustomColorPresetItem(e.Name, e.R, e.G, e.B));
+            }
+            return collection;
+        }
+
+        /// <summary>
+        /// 現在のカスタム色一覧を JSON へ保存する
+        /// </summary>
+        private void SaveCustomColors()
+        {
+            var entries = CustomColorPresets.Select(c => new CustomColorEntry
+            {
+                Name = c.Name,
+                R = c.R,
+                G = c.G,
+                B = c.B,
+            }).ToList();
+            _customColorStore.SaveAll(entries);
         }
 
         #endregion
@@ -128,6 +161,12 @@ namespace Lib.Ui.Screens.ViewModels
 
         public ObservableCollection<ColorPresetItem> ColorPresets { get; }
         public ObservableCollection<ActionPresetItem> ActionPresets { get; }
+
+        /// <summary>
+        /// カスタム色プリセット（Custom 1〜4）
+        /// 概要：オペレータが現場で中間色を調整するため、ローカルに 4 件まで保存可能。
+        /// </summary>
+        public ObservableCollection<CustomColorPresetItem> CustomColorPresets { get; }
 
         [ObservableProperty]
         private ColorPresetItem? selectedColorPreset;
@@ -797,7 +836,7 @@ namespace Lib.Ui.Screens.ViewModels
         #region コマンド：プリセット選択
 
         /// <summary>
-        /// 色プリセットボタン押下：選択中の行に色を反映する（CommandType は変更しない）
+        /// 色プリセットボタン押下:選択中の行に色を反映する（CommandType は変更しない）
         /// </summary>
         [RelayCommand]
         private void SelectColorPreset(ColorPresetItem? item)
@@ -805,6 +844,7 @@ namespace Lib.Ui.Screens.ViewModels
             if (item == null) return;
             SelectedColorPreset = item;
             foreach (var p in ColorPresets) p.IsSelected = p == item;
+            foreach (var c in CustomColorPresets) c.IsSelected = false;
 
             if (SelectedStep == null)
             {
@@ -816,6 +856,50 @@ namespace Lib.Ui.Screens.ViewModels
             SelectedStep.ColorG = item.G;
             SelectedStep.ColorB = item.B;
             StatusMessage = $"色を反映：{item.Name}（{item.R}, {item.G}, {item.B}）";
+        }
+
+        /// <summary>
+        /// カスタム色プリセット押下：選択中の行に色を反映（色プリセットと同じ挙動）
+        /// </summary>
+        [RelayCommand]
+        private void SelectCustomColorPreset(CustomColorPresetItem? item)
+        {
+            if (item == null) return;
+            foreach (var c in CustomColorPresets) c.IsSelected = c == item;
+            foreach (var p in ColorPresets) p.IsSelected = false;
+
+            if (SelectedStep == null)
+            {
+                StatusMessage = "色を反映する行を先に選択してください。";
+                return;
+            }
+
+            SelectedStep.ColorR = item.R;
+            SelectedStep.ColorG = item.G;
+            SelectedStep.ColorB = item.B;
+            StatusMessage = $"カスタム色を反映：{item.Name}（{item.R}, {item.G}, {item.B}）";
+        }
+
+        /// <summary>
+        /// カスタム色を編集する（右クリック → コンテキストメニュー「色を編集...」から呼ばれる）
+        /// 概要：DlgColorPicker を起動し、編集結果を当該カスタム色に反映して JSON へ保存する。
+        /// </summary>
+        [RelayCommand]
+        private void EditCustomColor(CustomColorPresetItem? item)
+        {
+            if (item == null) return;
+
+            var dlg = new DlgColorPicker { Owner = System.Windows.Application.Current?.MainWindow };
+            dlg.SetInitialColor(item.R, item.G, item.B);
+            if (dlg.ShowDialog() == true)
+            {
+                item.R = dlg.SelectedR;
+                item.G = dlg.SelectedG;
+                item.B = dlg.SelectedB;
+                SaveCustomColors();
+                StatusMessage = $"カスタム色「{item.Name}」を更新（{item.R}, {item.G}, {item.B}）";
+                AppendLog("INFO", $"カスタム色 {item.Name} を更新 ({item.R},{item.G},{item.B})");
+            }
         }
 
         /// <summary>
@@ -1467,18 +1551,10 @@ namespace Lib.Ui.Screens.ViewModels
 
         private static ObservableCollection<ColorPresetItem> CreateColorPresets() => new()
         {
-            new("Red",     255,   0,   0, "#FF0000"),
-            new("Orange",  255, 128,   0, "#FF8000"),
-            new("Yellow",  255, 255,   0, "#FFFF00"),
-            new("Lime",    128, 255,   0, "#80FF00"),
-            new("Green",     0, 255,   0, "#00FF00"),
-            new("Cyan",      0, 255, 255, "#00FFFF"),
-            new("Sky",       0, 128, 255, "#0080FF"),
-            new("Blue",      0,   0, 255, "#0000FF"),
-            new("Purple",  128,   0, 255, "#8000FF"),
-            new("Magenta", 255,   0, 255, "#FF00FF"),
-            new("Pink",    255, 128, 192, "#FF80C0"),
-            new("White",   255, 255, 255, "#FFFFFF"),
+            new("Red",   255,   0,   0, "#FF0000"),
+            new("Green",   0, 255,   0, "#00FF00"),
+            new("Blue",    0,   0, 255, "#0000FF"),
+            new("White", 255, 255, 255, "#FFFFFF"),
         };
 
         private static ObservableCollection<ActionPresetItem> CreateActionPresets() => new()
@@ -1526,6 +1602,49 @@ namespace Lib.Ui.Screens.ViewModels
 
         [ObservableProperty]
         private bool isSelected;
+    }
+
+    /// <summary>
+    /// カスタム色プリセット 1 件（Custom 1〜4）
+    /// 概要：オペレータが現場で発色を調整できる中間色枠。
+    ///       通常クリックで選択中行に色を反映、右クリック → 「色を編集...」で
+    ///       DlgColorPicker を起動して RGB を編集できる。値は JSON で永続化。
+    /// </summary>
+    public partial class CustomColorPresetItem : ObservableObject
+    {
+        public CustomColorPresetItem(string name, byte r, byte g, byte b)
+        {
+            Name = name;
+            this.r = r;
+            this.g = g;
+            this.b = b;
+            hex = ToHex(r, g, b);
+        }
+
+        public string Name { get; }
+
+        [ObservableProperty]
+        private byte r;
+
+        [ObservableProperty]
+        private byte g;
+
+        [ObservableProperty]
+        private byte b;
+
+        /// <summary>HEX 文字列（XAML の Fill バインド用、RGB 変更時に自動更新）</summary>
+        [ObservableProperty]
+        private string hex;
+
+        [ObservableProperty]
+        private bool isSelected;
+
+        // R/G/B 変更時に HEX を自動更新（XAML Fill バインドに即時反映）
+        partial void OnRChanged(byte value) => Hex = ToHex(value, G, B);
+        partial void OnGChanged(byte value) => Hex = ToHex(R, value, B);
+        partial void OnBChanged(byte value) => Hex = ToHex(R, G, value);
+
+        private static string ToHex(byte r, byte g, byte b) => $"#{r:X2}{g:X2}{b:X2}";
     }
 
     /// <summary>
