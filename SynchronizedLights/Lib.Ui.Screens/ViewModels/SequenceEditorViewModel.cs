@@ -47,6 +47,18 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         private bool _suppressAutoExecute;
 
+        /// <summary>
+        /// 連続再生中、最後に送信ログに記録したステップ番号
+        /// 概要：ポーリング検知で currentStepIndex の変化を見て、進んだステップごとに [TX] ログを残すために使用。
+        ///       再生開始時に -1 にリセット、ポーリングで重複ログを防ぐ。
+        /// </summary>
+        private int _lastLoggedStepIndex = -1;
+
+        /// <summary>
+        /// 連続再生の終了を検知するための「前回の再生状態」キャッシュ
+        /// </summary>
+        private bool _wasPlaying;
+
         #endregion
 
         #region コンストラクタ
@@ -142,6 +154,19 @@ namespace Lib.Ui.Screens.ViewModels
         private string? playingSequenceName;
 
         public string PlayButtonText => IsPlaying ? "■ 停止" : "▶ 一括再生";
+
+        /// <summary>
+        /// 連続再生中の現ステップ詳細（例：「Step 3/10: Color (255,0,0)」）
+        /// 概要：ステータスバー右側に表示し、いま再生中のコマンド内容を視認できるようにする。
+        /// </summary>
+        [ObservableProperty]
+        private string? playingStepLabel;
+
+        /// <summary>
+        /// 連続再生中の現ステップの色（HEX 文字列、ステータスバーの色プレビュー丸にバインド）
+        /// </summary>
+        [ObservableProperty]
+        private string playingStepColorHex = "#000000";
 
         #endregion
 
@@ -549,12 +574,13 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// 既存ステップ列の末尾にテンプレート由来のステップ群を追加する共通ヘルパー
-        /// 概要：直前ステップの TimeMs に intervalMs を加算した値を 1 件目の開始時刻とし、
+        /// 選択中の行の直後にテンプレート由来のステップ群を挿入する共通ヘルパー
+        /// 概要：選択行があればその直後、なければ末尾に挿入する。
+        ///       1 件目の開始時刻 = 挿入基準行 TimeMs + intervalMs（intervalMs=0 の場合は +1000ms）。
         ///       以降は intervalMs ずつ加算していく。
-        ///       追加された 1 件目を選択状態にする（自動実行は抑制）。
+        ///       挿入された 1 件目を選択状態にする（自動実行は抑制）。
         /// </summary>
-        private void AppendStepsToTail(IReadOnlyList<SequenceStep> steps, int intervalMs)
+        private void InsertStepsAfterSelected(IReadOnlyList<SequenceStep> steps, int intervalMs)
         {
             if (_editingSequence == null)
             {
@@ -564,19 +590,35 @@ namespace Lib.Ui.Screens.ViewModels
             if (steps == null || steps.Count == 0) return;
 
             int interval = Math.Max(0, intervalMs);
-            int baseTimeMs = EditingSteps.Count > 0
-                ? EditingSteps.Last().TimeMs + (interval > 0 ? interval : 1000)
-                : 0;
-            int firstIndex = EditingSteps.Count;
+            int insertIndex;
+            int baseTimeMs;
+            if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
+            {
+                insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
+                baseTimeMs = SelectedStep.TimeMs + (interval > 0 ? interval : 1000);
+            }
+            else if (EditingSteps.Count > 0)
+            {
+                insertIndex = EditingSteps.Count;
+                baseTimeMs = EditingSteps.Last().TimeMs + (interval > 0 ? interval : 1000);
+            }
+            else
+            {
+                insertIndex = 0;
+                baseTimeMs = 0;
+            }
 
+            int firstIndex = insertIndex;
             _suppressAutoExecute = true;
             try
             {
+                int currentIndex = insertIndex;
                 foreach (var step in steps)
                 {
                     step.TimeMs = baseTimeMs;
                     if (step.RetransmitCount <= 0) step.RetransmitCount = 3;
-                    EditingSteps.Add(new SequenceStepWrapper(step));
+                    EditingSteps.Insert(currentIndex, new SequenceStepWrapper(step));
+                    currentIndex++;
                     baseTimeMs += interval;
                 }
 
@@ -619,7 +661,7 @@ namespace Lib.Ui.Screens.ViewModels
                 ColorB = SelectedColorPreset.B,
                 Note = $"簡単登録: {SelectedColorPreset.Name}"
             };
-            AppendStepsToTail(new[] { step }, EasyIntervalMs);
+            InsertStepsAfterSelected(new[] { step }, EasyIntervalMs);
             StatusMessage = $"簡単登録：{SelectedColorPreset.Name} を追加（間隔 {EasyIntervalMs}ms）。";
         }
 
@@ -642,7 +684,7 @@ namespace Lib.Ui.Screens.ViewModels
                 ColorR = 0, ColorG = 0, ColorB = 0,
                 Note = "簡単登録: OFF"
             };
-            AppendStepsToTail(new[] { step }, EasyIntervalMs);
+            InsertStepsAfterSelected(new[] { step }, EasyIntervalMs);
             StatusMessage = $"簡単登録：OFF を追加（間隔 {EasyIntervalMs}ms）。";
         }
 
@@ -670,7 +712,7 @@ namespace Lib.Ui.Screens.ViewModels
                 Note = $"色変更: {c.Name}"
             }).ToList();
 
-            AppendStepsToTail(steps, intervalMs: 1000);
+            InsertStepsAfterSelected(steps, intervalMs: 1000);
             StatusMessage = "テンプレ：色変更（7 色 × 1000ms）を追加しました。";
         }
 
@@ -689,7 +731,7 @@ namespace Lib.Ui.Screens.ViewModels
                 FadeSteps = 30,
                 Note = "テンプレ: 呼吸"
             };
-            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            InsertStepsAfterSelected(new[] { step }, intervalMs: 0);
             StatusMessage = "テンプレ：呼吸（Breathing / 周期 3000ms / Fade 30）を追加しました。";
         }
 
@@ -708,7 +750,7 @@ namespace Lib.Ui.Screens.ViewModels
                 FadeSteps = 0,
                 Note = "テンプレ: Flash"
             };
-            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            InsertStepsAfterSelected(new[] { step }, intervalMs: 0);
             StatusMessage = "テンプレ：Flash（周期 500ms）を追加しました。";
         }
 
@@ -727,7 +769,7 @@ namespace Lib.Ui.Screens.ViewModels
                 FadeSteps = 20,
                 Note = "テンプレ: 7 色"
             };
-            AppendStepsToTail(new[] { step }, intervalMs: 0);
+            InsertStepsAfterSelected(new[] { step }, intervalMs: 0);
             StatusMessage = "テンプレ：7 色（SevenColor / 周期 7000ms / Fade 20）を追加しました。";
         }
 
@@ -746,7 +788,7 @@ namespace Lib.Ui.Screens.ViewModels
                 new SequenceStep { CommandType = "Color", ColorR = 255, ColorG = 255, ColorB = 255, Note = "カウントダウン: 1" },
                 new SequenceStep { CommandType = "Off",   ColorR =   0, ColorG =   0, ColorB =   0, Note = "カウントダウン: 0" },
             };
-            AppendStepsToTail(steps, intervalMs: 1000);
+            InsertStepsAfterSelected(steps, intervalMs: 1000);
             StatusMessage = "テンプレ：カウントダウン（5 → 0、1 秒間隔）を追加しました。";
         }
 
@@ -841,7 +883,7 @@ namespace Lib.Ui.Screens.ViewModels
 
         /// <summary>
         /// 選択中の行の直後に空行を 1 行挿入する
-        /// 概要：時刻は直前行 + 1000ms、コマンドは Color、色は白、エフェクト関連は未指定。
+        /// 概要：時刻は直前行 + 1000ms、コマンドは Color、色は直前行の色を踏襲（無ければ白）、エフェクト関連は未指定。
         ///       挿入後はその空行が選択状態となり、ユーザーが色や動作を選んで埋めていくワークフロー。
         /// </summary>
         [RelayCommand]
@@ -855,15 +897,23 @@ namespace Lib.Ui.Screens.ViewModels
 
             int insertIndex;
             int newTimeMs;
+            byte initR = 255, initG = 255, initB = 255;
             if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
             {
                 insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
                 newTimeMs = SelectedStep.TimeMs + 1000;
+                initR = SelectedStep.ColorR;
+                initG = SelectedStep.ColorG;
+                initB = SelectedStep.ColorB;
             }
             else if (EditingSteps.Count > 0)
             {
                 insertIndex = EditingSteps.Count;
-                newTimeMs = EditingSteps.Last().TimeMs + 1000;
+                var last = EditingSteps.Last();
+                newTimeMs = last.TimeMs + 1000;
+                initR = last.ColorR;
+                initG = last.ColorG;
+                initB = last.ColorB;
             }
             else
             {
@@ -876,9 +926,9 @@ namespace Lib.Ui.Screens.ViewModels
                 TimeMs = newTimeMs,
                 CommandType = "Color",
                 EffectType = null,
-                ColorR = 255,
-                ColorG = 255,
-                ColorB = 255,
+                ColorR = initR,
+                ColorG = initG,
+                ColorB = initB,
                 EffectCycleDurationMs = null,
                 FadeSteps = null,
                 RetransmitCount = 3,
@@ -978,7 +1028,7 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
         }
 
-        /// <summary>実行中エフェクトを停止（Esc キー）</summary>
+        /// <summary>実行中エフェクトを停止（停止ボタン または Esc キー）</summary>
         [RelayCommand]
         private async Task StopExecutionAsync()
         {
@@ -987,7 +1037,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 await _lighting.StopEffectAsync();
                 StatusMessage = "停止しました。";
-                AppendLog("TX", "EffectStop (Esc)");
+                AppendLog("TX", "EffectStop");
             }
             catch (Exception ex)
             {
@@ -1078,9 +1128,41 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 try
                 {
+                    // 停止前に現在実行中ステップの色を退避
+                    SequenceStepWrapper? lastWrapper = null;
+                    try
+                    {
+                        var (_, _, currentIdx, _) = await _lighting.GetSequencePlayStatusDetailedAsync();
+                        if (currentIdx >= 0 && currentIdx < EditingSteps.Count)
+                        {
+                            lastWrapper = EditingSteps[currentIdx];
+                        }
+                    }
+                    catch { /* 取得失敗時はスキップ */ }
+
                     await _lighting.StopSequenceAsync();
-                    StatusMessage = "シーケンスを停止しました。";
                     AppendLog("TX", "Sequence Stop");
+
+                    // 停止後、直前の Color/Effect 行の色を再送して点灯維持
+                    if (lastWrapper != null)
+                    {
+                        var step = lastWrapper.ToModel();
+                        if (step.CommandType == "Color" || step.CommandType == "Effect")
+                        {
+                            var color = new Rgb(step.ColorR, step.ColorG, step.ColorB);
+                            await _lighting.SetColorAsync(Target.All, color);
+                            AppendLog("TX", $"Stop hold color ({step.ColorR},{step.ColorG},{step.ColorB})");
+                            StatusMessage = $"シーケンスを停止しました（色保持: {step.ColorR},{step.ColorG},{step.ColorB}）。";
+                        }
+                        else
+                        {
+                            StatusMessage = "シーケンスを停止しました。";
+                        }
+                    }
+                    else
+                    {
+                        StatusMessage = "シーケンスを停止しました。";
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1115,6 +1197,19 @@ namespace Lib.Ui.Screens.ViewModels
                 await _lighting.PlaySequenceAsync(_editingSequence.Name);
                 StatusMessage = $"再生開始: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
                 AppendLog("TX", $"Sequence Play: {_editingSequence.Name} ({apiSteps.Count} ステップ)");
+
+                // ステップ進行ログのインデックスをリセット（1 ステップ目から確実にログを残す）
+                _lastLoggedStepIndex = -1;
+
+                // 再生開始の即時 UI 反映：API 状態反映の遅れを補うため、1 行目を楽観的にハイライト
+                // 後続の PollStatusAsync で API の真値（currentStepIndex）が来たら自動補正される
+                if (EditingSteps.Count > 0)
+                {
+                    IsPlaying = true;
+                    PlayingSequenceName = _editingSequence.Name;
+                    UpdatePlayingStepHighlight(0);
+                }
+                AdjustPollingInterval(true);
             }
             catch (Exception ex)
             {
@@ -1233,6 +1328,28 @@ namespace Lib.Ui.Screens.ViewModels
                 // 連続再生中の行ハイライト：currentIdx に一致する行のみ true、他は false
                 UpdatePlayingStepHighlight(playing ? currentIdx : -1);
 
+                // 現ステップ詳細（ステータスバー表示用）
+                UpdatePlayingStepDetail(playing ? currentIdx : -1);
+
+                // 連続再生中のステップ進行を検知して [TX] ログを残す
+                // 注意：ポーリング間隔（200ms）より短い間隔のステップは飛ぶ可能性あり
+                if (playing && currentIdx >= 0
+                    && currentIdx != _lastLoggedStepIndex
+                    && currentIdx < EditingSteps.Count)
+                {
+                    AppendStepProgressLog(currentIdx);
+                    _lastLoggedStepIndex = currentIdx;
+                }
+
+                // 再生終了を検知（前回 playing=true → 今回 false の遷移）
+                if (_wasPlaying && !playing)
+                {
+                    int total = EditingSteps.Count;
+                    AppendLog("INFO", $"Sequence 再生完了 ({total} ステップ)");
+                    _lastLoggedStepIndex = -1;
+                }
+                _wasPlaying = playing;
+
                 // 再生中は高頻度、停止中は通常頻度に切替
                 AdjustPollingInterval(playing);
             }
@@ -1241,7 +1358,62 @@ namespace Lib.Ui.Screens.ViewModels
                 IsPlaying = false;
                 PlayingSequenceName = null;
                 UpdatePlayingStepHighlight(-1);
+                UpdatePlayingStepDetail(-1);
                 AdjustPollingInterval(false);
+            }
+        }
+
+        /// <summary>
+        /// 連続再生中、進行したステップの内容を [TX] ログに記録
+        /// </summary>
+        private void AppendStepProgressLog(int stepIndex)
+        {
+            if (stepIndex < 0 || stepIndex >= EditingSteps.Count) return;
+
+            var w = EditingSteps[stepIndex];
+            int total = EditingSteps.Count;
+            string detail = w.CommandType switch
+            {
+                "Color"      => $"Step {stepIndex + 1}/{total}: Color ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "Off"        => $"Step {stepIndex + 1}/{total}: Off",
+                "Effect"     => $"Step {stepIndex + 1}/{total}: Effect {w.EffectType} ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "EffectStop" => $"Step {stepIndex + 1}/{total}: EffectStop",
+                _            => $"Step {stepIndex + 1}/{total}: {w.CommandType}",
+            };
+            AppendLog("TX", detail);
+        }
+
+        /// <summary>
+        /// 現在実行中ステップの詳細ラベルと色をステータスバー表示用に更新
+        /// </summary>
+        private void UpdatePlayingStepDetail(int currentIndex)
+        {
+            if (currentIndex < 0 || currentIndex >= EditingSteps.Count)
+            {
+                PlayingStepLabel = null;
+                PlayingStepColorHex = "#000000";
+                return;
+            }
+
+            var w = EditingSteps[currentIndex];
+            string detail = w.CommandType switch
+            {
+                "Color"      => $"Step {currentIndex + 1}/{EditingSteps.Count}: Color ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "Off"        => $"Step {currentIndex + 1}/{EditingSteps.Count}: Off",
+                "Effect"     => $"Step {currentIndex + 1}/{EditingSteps.Count}: Effect {w.EffectType} ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "EffectStop" => $"Step {currentIndex + 1}/{EditingSteps.Count}: EffectStop",
+                _            => $"Step {currentIndex + 1}/{EditingSteps.Count}: {w.CommandType}",
+            };
+            PlayingStepLabel = detail;
+
+            // 色プレビュー：Off / EffectStop は黒、それ以外は当該行の RGB
+            if (w.CommandType == "Off" || w.CommandType == "EffectStop")
+            {
+                PlayingStepColorHex = "#000000";
+            }
+            else
+            {
+                PlayingStepColorHex = $"#{w.ColorR:X2}{w.ColorG:X2}{w.ColorB:X2}";
             }
         }
 
@@ -1258,15 +1430,18 @@ namespace Lib.Ui.Screens.ViewModels
 
         /// <summary>
         /// ポーリング間隔を再生状態に応じて切替（再生中=200ms / 停止中=1500ms）
+        /// 概要：DispatcherTimer.Interval を変更しただけでは次回 Tick からしか反映されないため、
+        ///       Stop → Interval 変更 → Start で即座に新間隔を適用する。
         /// </summary>
         private void AdjustPollingInterval(bool playing)
         {
             if (_statusTimer == null) return;
             var desired = playing ? PollIntervalPlaying : PollIntervalIdle;
-            if (_statusTimer.Interval != desired)
-            {
-                _statusTimer.Interval = desired;
-            }
+            if (_statusTimer.Interval == desired) return;
+
+            _statusTimer.Stop();
+            _statusTimer.Interval = desired;
+            _statusTimer.Start();
         }
 
         private bool HasUnsavedEdits()

@@ -319,7 +319,7 @@
             </StackPanel>
         </Border>
 
-        <!-- ============ ステップ表示 + 操作キーガイド ============ -->
+        <!-- ============ ステップ表示 + 操作キーガイド + 停止ボタン ============ -->
         <Border Grid.Row="1"
                 Background="#0F0F0F"
                 BorderBrush="{StaticResource AccentAmberBrush}"
@@ -329,6 +329,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
@@ -340,7 +341,8 @@
                 <TextBlock Grid.Column="2"
                            VerticalAlignment="Center"
                            FontSize="12"
-                           Foreground="#888888">
+                           Foreground="#888888"
+                           Margin="0,0,8,0">
                     <Run Text="操作キー: "/>
                     <Run Text="Enter" Foreground="#FFC107" FontWeight="Bold"/>
                     <Run Text="=実行+次へ "/>
@@ -351,6 +353,14 @@
                     <Run Text="Esc" Foreground="#FFC107" FontWeight="Bold"/>
                     <Run Text="=停止"/>
                 </TextBlock>
+                <Button Grid.Column="3"
+                        Content="■ 停止"
+                        Command="{Binding StopExecutionCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
+                        Foreground="#FF5252"
+                        FontWeight="Bold"
+                        MinHeight="28" Width="80"
+                        ToolTip="実行中のエフェクトを停止（Esc キーと同じ動作）"/>
             </Grid>
         </Border>
 
@@ -737,13 +747,14 @@
                            Foreground="#FFC107"
                            FontStyle="Italic"
                            VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" FontSize="11"
-                           Foreground="#7CFF7C"
-                           FontWeight="Bold"
-                           VerticalAlignment="Center"
-                           Margin="8,0,0,0">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
+
+                <!-- 連続再生中の現ステップ表示：色プレビュー丸 + シーケンス名 + ステップ詳細 -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="8,0,0,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Collapsed"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
@@ -751,10 +762,26 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </TextBlock.Style>
-                    <Run Text="● 一括再生中: "/>
-                    <Run Text="{Binding PlayingSequenceName}"/>
-                </TextBlock>
+                    </StackPanel.Style>
+
+                    <!-- 現ステップの色プレビュー -->
+                    <Ellipse Width="14" Height="14"
+                             Fill="{Binding PlayingStepColorHex}"
+                             Stroke="#7CFF7C"
+                             StrokeThickness="1"
+                             VerticalAlignment="Center"
+                             Margin="0,0,6,0"/>
+
+                    <TextBlock FontSize="11"
+                               Foreground="#7CFF7C"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center">
+                        <Run Text="● "/>
+                        <Run Text="{Binding PlayingSequenceName}"/>
+                        <Run Text=" | "/>
+                        <Run Text="{Binding PlayingStepLabel}"/>
+                    </TextBlock>
+                </StackPanel>
             </Grid>
         </Border>
         </Grid>
