@@ -68,7 +68,10 @@ namespace Lib.Application.Models
                     api.EffectCycleDurationMs = step.GetEffectCycleDurationOrDefault();
                     api.FadeSteps = step.GetFadeStepsOrDefault();
 
-                    // Flash 時は flashIntervalMs を別途指定（API 仕様）
+                    // 繰り返し（true）／ 1 回実行後 最終色保持（false）／ 未指定（null）
+                    api.Continuous = step.Continuous;
+
+                    // Flash 時の ON/OFF 間隔を別途指定
                     if (step.EffectType == "Flash")
                     {
                         api.FlashIntervalMs = Math.Max(50, step.GetEffectCycleDurationOrDefault() / 2);

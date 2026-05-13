@@ -36,6 +36,9 @@
             <sys:String>EffectStop</sys:String>
         </x:Array>
 
+        <!-- DataGrid のエフェクト種別ドロップダウン候補。
+             「Fade In/In」「Fade Out/Out」は FadeIn / FadeOut に連続実行フラグ false を
+             組み合わせて表現するため、独立した選択肢としては持たない。 -->
         <x:Array x:Key="EffectTypeOptions" Type="sys:String">
             <x:Static Member="sys:String.Empty"/>
             <sys:String>Flash</sys:String>
@@ -320,7 +323,7 @@
             </StackPanel>
         </Border>
 
-        <!-- ============ ステップ表示 + 操作キーガイド + 停止ボタン ============ -->
+        <!-- ============ ステップ表示 + 操作キーガイド + 割り込み + 停止ボタン ============ -->
         <Border Grid.Row="1"
                 Background="#0F0F0F"
                 BorderBrush="{StaticResource AccentAmberBrush}"
@@ -330,6 +333,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -355,6 +359,16 @@
                     <Run Text="=停止"/>
                 </TextBlock>
                 <Button Grid.Column="3"
+                        Content="{Binding InterruptButtonText}"
+                        Command="{Binding ToggleInterruptCommand}"
+                        Style="{StaticResource GrandMaSelectableButtonStyle}"
+                        Tag="{Binding IsInterruptOn}"
+                        Foreground="#FFC107"
+                        FontWeight="Bold"
+                        MinHeight="28" Width="100"
+                        Margin="0,0,4,0"
+                        ToolTip="エフェクト/再生を中断し、Custom 1 の色で点灯（もう一度押すと解除）"/>
+                <Button Grid.Column="4"
                         Content="■ 停止"
                         Command="{Binding StopExecutionCommand}"
                         Style="{StaticResource GrandMaButtonStyle}"

@@ -926,9 +926,11 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
-            var (cmdType, effType) = MapActionToCommand(item.Command);
+            var (cmdType, effType, continuous) = MapActionToCommand(item.Command);
             SelectedStep.CommandType = cmdType;
             SelectedStep.EffectType = effType ?? "";
+            // 連続実行フラグを反映（null=未指定、true=繰り返し、false=1 回実行後 最終色保持）
+            SelectedStep.Continuous = continuous;
 
             // Effect の場合は周期・Fade のデフォルト値を補完
             if (cmdType == "Effect")
@@ -956,20 +958,29 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// プリセットボタンの動作名を内部モデル（CommandType + EffectType）に変換
+        /// プリセットボタンの動作名を内部モデル（CommandType / EffectType / Continuous）に変換する
         /// </summary>
-        private static (string CommandType, string? EffectType) MapActionToCommand(string? presetCommand)
+        /// <remarks>
+        /// Continuous の意味：
+        ///   null  → 未指定（繰り返し相当）
+        ///   true  → 繰り返し
+        ///   false → 1 回実行後 最終色保持
+        /// 「Fade In/In」「Fade Out/Out」は FadeIn / FadeOut に Continuous=false を組み合わせて実現する。
+        /// </remarks>
+        private static (string CommandType, string? EffectType, bool? Continuous) MapActionToCommand(string? presetCommand)
         {
             return presetCommand switch
             {
-                "SetColor" => ("Color", null),
-                "Off" => ("Off", null),
-                "Flash" => ("Effect", "Flash"),
-                "FadeIn" => ("Effect", "FadeIn"),
-                "FadeOut" => ("Effect", "FadeOut"),
-                "Breath" => ("Effect", "Breathing"),
-                "SevenColor" => ("Effect", "SevenColor"),
-                _ => ("Color", null),
+                "SetColor"    => ("Color",  null,         null),
+                "Off"         => ("Off",    null,         null),
+                "Flash"       => ("Effect", "Flash",      null),
+                "FadeIn"      => ("Effect", "FadeIn",     null),
+                "FadeOut"     => ("Effect", "FadeOut",    null),
+                "FadeInHold"  => ("Effect", "FadeIn",     false), // 1 回フェードイン後 目標色保持
+                "FadeOutHold" => ("Effect", "FadeOut",    false), // 1 回フェードアウト後 消灯保持
+                "Breath"      => ("Effect", "Breathing",  null),
+                "SevenColor"  => ("Effect", "SevenColor", null),
+                _             => ("Color",  null,         null),
             };
         }
 
@@ -1121,6 +1132,74 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
         }
 
+        /// <summary>
+        /// 割り込み点灯中かどうか（割り込みボタンの表記切替）
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(InterruptButtonText))]
+        private bool isInterruptOn;
+
+        /// <summary>
+        /// 割り込み点灯ボタンの表示テキスト
+        /// </summary>
+        public string InterruptButtonText => IsInterruptOn ? "⚡ 解除" : "⚡ 割り込み";
+
+        /// <summary>
+        /// 割り込み点灯のトグル
+        /// 概要：エフェクト実行中・連続再生中に押下されると、現在の動作を中断し
+        ///       Custom 1 の色で点灯する。もう一度押すと解除（エフェクト停止）する。
+        /// </summary>
+        [RelayCommand]
+        private async Task ToggleInterruptAsync()
+        {
+            if (_lighting == null || !_lighting.IsConnected)
+            {
+                StatusMessage = "未接続のため割り込み点灯できません。";
+                return;
+            }
+
+            if (IsInterruptOn)
+            {
+                // 解除：エフェクト停止コマンドを送るのみ
+                try
+                {
+                    await _lighting.StopEffectAsync();
+                    IsInterruptOn = false;
+                    StatusMessage = "割り込み点灯を解除しました。";
+                    AppendLog("TX", "Interrupt OFF");
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"割り込み解除失敗: {ex.Message}";
+                    AppendLog("ERR", $"Interrupt OFF 失敗: {ex.Message}");
+                }
+            }
+            else
+            {
+                // 割り込み点灯：Custom 1 の色で SetColor
+                try
+                {
+                    var interruptColor = CustomColorPresets.Count > 0
+                        ? new Rgb(CustomColorPresets[0].R, CustomColorPresets[0].G, CustomColorPresets[0].B)
+                        : new Rgb(255, 255, 255);
+
+                    await _lighting.StopEffectAsync();
+                    await Task.Delay(50);
+                    await _lighting.SetColorAsync(Target.All, interruptColor);
+
+                    IsInterruptOn = true;
+                    var name = CustomColorPresets.Count > 0 ? CustomColorPresets[0].Name : "White";
+                    StatusMessage = $"割り込み点灯：{name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})";
+                    AppendLog("TX", $"Interrupt ON: {name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})");
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"割り込み点灯失敗: {ex.Message}";
+                    AppendLog("ERR", $"Interrupt ON 失敗: {ex.Message}");
+                }
+            }
+        }
+
         /// <summary>実行中エフェクトを停止（停止ボタン または Esc キー）</summary>
         [RelayCommand]
         private async Task StopExecutionAsync()
@@ -1178,6 +1257,8 @@ namespace Lib.Ui.Screens.ViewModels
                             StatusMessage = "エフェクト種別が未設定です。";
                             return;
                         }
+                        // 連続実行フラグ：未指定（null）の場合は繰り返し（true）を採用
+                        var effectContinuous = step.Continuous ?? true;
                         await _lighting.StartEffectAsync(
                             effectType: step.EffectType,
                             color: color,
@@ -1186,8 +1267,8 @@ namespace Lib.Ui.Screens.ViewModels
                                 ? Math.Max(50, step.GetEffectCycleDurationOrDefault() / 2)
                                 : (int?)null,
                             fadeSteps: step.GetFadeStepsOrDefault(),
-                            continuous: true);
-                        AppendLog("TX", $"Effect {step.EffectType} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()}");
+                            continuous: effectContinuous);
+                        AppendLog("TX", $"Effect {step.EffectType} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()} cont={effectContinuous}");
                         break;
 
                     case "EffectStop":
@@ -1291,18 +1372,24 @@ namespace Lib.Ui.Screens.ViewModels
                 StatusMessage = $"再生開始: {_editingSequence.Name}（{apiSteps.Count} ステップ）";
                 AppendLog("TX", $"Sequence Play: {_editingSequence.Name} ({apiSteps.Count} ステップ)");
 
-                // ステップ進行ログのインデックスをリセット（1 ステップ目から確実にログを残す）
-                _lastLoggedStepIndex = -1;
-
-                // 再生開始の即時 UI 反映：API 状態反映の遅れを補うため、1 行目を楽観的にハイライト
-                // 後続の PollStatusAsync で API の真値（currentStepIndex）が来たら自動補正される
+                // 1 行目を即時にハイライト・ログ出力する
+                // 状態ポーリング更新は時刻 0 のステップを取り逃がす場合があるため、ここで先に反映する
                 if (EditingSteps.Count > 0)
                 {
                     IsPlaying = true;
                     PlayingSequenceName = _editingSequence.Name;
                     UpdatePlayingStepHighlight(0);
+                    AppendStepProgressLog(0);
+                    _lastLoggedStepIndex = 0;
+                }
+                else
+                {
+                    _lastLoggedStepIndex = -1;
                 }
                 AdjustPollingInterval(true);
+
+                // 1 行目のハイライトをユーザーに視認させるため、初回ポーリング前に短く待機する
+                await Task.Delay(150);
             }
             catch (Exception ex)
             {
@@ -1438,12 +1525,16 @@ namespace Lib.Ui.Screens.ViewModels
                 UpdatePlayingStepDetail(playing ? currentIdx : -1);
 
                 // 連続再生中のステップ進行を検知して [TX] ログを残す
-                // 注意：ポーリング間隔（200ms）より短い間隔のステップは飛ぶ可能性あり
+                // ポーリング間隔より短い時間でステップが進んだ場合に取りこぼさないよう、
+                // 前回ログ済みの次のステップから現在ステップまでを順番にログ出力する
                 if (playing && currentIdx >= 0
-                    && currentIdx != _lastLoggedStepIndex
+                    && currentIdx > _lastLoggedStepIndex
                     && currentIdx < EditingSteps.Count)
                 {
-                    AppendStepProgressLog(currentIdx);
+                    for (int i = _lastLoggedStepIndex + 1; i <= currentIdx; i++)
+                    {
+                        AppendStepProgressLog(i);
+                    }
                     _lastLoggedStepIndex = currentIdx;
                 }
 
@@ -1583,13 +1674,15 @@ namespace Lib.Ui.Screens.ViewModels
 
         private static ObservableCollection<ActionPresetItem> CreateActionPresets() => new()
         {
-            new("SetColor",   "色固定",     "#FFC107"),
-            new("FadeIn",     "Fade In",    "#4CAF50"),
-            new("FadeOut",    "Fade Out",   "#2196F3"),
-            new("Flash",      "Flash",      "#FFEB3B"),
-            new("Breath",     "Breath",     "#00BCD4"),
-            new("SevenColor", "7 Color",    "#E91E63"),
-            new("Off",        "消灯",       "#9E9E9E"),
+            new("SetColor",    "色固定",       "#FFC107"),
+            new("FadeIn",      "Fade In",      "#4CAF50"),
+            new("FadeOut",     "Fade Out",     "#2196F3"),
+            new("FadeInHold",  "Fade In/In",   "#81C784"),  // 1 回フェードイン → 目標色を保持
+            new("FadeOutHold", "Fade Out/Out", "#64B5F6"),  // 1 回フェードアウト → 消灯を保持
+            new("Flash",       "Flash",        "#FFEB3B"),
+            new("Breath",      "Breath",       "#00BCD4"),
+            new("SevenColor",  "7 Color",      "#E91E63"),
+            new("Off",         "消灯",         "#9E9E9E"),
         };
 
         #endregion

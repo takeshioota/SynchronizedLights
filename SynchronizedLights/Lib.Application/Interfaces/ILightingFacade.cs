@@ -49,20 +49,10 @@ public interface ILightingFacade
     Task SetColorAsync(Target target, Rgb color, CancellationToken ct = default);
 
     // --- 演出 StartEffectAsync / StopEffectAsync ---
-
-    /// <summary>点滅を実行する</summary>
-    Task FlashAsync(Target target, int speedMs, Rgb color, CancellationToken ct = default);
-
-    /// <summary>フェードインを実行する</summary>
-    Task FadeInAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default);
-
-    /// <summary>フェードアウトを実行する</summary>
-    Task FadeOutAsync(Target target, int timeMs, Rgb color, CancellationToken ct = default);
-
-    /// <summary>
-    /// ブレス（呼吸）演出を実行する
-    /// </summary>
-    Task BreathAsync(Target target, int cycleMs, Rgb color, int cycles = 3, CancellationToken ct = default);
+    //
+    // 旧 FlashAsync / FadeInAsync / FadeOutAsync / BreathAsync は
+    // API 担当者からの指摘（UI 側ループ＝方式 A）に基づき削除。
+    // 演出は StartEffectAsync / StopEffectAsync（方式 B：API 側で 0.2 秒間隔の継続送信）に統一する。
 
     // --- シーケンス ---
 

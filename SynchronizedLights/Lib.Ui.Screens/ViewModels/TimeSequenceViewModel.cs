@@ -494,6 +494,7 @@ namespace Lib.Ui.Screens.ViewModels
             retransmitCount = src.RetransmitCount;
             comment = src.Comment ?? "";
             note = src.Note ?? "";
+            continuous = src.Continuous;
         }
 
         /// <summary>開始時刻（ms）— 内部値</summary>
@@ -584,6 +585,15 @@ namespace Lib.Ui.Screens.ViewModels
         private string note = "";
 
         /// <summary>
+        /// エフェクト連続実行フラグ（CommandType="Effect" 時のみ意味を持つ）
+        /// 値： null = 未指定（繰り返し相当）、
+        ///        true = 繰り返し実行、
+        ///        false = 1 回実行後 最終色保持（「Fade In/In」「Fade Out/Out」などで使用）
+        /// </summary>
+        [ObservableProperty]
+        private bool? continuous;
+
+        /// <summary>
         /// 連続再生中の現在ステップかどうか（DataGrid のハイライト表示に使用）
         /// 概要：API 側の play status から取得した currentStepIndex に該当する行で true。
         ///       永続化対象外（[JsonIgnore] 相当だが、ToModel に含めないことで JSON 出力されない）。
@@ -619,7 +629,9 @@ namespace Lib.Ui.Screens.ViewModels
                     : (int?)null,
                 RetransmitCount = RetransmitCount,
                 Comment = Comment ?? "",
-                Note = Note ?? ""
+                Note = Note ?? "",
+                // Effect 以外では連続実行フラグは意味を持たないため null 化する
+                Continuous = (CommandType == "Effect") ? Continuous : null,
             };
         }
     }

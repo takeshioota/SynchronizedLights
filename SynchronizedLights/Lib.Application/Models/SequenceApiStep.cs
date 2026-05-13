@@ -57,5 +57,13 @@ namespace Lib.Application.Models
         /// <summary>Fade 補間ステップ数</summary>
         [JsonPropertyName("fadeSteps")]
         public int? FadeSteps { get; set; }
+
+        /// <summary>
+        /// エフェクト連続実行フラグ
+        /// 値： true = 繰り返し、false = 1 回実行後 最終色保持、null = 未指定（繰り返し相当）
+        /// 「Fade In/In」「Fade Out/Out」のような最終色保持動作のときに false を指定する。
+        /// </summary>
+        [JsonPropertyName("continuous")]
+        public bool? Continuous { get; set; }
     }
 }

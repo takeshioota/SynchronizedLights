@@ -30,7 +30,45 @@ namespace Lib.Application.Models
         /// エフェクト種別（CommandType="Effect" 時のみ有効、それ以外は null）
         /// 値： "Flash" / "FadeIn" / "FadeOut" / "Breathing" / "SevenColor" / null
         /// </summary>
-        public string? EffectType { get; set; } = null;
+        /// <remarks>
+        /// 入力値が "FadeInHold" / "FadeOutHold" のときは "FadeIn" / "FadeOut" + Continuous=false に
+        /// 正規化して格納する（「1 回実行後 最終色保持」動作と等価）。
+        /// </remarks>
+        public string? EffectType
+        {
+            get => _effectType;
+            set
+            {
+                switch (value)
+                {
+                    case "FadeInHold":
+                        _effectType = "FadeIn";
+                        Continuous = false;
+                        break;
+                    case "FadeOutHold":
+                        _effectType = "FadeOut";
+                        Continuous = false;
+                        break;
+                    default:
+                        _effectType = value;
+                        break;
+                }
+            }
+        }
+        private string? _effectType = null;
+
+        /// <summary>
+        /// エフェクト連続実行フラグ（CommandType="Effect" 時のみ意味を持つ）
+        /// 値： null = 未指定（繰り返し相当として扱われる）、
+        ///        true = 繰り返し実行（停止コマンドまで継続）、
+        ///        false = 1 回実行後 最終色を保持
+        /// </summary>
+        /// <remarks>
+        /// 用例：
+        ///   - 「Fade In/In」（黒→緑→緑保持）= EffectType:"FadeIn" + Continuous:false
+        ///   - 「Fade Out/Out」（緑→黒→黒保持）= EffectType:"FadeOut" + Continuous:false
+        /// </remarks>
+        public bool? Continuous { get; set; } = null;
 
         /// <summary>色 R（0〜255）</summary>
         public byte ColorR { get; set; } = 255;
