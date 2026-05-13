@@ -492,6 +492,7 @@ namespace Lib.Ui.Screens.ViewModels
             _effectCycleDurationMs = src.EffectCycleDurationMs ?? 0;
             _fadeSteps = src.FadeSteps ?? 0;
             retransmitCount = src.RetransmitCount;
+            comment = src.Comment ?? "";
             note = src.Note ?? "";
         }
 
@@ -574,6 +575,11 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private int retransmitCount = 3;
 
+        /// <summary>コメント（曲名・場面名など、15 文字程度を想定）</summary>
+        [ObservableProperty]
+        private string comment = "";
+
+        /// <summary>メモ（自由記述）</summary>
         [ObservableProperty]
         private string note = "";
 
@@ -584,6 +590,15 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         [ObservableProperty]
         private bool isCurrentlyPlaying;
+
+        /// <summary>
+        /// DataGrid 表示用の連番（1 始まり）
+        /// 概要：EditingSteps コレクション内の位置を 1 ベースで示す表示専用プロパティ。
+        ///       行追加・削除・移動・ソート時に SequenceEditorViewModel 側で振り直される。
+        ///       永続化対象外（ToModel に含めない）。
+        /// </summary>
+        [ObservableProperty]
+        private int rowNumber;
 
         /// <summary>永続化用 SequenceStep に変換</summary>
         public SequenceStep ToModel()
@@ -603,6 +618,7 @@ namespace Lib.Ui.Screens.ViewModels
                     ? FadeSteps
                     : (int?)null,
                 RetransmitCount = RetransmitCount,
+                Comment = Comment ?? "",
                 Note = Note ?? ""
             };
         }

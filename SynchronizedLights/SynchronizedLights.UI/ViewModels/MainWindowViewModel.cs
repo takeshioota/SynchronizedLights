@@ -826,8 +826,16 @@ namespace SynchronizedLights.UI.ViewModels
             // Main画面のフィールド復元
             CommandName = state.CommandName ?? "";
             SelectedPort = state.SelectedPort ?? "ALL";
-            LastTransmitterChannel = state.TransmitterChannel;
-            LastTransmitterPower = state.TransmitterPower;
+
+            // 送信機 Channel / Power は appsettings.json の DefaultChannel / DefaultPower を最優先で採用する
+            // 概要：オペレータが appsettings を編集して再起動すれば必ず反映されるようにする。
+            //       UserState の値は無視（最後のセッション値の参考としてのみ保存される）。
+            LastTransmitterChannel = App.DefaultChannel;
+            LastTransmitterPower = App.DefaultPower;
+            Serilog.Log.Information(
+                "Transmitter init values from appsettings: Channel={Ch}, Power={Pwr} (UserState値 Ch={UCh}/Pwr={UPwr} は無視)",
+                LastTransmitterChannel, LastTransmitterPower,
+                state.TransmitterChannel, state.TransmitterPower);
 
             // 画面表示を更新
             OnPropertyChanged(nameof(CurrentTargetLabel));

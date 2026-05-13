@@ -33,6 +33,18 @@ namespace SynchronizedLights.UI
         /// <summary>起動時に読み込んだ UserState</summary>
         public static UserState? LoadedUserState { get; private set; }
 
+        /// <summary>
+        /// appsettings.json で指定された送信機チャネルの既定値（FA、1〜4）
+        /// 概要：未指定時は 1 を使用。UserState に保存値があればそれを優先。
+        /// </summary>
+        public static byte DefaultChannel { get; private set; } = 1;
+
+        /// <summary>
+        /// appsettings.json で指定された送信機電力の既定値（FB、0〜3）
+        /// 概要：未指定時は 3 を使用。UserState に保存値があればそれを優先。
+        /// </summary>
+        public static byte DefaultPower { get; private set; } = 3;
+
         /// <summary>MainWindowViewModel への静的参照</summary>
         public static MainWindowViewModel? MainVm { get; set; }
 
@@ -107,6 +119,17 @@ namespace SynchronizedLights.UI
                 config["Lighting:HeartbeatEnabled"], "false", StringComparison.OrdinalIgnoreCase);
             var heartbeatIntervalSec = int.TryParse(
                 config["Lighting:HeartbeatIntervalSec"], out var hb) ? hb : 30;
+
+            // 送信機初期化の既定値（Channel 1〜4 / Power 0〜3）
+            if (byte.TryParse(config["Lighting:DefaultChannel"], out var defCh) && defCh >= 1 && defCh <= 4)
+            {
+                DefaultChannel = defCh;
+            }
+            if (byte.TryParse(config["Lighting:DefaultPower"], out var defPw) && defPw <= 3)
+            {
+                DefaultPower = defPw;
+            }
+            Log.Information("Default Transmitter: Channel={Ch}, Power={Pwr}", DefaultChannel, DefaultPower);
             // 循環バッファを設定値のサイズで再作成
             LatencyTracker = new LatencyTracker(windowSize: latencyWindow);
 

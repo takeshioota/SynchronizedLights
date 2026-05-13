@@ -373,47 +373,57 @@
                   SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
                   SelectedIndex="{Binding CurrentStepIndex, Mode=TwoWay}"
                   IsEnabled="{Binding HasSelectedSequence}"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   Margin="0,0,0,4">
             <DataGrid.Columns>
+                <DataGridTextColumn Header="No"
+		                          Binding="{Binding RowNumber, Mode=OneWay}"
+		                          Width="40"
+		                          IsReadOnly="True"/>
+
+                <DataGridTextColumn Header="コメント"
+		                          Binding="{Binding Comment, UpdateSourceTrigger=PropertyChanged}"
+		                          Width="130"/>
+
                 <DataGridTextColumn Header="開始(ms)"
 		                          Binding="{Binding TimeMs, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="80"/>
+		                          Width="70"/>
 
                 <DataGridTextColumn Header="(秒)"
 		                          Binding="{Binding TimeSec, StringFormat={}{0:F1}s, Mode=OneWay}"
-		                          Width="60" IsReadOnly="True"/>
+		                          Width="55" IsReadOnly="True"/>
 
                 <DataGridComboBoxColumn Header="コマンド"
 		                              ItemsSource="{StaticResource CommandTypeOptions}"
 		                              SelectedValueBinding="{Binding CommandType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-		                              Width="100"/>
+		                              Width="95"/>
 
                 <DataGridTextColumn Header="R"
 		                          Binding="{Binding ColorR, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="50"/>
+		                          Width="45"/>
                 <DataGridTextColumn Header="G"
 		                          Binding="{Binding ColorG, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="50"/>
+		                          Width="45"/>
                 <DataGridTextColumn Header="B"
 		                          Binding="{Binding ColorB, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="50"/>
+		                          Width="45"/>
 
                 <DataGridTextColumn Header="再送"
 		                          Binding="{Binding RetransmitCount, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="50"/>
+		                          Width="45"/>
 
                 <DataGridComboBoxColumn Header="エフェクト"
 		                              ItemsSource="{StaticResource EffectTypeOptions}"
 		                              SelectedValueBinding="{Binding EffectType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-		                              Width="100"/>
+		                              Width="95"/>
 
                 <DataGridTextColumn Header="周期(ms)"
 		                          Binding="{Binding EffectCycleDurationMs, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="80"/>
+		                          Width="70"/>
 
                 <DataGridTextColumn Header="Fade"
 		                          Binding="{Binding FadeSteps, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="60"/>
+		                          Width="55"/>
 
                 <DataGridTextColumn Header="メモ"
 		                          Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}"

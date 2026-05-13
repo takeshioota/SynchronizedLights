@@ -271,6 +271,7 @@ namespace Lib.Ui.Screens.ViewModels
                 {
                     EditingSteps.Add(new SequenceStepWrapper(step));
                 }
+                RenumberEditingSteps();
                 CurrentStepIndex = EditingSteps.Count > 0 ? 0 : -1;
                 SelectedStep = CurrentStepIndex >= 0 ? EditingSteps[CurrentStepIndex] : null;
                 OnPropertyChanged(nameof(CurrentStepLabel));
@@ -408,6 +409,7 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 EditingSteps.Remove(SelectedStep);
+                RenumberEditingSteps();
                 if (CurrentStepIndex >= EditingSteps.Count) CurrentStepIndex = EditingSteps.Count - 1;
                 if (idx < EditingSteps.Count) SelectedStep = EditingSteps[idx];
                 else if (EditingSteps.Count > 0) SelectedStep = EditingSteps.Last();
@@ -453,6 +455,7 @@ namespace Lib.Ui.Screens.ViewModels
 
             int insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
             EditingSteps.Insert(insertIndex, wrapper);
+            RenumberEditingSteps();
 
             // 複製は内容コピーであり実行はしないため自動実行を抑制
             _suppressAutoExecute = true;
@@ -491,6 +494,7 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 EditingSteps.Move(idx, idx - 1);
+                RenumberEditingSteps();
                 CurrentStepIndex = idx - 1;
             }
             finally
@@ -498,7 +502,7 @@ namespace Lib.Ui.Screens.ViewModels
                 _suppressAutoExecute = false;
             }
             OnPropertyChanged(nameof(CurrentStepLabel));
-            StatusMessage = $"行を上に移動：{idx + 1} → {idx}";
+            StatusMessage = $"行を上に移動:{idx + 1} → {idx}";
         }
 
         /// <summary>
@@ -523,6 +527,7 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 EditingSteps.Move(idx, idx + 1);
+                RenumberEditingSteps();
                 CurrentStepIndex = idx + 1;
             }
             finally
@@ -551,6 +556,7 @@ namespace Lib.Ui.Screens.ViewModels
                 var sorted = EditingSteps.OrderBy(w => w.TimeMs).ToList();
                 EditingSteps.Clear();
                 foreach (var w in sorted) EditingSteps.Add(w);
+                RenumberEditingSteps();
 
                 if (EditingSteps.Count > 0)
                 {
@@ -601,6 +607,7 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 EditingSteps.Clear();
+                RenumberEditingSteps();
                 SelectedStep = null;
                 CurrentStepIndex = -1;
             }
@@ -660,6 +667,7 @@ namespace Lib.Ui.Screens.ViewModels
                     currentIndex++;
                     baseTimeMs += interval;
                 }
+                RenumberEditingSteps();
 
                 if (firstIndex < EditingSteps.Count)
                 {
@@ -1020,6 +1028,7 @@ namespace Lib.Ui.Screens.ViewModels
             };
             var wrapper = new SequenceStepWrapper(step);
             EditingSteps.Insert(insertIndex, wrapper);
+            RenumberEditingSteps();
 
             // 空行は実行する意味がないため、自動実行を抑制
             _suppressAutoExecute = true;
@@ -1394,6 +1403,19 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>
+        /// EditingSteps の RowNumber を 1 始まりで振り直す
+        /// 概要：行追加・削除・複製・移動・ソート・全クリア・テンプレ挿入後に呼ぶ。
+        ///       DataGrid の「No」列に即時反映される。
+        /// </summary>
+        private void RenumberEditingSteps()
+        {
+            for (int i = 0; i < EditingSteps.Count; i++)
+            {
+                EditingSteps[i].RowNumber = i + 1;
+            }
+        }
+
         /// <summary>停止中のポーリング間隔（軽量）</summary>
         private static readonly TimeSpan PollIntervalIdle = TimeSpan.FromMilliseconds(1500);
 
@@ -1545,6 +1567,8 @@ namespace Lib.Ui.Screens.ViewModels
                 if ((a.EffectCycleDurationMs ?? 0) != b.EffectCycleDurationMs) return true;
                 if ((a.FadeSteps ?? 0) != b.FadeSteps) return true;
                 if (a.RetransmitCount != b.RetransmitCount) return true;
+                if ((a.Comment ?? "") != (b.Comment ?? "")) return true;
+                if ((a.Note ?? "") != (b.Note ?? "")) return true;
             }
             return false;
         }

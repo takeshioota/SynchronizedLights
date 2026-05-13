@@ -60,8 +60,14 @@ namespace Lib.Application.Models
         public int RetransmitCount { get; set; } = 3;
 
         /// <summary>
-        /// メモ・コメント（任意）
-        /// 概要：ステップ作成者が自由に書ける備考。
+        /// コメント（任意、15 文字程度を想定）
+        /// 概要：曲名・場面名など、現場運用で識別しやすい短い名前を入れる欄。
+        /// </summary>
+        public string Comment { get; set; } = "";
+
+        /// <summary>
+        /// メモ（任意、自由記述）
+        /// 概要：ステップ作成者が自由に書ける備考。コメント欄より長文を想定。
         /// </summary>
         public string Note { get; set; } = "";
 
