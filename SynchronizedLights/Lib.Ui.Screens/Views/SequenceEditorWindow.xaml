@@ -16,6 +16,7 @@
         Background="{StaticResource AppBgBrush}"
         Foreground="{StaticResource TextBrushMain}"
         PreviewKeyDown="Window_KeyDown"
+        PreviewMouseDown="Window_PreviewMouseDown"
         Loaded="Window_Loaded">
 
     <Window.Resources>
@@ -299,13 +300,24 @@
                 <TextBox Width="280"
                          Text="{Binding EditingName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          IsEnabled="{Binding HasSelectedSequence}"
-                         Style="{StaticResource GrandMaTextBoxStyle}"
                          VerticalAlignment="Center"
                          VerticalContentAlignment="Center"
                          Padding="6,2"
                          MinHeight="30"
                          Margin="0,0,12,0"
-                         ToolTip="シーケンス名を編集して「保存」を押すと名称が変更されます"/>
+                         ToolTip="シーケンス名を編集して「保存」を押すと名称が変更されます">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox" BasedOn="{StaticResource GrandMaTextBoxStyle}">
+                            <Style.Triggers>
+                                <!-- 名前重複時は赤枠で警告 -->
+                                <DataTrigger Binding="{Binding IsNameDuplicate}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#DC3545"/>
+                                    <Setter Property="BorderThickness" Value="2"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
 
                 <Separator Width="1" Background="#444" Margin="0,4,12,4"/>
 
@@ -320,6 +332,24 @@
                         IsEnabled="{Binding HasSelectedSequence}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         MinHeight="30" Width="70"/>
+
+                <!-- 名前エラーメッセージ（重複時のみ表示）-->
+                <TextBlock Text="{Binding NameErrorMessage}"
+                           Foreground="#FF6B6B"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsNameDuplicate}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </Border>
 
@@ -358,23 +388,29 @@
                     <Run Text="Esc" Foreground="#FFC107" FontWeight="Bold"/>
                     <Run Text="=停止"/>
                 </TextBlock>
-                <Button Grid.Column="3"
-                        Content="{Binding InterruptButtonText}"
-                        Command="{Binding ToggleInterruptCommand}"
+                <Button x:Name="InterruptButton"
+                        Grid.Column="3"
+                        Content="⚡ 割り込み"
                         Style="{StaticResource GrandMaSelectableButtonStyle}"
                         Tag="{Binding IsInterruptOn}"
                         Foreground="#FFC107"
                         FontWeight="Bold"
-                        MinHeight="28" Width="100"
+                        Height="28" Width="100"
+                        VerticalAlignment="Center"
                         Margin="0,0,4,0"
-                        ToolTip="エフェクト/再生を中断し、Custom 1 の色で点灯（もう一度押すと解除）"/>
+                        PreviewMouseLeftButtonDown="InterruptButton_PreviewMouseLeftButtonDown"
+                        PreviewMouseLeftButtonUp="InterruptButton_PreviewMouseLeftButtonUp"
+                        MouseLeave="InterruptButton_MouseLeave"
+                        LostMouseCapture="InterruptButton_LostMouseCapture"
+                        ToolTip="押している間 Custom 1 の色で全 LED を点灯。離すと前のコマンドを再開"/>
                 <Button Grid.Column="4"
                         Content="■ 停止"
                         Command="{Binding StopExecutionCommand}"
                         Style="{StaticResource GrandMaButtonStyle}"
                         Foreground="#FF5252"
                         FontWeight="Bold"
-                        MinHeight="28" Width="80"
+                        Height="28" Width="80"
+                        VerticalAlignment="Center"
                         ToolTip="実行中のエフェクトを停止（Esc キーと同じ動作）"/>
             </Grid>
         </Border>
@@ -799,8 +835,10 @@
                          BorderThickness="0"
                          FontFamily="Consolas, Courier New, monospace"
                          FontSize="11"
+                         SelectionMode="Extended"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         KeyDown="LogListBox_KeyDown"
                          Loaded="LogListBox_Loaded">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">

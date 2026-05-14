@@ -130,8 +130,49 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private string editingName = "";
 
+        partial void OnEditingNameChanged(string value)
+        {
+            UpdateNameValidation();
+        }
+
         [ObservableProperty]
         private string editingDescription = "";
+
+        /// <summary>
+        /// 名前が既存シーケンスと重複しているかどうか（赤枠表示用）
+        /// </summary>
+        [ObservableProperty]
+        private bool isNameDuplicate;
+
+        /// <summary>
+        /// 保存ボタン横に表示する名前のエラーメッセージ。重複なし時は空文字
+        /// </summary>
+        [ObservableProperty]
+        private string nameErrorMessage = "";
+
+        /// <summary>
+        /// 現在の EditingName と編集対象 ID から重複チェックを行い、状態プロパティを更新する
+        /// </summary>
+        private void UpdateNameValidation()
+        {
+            if (_editingSequence == null || string.IsNullOrWhiteSpace(EditingName))
+            {
+                IsNameDuplicate = false;
+                NameErrorMessage = "";
+                return;
+            }
+
+            if (_store.ExistsByName(EditingName, _editingSequence.Id))
+            {
+                IsNameDuplicate = true;
+                NameErrorMessage = "同名のシーケンスが既に存在します";
+            }
+            else
+            {
+                IsNameDuplicate = false;
+                NameErrorMessage = "";
+            }
+        }
 
         public ObservableCollection<SequenceStepWrapper> EditingSteps { get; }
 
@@ -327,12 +368,24 @@ namespace Lib.Ui.Screens.ViewModels
         private void SaveSequence()
         {
             if (_editingSequence == null) { StatusMessage = "保存対象が選択されていません。"; return; }
-            if (string.IsNullOrWhiteSpace(EditingName)) { StatusMessage = "シーケンス名を入力してください。"; return; }
+            if (string.IsNullOrWhiteSpace(EditingName))
+            {
+                NameErrorMessage = "シーケンス名を入力してください";
+                IsNameDuplicate = true;
+                StatusMessage = "シーケンス名を入力してください。";
+                return;
+            }
             if (_store.ExistsByName(EditingName, _editingSequence.Id))
             {
+                IsNameDuplicate = true;
+                NameErrorMessage = "同名のシーケンスが既に存在します";
                 StatusMessage = $"「{EditingName}」という名前のシーケンスが既に存在します。";
                 return;
             }
+
+            // 重複なし → エラー表示をクリア
+            IsNameDuplicate = false;
+            NameErrorMessage = "";
 
             _editingSequence.Name = EditingName.Trim();
             _editingSequence.Description = EditingDescription ?? "";
@@ -1133,70 +1186,81 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// 割り込み点灯中かどうか（割り込みボタンの表記切替）
+        /// 割り込み点灯中かどうか（ボタン押下中の視覚フィードバック用）
         /// </summary>
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(InterruptButtonText))]
         private bool isInterruptOn;
 
         /// <summary>
-        /// 割り込み点灯ボタンの表示テキスト
+        /// 多重実行防止用フラグ。Press / Release を順序通りに動作させる。
         /// </summary>
-        public string InterruptButtonText => IsInterruptOn ? "⚡ 解除" : "⚡ 割り込み";
+        private bool _interruptInProgress;
 
         /// <summary>
-        /// 割り込み点灯のトグル
-        /// 概要：エフェクト実行中・連続再生中に押下されると、現在の動作を中断し
-        ///       Custom 1 の色で点灯する。もう一度押すと解除（エフェクト停止）する。
+        /// 割り込み点灯ボタンが押された瞬間の処理
+        /// 概要：再生中シーケンスを一時停止して停止位置を保存し、Custom 1 の色で全 LED を点灯する。
         /// </summary>
-        [RelayCommand]
-        private async Task ToggleInterruptAsync()
+        public async Task InterruptPressAsync()
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
                 StatusMessage = "未接続のため割り込み点灯できません。";
                 return;
             }
+            if (_interruptInProgress) return;
+            _interruptInProgress = true;
 
-            if (IsInterruptOn)
+            try
             {
-                // 解除：エフェクト停止コマンドを送るのみ
-                try
-                {
-                    await _lighting.StopEffectAsync();
-                    IsInterruptOn = false;
-                    StatusMessage = "割り込み点灯を解除しました。";
-                    AppendLog("TX", "Interrupt OFF");
-                }
-                catch (Exception ex)
-                {
-                    StatusMessage = $"割り込み解除失敗: {ex.Message}";
-                    AppendLog("ERR", $"Interrupt OFF 失敗: {ex.Message}");
-                }
+                var interruptColor = CustomColorPresets.Count > 0
+                    ? new Rgb(CustomColorPresets[0].R, CustomColorPresets[0].G, CustomColorPresets[0].B)
+                    : new Rgb(255, 255, 255);
+
+                await _lighting.PauseSequenceAsync();
+                await Task.Delay(50);
+                await _lighting.SetColorAsync(Target.All, interruptColor);
+
+                IsInterruptOn = true;
+                var name = CustomColorPresets.Count > 0 ? CustomColorPresets[0].Name : "White";
+                StatusMessage = $"割り込み点灯：{name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})";
+                AppendLog("TX", $"Interrupt ON: {name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})");
             }
-            else
+            catch (Exception ex)
             {
-                // 割り込み点灯：Custom 1 の色で SetColor
-                try
-                {
-                    var interruptColor = CustomColorPresets.Count > 0
-                        ? new Rgb(CustomColorPresets[0].R, CustomColorPresets[0].G, CustomColorPresets[0].B)
-                        : new Rgb(255, 255, 255);
+                StatusMessage = $"割り込み点灯失敗: {ex.Message}";
+                AppendLog("ERR", $"Interrupt ON 失敗: {ex.Message}");
+            }
+            finally
+            {
+                _interruptInProgress = false;
+            }
+        }
 
-                    await _lighting.StopEffectAsync();
-                    await Task.Delay(50);
-                    await _lighting.SetColorAsync(Target.All, interruptColor);
+        /// <summary>
+        /// 割り込み点灯ボタンが離された瞬間の処理
+        /// 概要：保存されているシーケンス位置から再生を再開する。
+        /// </summary>
+        public async Task InterruptReleaseAsync()
+        {
+            if (_lighting == null || !_lighting.IsConnected)
+            {
+                IsInterruptOn = false;
+                return;
+            }
+            if (!IsInterruptOn) return;
 
-                    IsInterruptOn = true;
-                    var name = CustomColorPresets.Count > 0 ? CustomColorPresets[0].Name : "White";
-                    StatusMessage = $"割り込み点灯：{name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})";
-                    AppendLog("TX", $"Interrupt ON: {name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})");
-                }
-                catch (Exception ex)
-                {
-                    StatusMessage = $"割り込み点灯失敗: {ex.Message}";
-                    AppendLog("ERR", $"Interrupt ON 失敗: {ex.Message}");
-                }
+            try
+            {
+                await _lighting.ResumeSequenceAsync();
+                IsInterruptOn = false;
+                StatusMessage = "割り込み解除：シーケンスの続きを再生します。";
+                AppendLog("TX", "Interrupt OFF (Resume Sequence)");
+            }
+            catch (Exception ex)
+            {
+                IsInterruptOn = false;
+                StatusMessage = $"割り込み解除失敗: {ex.Message}";
+                AppendLog("ERR", $"Interrupt OFF 失敗: {ex.Message}");
             }
         }
 
@@ -1268,7 +1332,7 @@ namespace Lib.Ui.Screens.ViewModels
                                 : (int?)null,
                             fadeSteps: step.GetFadeStepsOrDefault(),
                             continuous: effectContinuous);
-                        AppendLog("TX", $"Effect {step.EffectType} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()} cont={effectContinuous}");
+                        AppendLog("TX", $"Effect {FormatEffectDisplayName(step.EffectType, step.Continuous)} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()} cont={effectContinuous}");
                         break;
 
                     case "EffectStop":
@@ -1561,6 +1625,20 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
+        /// エフェクト種別の表示名を返す
+        /// 連続実行フラグが false の FadeIn / FadeOut は「Fade In/In」「Fade Out/Out」と表示する
+        /// </summary>
+        private static string FormatEffectDisplayName(string? effectType, bool? continuous)
+        {
+            if (continuous == false)
+            {
+                if (effectType == "FadeIn") return "FadeIn/In";
+                if (effectType == "FadeOut") return "FadeOut/Out";
+            }
+            return effectType ?? "";
+        }
+
+        /// <summary>
         /// 連続再生中、進行したステップの内容を [TX] ログに記録
         /// </summary>
         private void AppendStepProgressLog(int stepIndex)
@@ -1573,7 +1651,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 "Color"      => $"Step {stepIndex + 1}/{total}: Color ({w.ColorR},{w.ColorG},{w.ColorB})",
                 "Off"        => $"Step {stepIndex + 1}/{total}: Off",
-                "Effect"     => $"Step {stepIndex + 1}/{total}: Effect {w.EffectType} ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "Effect"     => $"Step {stepIndex + 1}/{total}: Effect {FormatEffectDisplayName(w.EffectType, w.Continuous)} ({w.ColorR},{w.ColorG},{w.ColorB})",
                 "EffectStop" => $"Step {stepIndex + 1}/{total}: EffectStop",
                 _            => $"Step {stepIndex + 1}/{total}: {w.CommandType}",
             };
@@ -1597,7 +1675,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 "Color"      => $"Step {currentIndex + 1}/{EditingSteps.Count}: Color ({w.ColorR},{w.ColorG},{w.ColorB})",
                 "Off"        => $"Step {currentIndex + 1}/{EditingSteps.Count}: Off",
-                "Effect"     => $"Step {currentIndex + 1}/{EditingSteps.Count}: Effect {w.EffectType} ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "Effect"     => $"Step {currentIndex + 1}/{EditingSteps.Count}: Effect {FormatEffectDisplayName(w.EffectType, w.Continuous)} ({w.ColorR},{w.ColorG},{w.ColorB})",
                 "EffectStop" => $"Step {currentIndex + 1}/{EditingSteps.Count}: EffectStop",
                 _            => $"Step {currentIndex + 1}/{EditingSteps.Count}: {w.CommandType}",
             };

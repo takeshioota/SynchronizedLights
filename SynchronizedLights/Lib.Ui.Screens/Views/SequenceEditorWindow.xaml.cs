@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Specialized;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -142,6 +143,151 @@ namespace Lib.Ui.Screens.Views
                     if (lastItem != null) listBox.ScrollIntoView(lastItem);
                 }));
             };
+        }
+
+        /// <summary>
+        /// DataGrid の外側でクリックされた瞬間に、編集中セルの値を強制コミットする
+        /// </summary>
+        /// <remarks>
+        /// 編集中セルの値が、続けて押下されたプリセットボタンの処理時点では
+        /// まだソースプロパティに反映されていない場合があるため、
+        /// クリックが処理される前にコミットして整合を取る。
+        /// </remarks>
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (StepDataGrid == null) return;
+
+            // クリック対象が DataGrid 内なら DataGrid 自身の編集処理に任せる
+            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, StepDataGrid))
+            {
+                return;
+            }
+
+            // セル → 行の順でコミットする（Cell 単位で確定してから Row 単位を確定）
+            try
+            {
+                StepDataGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+                StepDataGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "StepDataGrid.CommitEdit failed");
+            }
+        }
+
+        /// <summary>
+        /// 指定した DependencyObject が parent の子孫かどうかを判定する
+        /// </summary>
+        private static bool IsDescendantOf(DependencyObject child, DependencyObject parent)
+        {
+            var current = child;
+            while (current != null)
+            {
+                if (current == parent) return true;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current)
+                          ?? LogicalTreeHelper.GetParent(current);
+            }
+            return false;
+        }
+
+        // 割り込みボタンが押されているかどうか（離したときに二重に Release を呼ばないため）
+        private bool _interruptIsPressed;
+
+        /// <summary>
+        /// 割り込みボタン押下開始：Custom 1 の色で全 LED 点灯
+        /// </summary>
+        private async void InterruptButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (DataContext is not SequenceEditorViewModel vm) return;
+            if (_interruptIsPressed) return;
+            _interruptIsPressed = true;
+
+            // ボタンへ確実にマウスキャプチャを取らせて、外にドラッグしても Release を検知できるようにする
+            if (sender is System.Windows.UIElement el)
+            {
+                el.CaptureMouse();
+            }
+
+            await vm.InterruptPressAsync();
+        }
+
+        /// <summary>
+        /// 割り込みボタン押下終了（ボタン上で離した場合）：シーケンスの続きを再生
+        /// </summary>
+        private async void InterruptButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            await ReleaseInterruptAsync(sender);
+        }
+
+        /// <summary>
+        /// マウスがボタン外へドラッグして離された場合の保険
+        /// </summary>
+        private async void InterruptButton_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (!_interruptIsPressed) return;
+            if (e.LeftButton == MouseButtonState.Released)
+            {
+                await ReleaseInterruptAsync(sender);
+            }
+        }
+
+        /// <summary>
+        /// マウスキャプチャを失った場合の保険（システム的に Release が来ないケースの最終手段）
+        /// </summary>
+        private async void InterruptButton_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (!_interruptIsPressed) return;
+            await ReleaseInterruptAsync(sender);
+        }
+
+        /// <summary>
+        /// 割り込み解除処理の共通入口
+        /// </summary>
+        private async Task ReleaseInterruptAsync(object sender)
+        {
+            if (!_interruptIsPressed) return;
+            _interruptIsPressed = false;
+
+            if (sender is System.Windows.UIElement el && el.IsMouseCaptured)
+            {
+                el.ReleaseMouseCapture();
+            }
+
+            if (DataContext is SequenceEditorViewModel vm)
+            {
+                await vm.InterruptReleaseAsync();
+            }
+        }
+
+        /// <summary>
+        /// 送信ログ ListBox の Ctrl+C：選択行をクリップボードへコピー
+        /// </summary>
+        private void LogListBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers != ModifierKeys.Control) return;
+            if (e.Key != Key.C) return;
+
+            e.Handled = true;
+
+            if (LogListBox.SelectedItems.Count == 0) return;
+
+            var sb = new StringBuilder();
+            foreach (var item in LogListBox.SelectedItems)
+            {
+                if (item is LogEntry entry)
+                {
+                    sb.AppendLine(entry.Display);
+                }
+            }
+
+            try
+            {
+                Clipboard.SetText(sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Clipboard SetText failed");
+            }
         }
 
         /// <summary>

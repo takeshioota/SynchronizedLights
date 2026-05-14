@@ -107,6 +107,17 @@ public interface ILightingFacade
     Task StopSequenceAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// 再生中シーケンスを一時停止し、停止位置を API 側に保存する（POST /api/sequence/play/pause）。
+    /// 続けて ResumeSequenceAsync を呼ぶことで、保存された位置から再開できる。
+    /// </summary>
+    Task PauseSequenceAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// PauseSequenceAsync で保存された位置からシーケンスを再開する（POST /api/sequence/play/resume）。
+    /// </summary>
+    Task ResumeSequenceAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// 再生状態を取得する（GET /api/sequence/play/status）
     /// </summary>
     /// <returns>(isPlaying, currentSequenceName)</returns>
