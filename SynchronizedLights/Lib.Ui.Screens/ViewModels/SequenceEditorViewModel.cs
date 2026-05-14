@@ -1087,7 +1087,7 @@ namespace Lib.Ui.Screens.ViewModels
 
         /// <summary>
         /// 選択中の行の直後に空行を 1 行挿入する
-        /// 概要：時刻は直前行 + 1000ms、コマンドは Color、色は直前行の色を踏襲（無ければ白）、エフェクト関連は未指定。
+        /// 概要：時刻は直前行 + 1000ms、コマンドは Color、色は常に白(255,255,255)、エフェクト関連は未指定。
         ///       挿入後はその空行が選択状態となり、ユーザーが色や動作を選んで埋めていくワークフロー。
         /// </summary>
         [RelayCommand]
@@ -1101,23 +1101,16 @@ namespace Lib.Ui.Screens.ViewModels
 
             int insertIndex;
             int newTimeMs;
-            byte initR = 255, initG = 255, initB = 255;
             if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
             {
                 insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
                 newTimeMs = SelectedStep.TimeMs + 1000;
-                initR = SelectedStep.ColorR;
-                initG = SelectedStep.ColorG;
-                initB = SelectedStep.ColorB;
             }
             else if (EditingSteps.Count > 0)
             {
                 insertIndex = EditingSteps.Count;
                 var last = EditingSteps.Last();
                 newTimeMs = last.TimeMs + 1000;
-                initR = last.ColorR;
-                initG = last.ColorG;
-                initB = last.ColorB;
             }
             else
             {
@@ -1125,14 +1118,16 @@ namespace Lib.Ui.Screens.ViewModels
                 newTimeMs = 0;
             }
 
+            // 追加される行は常に「白 / Color / エフェクトなし」の初期値で統一する。
+            // 直前の色を引き継がないことで、編集時に「複製のように見える」混乱を防ぐ。
             var step = new SequenceStep
             {
                 TimeMs = newTimeMs,
                 CommandType = "Color",
                 EffectType = null,
-                ColorR = initR,
-                ColorG = initG,
-                ColorB = initB,
+                ColorR = 255,
+                ColorG = 255,
+                ColorB = 255,
                 EffectCycleDurationMs = null,
                 FadeSteps = null,
                 RetransmitCount = 3,
