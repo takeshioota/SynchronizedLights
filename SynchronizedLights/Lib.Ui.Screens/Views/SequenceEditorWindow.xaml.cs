@@ -190,63 +190,65 @@ namespace Lib.Ui.Screens.Views
             return false;
         }
 
-        // 割り込みボタンが押されているかどうか（離したときに二重に Release を呼ばないため）
-        private bool _interruptIsPressed;
+        // 押下中の煽りボタンのインデックス（離した時に二重 Release を防ぐ、未押下時は -1）
+        private int _aggressivePressedIndex = -1;
 
         /// <summary>
-        /// 割り込みボタン押下開始：Custom 1 の色で全 LED 点灯
+        /// 煽りボタン押下開始：そのボタンの色で全 LED 点灯
         /// </summary>
-        private async void InterruptButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private async void AggressiveButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (DataContext is not SequenceEditorViewModel vm) return;
-            if (_interruptIsPressed) return;
-            _interruptIsPressed = true;
+            if (sender is not Button btn) return;
+            if (btn.DataContext is not AggressiveColorPresetItem item) return;
+            if (_aggressivePressedIndex >= 0) return;
 
-            // ボタンへ確実にマウスキャプチャを取らせて、外にドラッグしても Release を検知できるようにする
-            if (sender is System.Windows.UIElement el)
-            {
-                el.CaptureMouse();
-            }
+            var index = vm.AggressiveColorPresets.IndexOf(item);
+            if (index < 0) return;
 
-            await vm.InterruptPressAsync();
+            _aggressivePressedIndex = index;
+            btn.CaptureMouse();
+
+            await vm.AggressivePressAsync(index);
         }
 
         /// <summary>
-        /// 割り込みボタン押下終了（ボタン上で離した場合）：シーケンスの続きを再生
+        /// 煽りボタン押下終了（ボタン上で離した場合）：前の状態を復元
         /// </summary>
-        private async void InterruptButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        private async void AggressiveButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            await ReleaseInterruptAsync(sender);
+            await ReleaseAggressiveAsync(sender);
         }
 
         /// <summary>
         /// マウスがボタン外へドラッグして離された場合の保険
         /// </summary>
-        private async void InterruptButton_MouseLeave(object sender, MouseEventArgs e)
+        private async void AggressiveButton_MouseLeave(object sender, MouseEventArgs e)
         {
-            if (!_interruptIsPressed) return;
+            if (_aggressivePressedIndex < 0) return;
             if (e.LeftButton == MouseButtonState.Released)
             {
-                await ReleaseInterruptAsync(sender);
+                await ReleaseAggressiveAsync(sender);
             }
         }
 
         /// <summary>
         /// マウスキャプチャを失った場合の保険（システム的に Release が来ないケースの最終手段）
         /// </summary>
-        private async void InterruptButton_LostMouseCapture(object sender, MouseEventArgs e)
+        private async void AggressiveButton_LostMouseCapture(object sender, MouseEventArgs e)
         {
-            if (!_interruptIsPressed) return;
-            await ReleaseInterruptAsync(sender);
+            if (_aggressivePressedIndex < 0) return;
+            await ReleaseAggressiveAsync(sender);
         }
 
         /// <summary>
-        /// 割り込み解除処理の共通入口
+        /// 煽りボタン離した時の共通入口
         /// </summary>
-        private async Task ReleaseInterruptAsync(object sender)
+        private async Task ReleaseAggressiveAsync(object sender)
         {
-            if (!_interruptIsPressed) return;
-            _interruptIsPressed = false;
+            if (_aggressivePressedIndex < 0) return;
+            var index = _aggressivePressedIndex;
+            _aggressivePressedIndex = -1;
 
             if (sender is System.Windows.UIElement el && el.IsMouseCaptured)
             {
@@ -255,7 +257,24 @@ namespace Lib.Ui.Screens.Views
 
             if (DataContext is SequenceEditorViewModel vm)
             {
-                await vm.InterruptReleaseAsync();
+                await vm.AggressiveReleaseAsync(index);
+            }
+        }
+
+        /// <summary>
+        /// 煽りボタンの右クリック「色を編集...」メニューハンドラ
+        /// </summary>
+        private void AggressiveColorEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem) return;
+            if (menuItem.Parent is not ContextMenu contextMenu) return;
+            if (contextMenu.PlacementTarget is not FrameworkElement target) return;
+            if (target.DataContext is not AggressiveColorPresetItem item) return;
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            if (vm.EditAggressiveColorCommand.CanExecute(item))
+            {
+                vm.EditAggressiveColorCommand.Execute(item);
             }
         }
 

@@ -354,21 +354,21 @@ namespace Lib.Application.Facades
         /// <summary>
         /// シーケンス一時停止（Dummy 疑似実装：ログのみ）
         /// </summary>
-        public Task PauseSequenceAsync(CancellationToken ct = default)
+        public Task<bool> PauseSequenceAsync(CancellationToken ct = default)
         {
             Log.Information("[Dummy] PauseSequence");
             RaiseStatusChanged();
-            return Task.CompletedTask;
+            return Task.FromResult(_dummyPlayingSequence != null);
         }
 
         /// <summary>
         /// シーケンス再開（Dummy 疑似実装：ログのみ）
         /// </summary>
-        public Task ResumeSequenceAsync(CancellationToken ct = default)
+        public Task<bool> ResumeSequenceAsync(CancellationToken ct = default)
         {
             Log.Information("[Dummy] ResumeSequence");
             RaiseStatusChanged();
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
         /// <summary>

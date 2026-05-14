@@ -594,6 +594,50 @@ namespace Lib.Ui.Screens.ViewModels
         private bool? continuous;
 
         /// <summary>
+        /// DataGrid のエフェクト列に表示する文字列。
+        /// EffectType と Continuous の組み合わせを 1 列で見分けられるようにする：
+        ///   FadeIn + Continuous=false  → "FadeIn/In"
+        ///   FadeOut + Continuous=false → "FadeOut/Out"
+        ///   それ以外                    → EffectType そのまま
+        /// セット時は逆変換して EffectType / Continuous を同時に更新する。
+        /// </summary>
+        public string EffectTypeDisplay
+        {
+            get
+            {
+                if (Continuous == false && EffectType == "FadeIn") return "FadeIn/In";
+                if (Continuous == false && EffectType == "FadeOut") return "FadeOut/Out";
+                return EffectType ?? "";
+            }
+            set
+            {
+                switch (value)
+                {
+                    case "FadeIn/In":
+                        EffectType = "FadeIn";
+                        Continuous = false;
+                        break;
+                    case "FadeOut/Out":
+                        EffectType = "FadeOut";
+                        Continuous = false;
+                        break;
+                    default:
+                        EffectType = value;
+                        // 通常 Fade In / Fade Out へ戻したときは保持フラグもクリアする
+                        if ((value == "FadeIn" || value == "FadeOut") && Continuous == false)
+                        {
+                            Continuous = null;
+                        }
+                        break;
+                }
+                OnPropertyChanged();
+            }
+        }
+
+        partial void OnEffectTypeChanged(string value) => OnPropertyChanged(nameof(EffectTypeDisplay));
+        partial void OnContinuousChanged(bool? value) => OnPropertyChanged(nameof(EffectTypeDisplay));
+
+        /// <summary>
         /// 連続再生中の現在ステップかどうか（DataGrid のハイライト表示に使用）
         /// 概要：API 側の play status から取得した currentStepIndex に該当する行で true。
         ///       永続化対象外（[JsonIgnore] 相当だが、ToModel に含めないことで JSON 出力されない）。

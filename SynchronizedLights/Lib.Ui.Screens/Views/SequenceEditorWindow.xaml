@@ -38,13 +38,16 @@
         </x:Array>
 
         <!-- DataGrid のエフェクト種別ドロップダウン候補。
-             「Fade In/In」「Fade Out/Out」は FadeIn / FadeOut に連続実行フラグ false を
-             組み合わせて表現するため、独立した選択肢としては持たない。 -->
+             「FadeIn/In」「FadeOut/Out」は内部的には FadeIn / FadeOut に
+             連続実行フラグ false を組み合わせた値で、表示・選択時に区別できるよう
+             ドロップダウンの選択肢として含めている。 -->
         <x:Array x:Key="EffectTypeOptions" Type="sys:String">
             <x:Static Member="sys:String.Empty"/>
             <sys:String>Flash</sys:String>
             <sys:String>FadeIn</sys:String>
+            <sys:String>FadeIn/In</sys:String>
             <sys:String>FadeOut</sys:String>
+            <sys:String>FadeOut/Out</sys:String>
             <sys:String>Breathing</sys:String>
             <sys:String>SevenColor</sys:String>
         </x:Array>
@@ -353,7 +356,7 @@
             </StackPanel>
         </Border>
 
-        <!-- ============ ステップ表示 + 操作キーガイド + 割り込み + 停止ボタン ============ -->
+        <!-- ============ ステップ表示 + 操作キーガイド + 停止ボタン ============ -->
         <Border Grid.Row="1"
                 Background="#0F0F0F"
                 BorderBrush="{StaticResource AccentAmberBrush}"
@@ -363,7 +366,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -388,22 +390,7 @@
                     <Run Text="Esc" Foreground="#FFC107" FontWeight="Bold"/>
                     <Run Text="=停止"/>
                 </TextBlock>
-                <Button x:Name="InterruptButton"
-                        Grid.Column="3"
-                        Content="⚡ 割り込み"
-                        Style="{StaticResource GrandMaSelectableButtonStyle}"
-                        Tag="{Binding IsInterruptOn}"
-                        Foreground="#FFC107"
-                        FontWeight="Bold"
-                        Height="28" Width="100"
-                        VerticalAlignment="Center"
-                        Margin="0,0,4,0"
-                        PreviewMouseLeftButtonDown="InterruptButton_PreviewMouseLeftButtonDown"
-                        PreviewMouseLeftButtonUp="InterruptButton_PreviewMouseLeftButtonUp"
-                        MouseLeave="InterruptButton_MouseLeave"
-                        LostMouseCapture="InterruptButton_LostMouseCapture"
-                        ToolTip="押している間 Custom 1 の色で全 LED を点灯。離すと前のコマンドを再開"/>
-                <Button Grid.Column="4"
+                <Button Grid.Column="3"
                         Content="■ 停止"
                         Command="{Binding StopExecutionCommand}"
                         Style="{StaticResource GrandMaButtonStyle}"
@@ -464,8 +451,8 @@
 
                 <DataGridComboBoxColumn Header="エフェクト"
 		                              ItemsSource="{StaticResource EffectTypeOptions}"
-		                              SelectedValueBinding="{Binding EffectType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-		                              Width="95"/>
+		                              SelectedValueBinding="{Binding EffectTypeDisplay, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+		                              Width="105"/>
 
                 <DataGridTextColumn Header="周期(ms)"
 		                          Binding="{Binding EffectCycleDurationMs, UpdateSourceTrigger=PropertyChanged}"
@@ -493,11 +480,13 @@
                     <RowDefinition Height="6"/>
                     <RowDefinition Height="Auto"/>   <!-- 4: 動作プリセット -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 6: 操作行 -->
+                    <RowDefinition Height="Auto"/>   <!-- 6: 煽り プリセット（押下中点灯）-->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 8: 簡単登録 -->
+                    <RowDefinition Height="Auto"/>   <!-- 8: 操作行 -->
                     <RowDefinition Height="6"/>
-                    <RowDefinition Height="Auto"/>   <!-- 10: テンプレ -->
+                    <RowDefinition Height="Auto"/>   <!-- 10: 簡単登録 -->
+                    <RowDefinition Height="6"/>
+                    <RowDefinition Height="Auto"/>   <!-- 12: テンプレ -->
                 </Grid.RowDefinitions>
 
                 <!-- 色プリセット -->
@@ -640,8 +629,68 @@
                     </ItemsControl>
                 </Grid>
 
-                <!-- 操作行：行操作ボタン群 -->
+                <!-- 煽り プリセット（押している間 LED 点灯、離すと元に戻る）-->
                 <Grid Grid.Row="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="煽り:"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               ToolTip="短押し=ピカ一発 / 長押し=押下中ずっと点灯 / 右クリックで色を編集"/>
+                    <ItemsControl Grid.Column="1"
+                                  ItemsSource="{Binding AggressiveColorPresets}"
+                                  HorizontalAlignment="Left">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource GrandMaButtonStyle}"
+                                        MinWidth="120" MinHeight="36"
+                                        Margin="0,0,4,4"
+                                        Padding="0"
+                                        Foreground="#FFC107"
+                                        FontWeight="Bold"
+                                        PreviewMouseLeftButtonDown="AggressiveButton_PreviewMouseLeftButtonDown"
+                                        PreviewMouseLeftButtonUp="AggressiveButton_PreviewMouseLeftButtonUp"
+                                        MouseLeave="AggressiveButton_MouseLeave"
+                                        LostMouseCapture="AggressiveButton_LostMouseCapture"
+                                        ToolTip="短押し=ピカ一発 / 長押し=押下中点灯 / 右クリック=色を編集">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="色を編集..."
+                                                      Click="AggressiveColorEdit_Click"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Fill="{Binding Hex}"
+                                                 Width="14" Height="14"
+                                                 Stroke="#FFFFFF" StrokeThickness="1"
+                                                 Margin="6,0,4,0"
+                                                 VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,4,0"/>
+                                        <TextBlock Text="✏"
+                                                   FontSize="10"
+                                                   Foreground="#888888"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,6,0"
+                                                   ToolTip="右クリックで色を編集"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+
+                <!-- 操作行：行操作ボタン群 -->
+                <Grid Grid.Row="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>
@@ -710,7 +759,7 @@
                 </Grid>
 
                 <!-- 簡単登録：選択中の色プリセットで Color / Off ステップを末尾に追加 -->
-                <Grid Grid.Row="8">
+                <Grid Grid.Row="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="Auto"/>
@@ -745,7 +794,7 @@
                 </Grid>
 
                 <!-- テンプレ：複数ステップをまとめて末尾に追加 -->
-                <Grid Grid.Row="10">
+                <Grid Grid.Row="12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="60"/>
                         <ColumnDefinition Width="*"/>

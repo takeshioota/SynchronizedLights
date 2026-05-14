@@ -38,6 +38,7 @@ namespace Lib.Ui.Screens.ViewModels
 
         private readonly TimeBasedSequenceStore _store;
         private readonly CustomColorStore _customColorStore;
+        private readonly AggressiveColorStore _aggressiveColorStore;
         private readonly ILightingFacade? _lighting;
         private readonly DispatcherTimer? _statusTimer;
         private TimeBasedSequence? _editingSequence;
@@ -69,6 +70,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             _store = new TimeBasedSequenceStore();
             _customColorStore = new CustomColorStore();
+            _aggressiveColorStore = new AggressiveColorStore();
             _lighting = lighting;
 
             Sequences = new ObservableCollection<TimeBasedSequence>();
@@ -76,6 +78,7 @@ namespace Lib.Ui.Screens.ViewModels
             ColorPresets = CreateColorPresets();
             ActionPresets = CreateActionPresets();
             CustomColorPresets = LoadCustomColorPresets();
+            AggressiveColorPresets = LoadAggressiveColorPresets();
             SelectedColorPreset = ColorPresets.First();
             SelectedActionPreset = ActionPresets.First();
 
@@ -113,6 +116,35 @@ namespace Lib.Ui.Screens.ViewModels
                 B = c.B,
             }).ToList();
             _customColorStore.SaveAll(entries);
+        }
+
+        /// <summary>
+        /// 永続化されている煽り色を ObservableCollection 化して読み込む
+        /// </summary>
+        private ObservableCollection<AggressiveColorPresetItem> LoadAggressiveColorPresets()
+        {
+            var entries = _aggressiveColorStore.LoadAll();
+            var collection = new ObservableCollection<AggressiveColorPresetItem>();
+            foreach (var e in entries)
+            {
+                collection.Add(new AggressiveColorPresetItem(e.Name, e.R, e.G, e.B));
+            }
+            return collection;
+        }
+
+        /// <summary>
+        /// 現在の煽り色一覧を JSON へ保存する
+        /// </summary>
+        private void SaveAggressiveColors()
+        {
+            var entries = AggressiveColorPresets.Select(c => new AggressiveColorEntry
+            {
+                Name = c.Name,
+                R = c.R,
+                G = c.G,
+                B = c.B,
+            }).ToList();
+            _aggressiveColorStore.SaveAll(entries);
         }
 
         #endregion
@@ -208,6 +240,13 @@ namespace Lib.Ui.Screens.ViewModels
         /// 概要：オペレータが現場で中間色を調整するため、ローカルに 4 件まで保存可能。
         /// </summary>
         public ObservableCollection<CustomColorPresetItem> CustomColorPresets { get; }
+
+        /// <summary>
+        /// 煽りボタン用色プリセット（煽り 1, 2）
+        /// 概要：ライブ中にオペレータが押下して即興で点灯させる色プリセット。
+        ///       押下中は LED を一時的に上書きし、離すと前の状態へ戻る。
+        /// </summary>
+        public ObservableCollection<AggressiveColorPresetItem> AggressiveColorPresets { get; }
 
         [ObservableProperty]
         private ColorPresetItem? selectedColorPreset;
@@ -985,6 +1024,15 @@ namespace Lib.Ui.Screens.ViewModels
             // 連続実行フラグを反映（null=未指定、true=繰り返し、false=1 回実行後 最終色保持）
             SelectedStep.Continuous = continuous;
 
+            // 消灯時は RGB を 0/0/0 にして、DataGrid 表示と実動作を一致させる
+            // （+追加 時の色踏襲でも 0/0/0 が引き継がれるので、後続行も「消灯起点」になる）
+            if (cmdType == "Off")
+            {
+                SelectedStep.ColorR = 0;
+                SelectedStep.ColorG = 0;
+                SelectedStep.ColorB = 0;
+            }
+
             // Effect の場合は周期・Fade のデフォルト値を補完
             if (cmdType == "Effect")
             {
@@ -1186,89 +1234,140 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// 割り込み点灯中かどうか（ボタン押下中の視覚フィードバック用）
+        /// 押下中の煽りボタンインデックス（押下中の視覚フィードバック用、未押下時は -1）
         /// </summary>
         [ObservableProperty]
-        private bool isInterruptOn;
+        private int activeAggressiveButtonIndex = -1;
 
         /// <summary>
-        /// 多重実行防止用フラグ。Press / Release を順序通りに動作させる。
+        /// 押下が始まった時刻（ピカ一発の最小視認時間を担保するために使用）
         /// </summary>
-        private bool _interruptInProgress;
+        private DateTime _aggressivePressTime;
 
         /// <summary>
-        /// 割り込み点灯ボタンが押された瞬間の処理
-        /// 概要：再生中シーケンスを一時停止して停止位置を保存し、Custom 1 の色で全 LED を点灯する。
+        /// 押下時にシーケンス再生中だったかどうか。Release 時にこの値を見て resume するか消灯するか判断。
         /// </summary>
-        public async Task InterruptPressAsync()
+        private bool _aggressivePausedSequence;
+
+        /// <summary>ピカ一発の最小視認時間（ms）。短押しでも必ずこの時間以上は点灯させる。</summary>
+        private const int AggressiveMinFlashMs = 150;
+
+        /// <summary>
+        /// 煽りボタン押し下げ時の処理
+        /// 概要：再生中シーケンスがあれば一時停止して停止位置を保存し、
+        ///       ボタンの色で全 LED を点灯する。
+        /// </summary>
+        /// <param name="buttonIndex">押された煽りボタンの index（0 = 煽り 1、1 = 煽り 2）</param>
+        public async Task AggressivePressAsync(int buttonIndex)
         {
-            if (_lighting == null || !_lighting.IsConnected)
-            {
-                StatusMessage = "未接続のため割り込み点灯できません。";
-                return;
-            }
-            if (_interruptInProgress) return;
-            _interruptInProgress = true;
+            if (_lighting == null || !_lighting.IsConnected) return;
+            if (buttonIndex < 0 || buttonIndex >= AggressiveColorPresets.Count) return;
+
+            ActiveAggressiveButtonIndex = buttonIndex;
+            _aggressivePressTime = DateTime.UtcNow;
+
+            var item = AggressiveColorPresets[buttonIndex];
+            var color = new Rgb(item.R, item.G, item.B);
 
             try
             {
-                var interruptColor = CustomColorPresets.Count > 0
-                    ? new Rgb(CustomColorPresets[0].R, CustomColorPresets[0].G, CustomColorPresets[0].B)
-                    : new Rgb(255, 255, 255);
-
-                await _lighting.PauseSequenceAsync();
-                await Task.Delay(50);
-                await _lighting.SetColorAsync(Target.All, interruptColor);
-
-                IsInterruptOn = true;
-                var name = CustomColorPresets.Count > 0 ? CustomColorPresets[0].Name : "White";
-                StatusMessage = $"割り込み点灯：{name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})";
-                AppendLog("TX", $"Interrupt ON: {name} ({interruptColor.R},{interruptColor.G},{interruptColor.B})");
+                // シーケンス再生中なら一時停止して状態を保存する
+                _aggressivePausedSequence = await _lighting.PauseSequenceAsync();
+                await _lighting.SetColorAsync(Target.All, color);
+                AppendLog("TX", $"{item.Name} ON ({color.R},{color.G},{color.B})");
             }
             catch (Exception ex)
             {
-                StatusMessage = $"割り込み点灯失敗: {ex.Message}";
-                AppendLog("ERR", $"Interrupt ON 失敗: {ex.Message}");
+                AppendLog("ERR", $"{item.Name} ON 失敗: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 煽りボタン離した時の処理
+        /// 概要：押下時にシーケンスを一時停止していたら続きから再開する。
+        ///       一時停止対象がなかった場合は消灯する。
+        ///       短押し（ピカ一発）の場合は最小視認時間を担保してから処理する。
+        /// </summary>
+        public async Task AggressiveReleaseAsync(int buttonIndex)
+        {
+            if (_lighting == null) return;
+            if (ActiveAggressiveButtonIndex < 0) return;
+
+            var item = (buttonIndex >= 0 && buttonIndex < AggressiveColorPresets.Count)
+                ? AggressiveColorPresets[buttonIndex]
+                : null;
+
+            // ピカ一発を視認可能にするため、最小点灯時間を担保する
+            var elapsed = (int)(DateTime.UtcNow - _aggressivePressTime).TotalMilliseconds;
+            if (elapsed < AggressiveMinFlashMs)
+            {
+                await Task.Delay(AggressiveMinFlashMs - elapsed);
+            }
+
+            try
+            {
+                if (_aggressivePausedSequence)
+                {
+                    // 再生中だったシーケンスを続きから再開
+                    await _lighting.ResumeSequenceAsync();
+                    AppendLog("TX", $"{item?.Name ?? "煽り"} OFF (Resume Sequence)");
+                }
+                else
+                {
+                    // 元々何も再生されていなかったので消灯する
+                    await _lighting.SetColorAsync(Target.All, new Rgb(0, 0, 0));
+                    AppendLog("TX", $"{item?.Name ?? "煽り"} OFF (Off)");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog("ERR", $"{item?.Name ?? "煽り"} OFF 失敗: {ex.Message}");
             }
             finally
             {
-                _interruptInProgress = false;
+                _aggressivePausedSequence = false;
+                ActiveAggressiveButtonIndex = -1;
             }
         }
 
         /// <summary>
-        /// 割り込み点灯ボタンが離された瞬間の処理
-        /// 概要：保存されているシーケンス位置から再生を再開する。
+        /// 煽りボタンの色を編集する（右クリック「色を編集...」メニューから呼ばれる）
         /// </summary>
-        public async Task InterruptReleaseAsync()
+        [RelayCommand]
+        private void EditAggressiveColor(AggressiveColorPresetItem? item)
         {
-            if (_lighting == null || !_lighting.IsConnected)
+            if (item == null) return;
+            var dlg = new DlgColorPicker { Owner = System.Windows.Application.Current?.MainWindow };
+            dlg.SetInitialColor(item.R, item.G, item.B);
+            if (dlg.ShowDialog() == true)
             {
-                IsInterruptOn = false;
-                return;
-            }
-            if (!IsInterruptOn) return;
-
-            try
-            {
-                await _lighting.ResumeSequenceAsync();
-                IsInterruptOn = false;
-                StatusMessage = "割り込み解除：シーケンスの続きを再生します。";
-                AppendLog("TX", "Interrupt OFF (Resume Sequence)");
-            }
-            catch (Exception ex)
-            {
-                IsInterruptOn = false;
-                StatusMessage = $"割り込み解除失敗: {ex.Message}";
-                AppendLog("ERR", $"Interrupt OFF 失敗: {ex.Message}");
+                item.R = dlg.SelectedR;
+                item.G = dlg.SelectedG;
+                item.B = dlg.SelectedB;
+                SaveAggressiveColors();
+                StatusMessage = $"煽り色「{item.Name}」を更新（{item.R}, {item.G}, {item.B}）";
+                AppendLog("INFO", $"煽り色 {item.Name} を更新 ({item.R},{item.G},{item.B})");
             }
         }
 
-        /// <summary>実行中エフェクトを停止（停止ボタン または Esc キー）</summary>
+        /// <summary>
+        /// 実行中エフェクトを停止（停止ボタン または Esc キー）
+        /// 一括再生中はシーケンス自体を停止し、停止時点の色を維持する。
+        /// それ以外はエフェクトのみ停止する。
+        /// </summary>
         [RelayCommand]
         private async Task StopExecutionAsync()
         {
             if (_lighting == null) return;
+
+            // 一括再生中ならシーケンス停止＋停止時の色を維持する
+            if (IsPlaying)
+            {
+                await StopSequenceWithColorHoldAsync();
+                return;
+            }
+
+            // 単発エフェクト停止
             try
             {
                 await _lighting.StopEffectAsync();
@@ -1279,6 +1378,59 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 StatusMessage = $"停止失敗: {ex.Message}";
                 AppendLog("ERR", $"EffectStop 失敗: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 一括再生中のシーケンスを停止し、停止時点のステップの色を保持する。
+        /// 後続ステップは発火させない。
+        /// </summary>
+        private async Task StopSequenceWithColorHoldAsync()
+        {
+            if (_lighting == null) return;
+
+            // 停止前に「いまどのステップを実行中か」を取得して色を退避する
+            SequenceStepWrapper? lastWrapper = null;
+            try
+            {
+                var status = await _lighting.GetSequencePlayStatusDetailedAsync();
+                if (status.IsPlaying && status.CurrentStepIndex >= 0 && status.CurrentStepIndex < EditingSteps.Count)
+                {
+                    lastWrapper = EditingSteps[status.CurrentStepIndex];
+                }
+            }
+            catch { /* 取得失敗時は色保持なしで停止する */ }
+
+            try
+            {
+                await _lighting.StopSequenceAsync();
+
+                // 停止時点の色を再送して LED 状態を維持する
+                if (lastWrapper != null)
+                {
+                    var color = new Rgb(lastWrapper.ColorR, lastWrapper.ColorG, lastWrapper.ColorB);
+                    if (lastWrapper.CommandType == "Off" || lastWrapper.CommandType == "EffectStop")
+                    {
+                        await _lighting.SetColorAsync(Target.All, new Rgb(0, 0, 0));
+                        AppendLog("TX", "Sequence Stop → Off 維持");
+                    }
+                    else
+                    {
+                        await _lighting.SetColorAsync(Target.All, color);
+                        AppendLog("TX", $"Sequence Stop → Color ({color.R},{color.G},{color.B}) 維持");
+                    }
+                }
+                else
+                {
+                    AppendLog("TX", "Sequence Stop");
+                }
+
+                StatusMessage = "シーケンス再生を停止しました（停止時の色を維持）。";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"シーケンス停止失敗: {ex.Message}";
+                AppendLog("ERR", $"Sequence Stop 失敗: {ex.Message}");
             }
         }
 
@@ -1835,6 +1987,42 @@ namespace Lib.Ui.Screens.ViewModels
         private bool isSelected;
 
         // R/G/B 変更時に HEX を自動更新（XAML Fill バインドに即時反映）
+        partial void OnRChanged(byte value) => Hex = ToHex(value, G, B);
+        partial void OnGChanged(byte value) => Hex = ToHex(R, value, B);
+        partial void OnBChanged(byte value) => Hex = ToHex(R, G, value);
+
+        private static string ToHex(byte r, byte g, byte b) => $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    /// <summary>
+    /// 煽りボタン用プリセット 1 件（煽り 1, 2）
+    /// 概要：押下中だけ LED を上書きする即興演出用。右クリックで色編集可能、JSON で永続化。
+    /// </summary>
+    public partial class AggressiveColorPresetItem : ObservableObject
+    {
+        public AggressiveColorPresetItem(string name, byte r, byte g, byte b)
+        {
+            Name = name;
+            this.r = r;
+            this.g = g;
+            this.b = b;
+            hex = ToHex(r, g, b);
+        }
+
+        public string Name { get; }
+
+        [ObservableProperty]
+        private byte r;
+
+        [ObservableProperty]
+        private byte g;
+
+        [ObservableProperty]
+        private byte b;
+
+        [ObservableProperty]
+        private string hex;
+
         partial void OnRChanged(byte value) => Hex = ToHex(value, G, B);
         partial void OnGChanged(byte value) => Hex = ToHex(R, value, B);
         partial void OnBChanged(byte value) => Hex = ToHex(R, G, value);

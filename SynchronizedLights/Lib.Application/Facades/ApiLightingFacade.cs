@@ -636,18 +636,20 @@ namespace Lib.Application.Facades
         /// シーケンス一時停止（POST /api/sequence/play/pause）
         /// 停止位置は API 側で保持され、ResumeSequenceAsync で続きから再開できる。
         /// </summary>
-        public async Task PauseSequenceAsync(CancellationToken ct = default)
+        public async Task<bool> PauseSequenceAsync(CancellationToken ct = default)
         {
             try
             {
                 var response = await _httpClient.PostAsync("api/sequence/play/pause", null, ct);
                 var result = await ReadApiResponseAsync(response, ct);
                 Log.Information("[Api] PauseSequence: {Msg}", result.Message ?? result.Error);
+                return result.Success;
             }
             catch (Exception ex)
             {
                 _lastError = $"HTTP通信エラー: {ex.Message}";
                 Log.Warning("[Api] PauseSequence HTTP error: {Err}", ex.Message);
+                return false;
             }
             finally
             {
@@ -659,18 +661,20 @@ namespace Lib.Application.Facades
         /// シーケンス再開（POST /api/sequence/play/resume）
         /// PauseSequenceAsync で保存された位置からシーケンス再生を再開する。
         /// </summary>
-        public async Task ResumeSequenceAsync(CancellationToken ct = default)
+        public async Task<bool> ResumeSequenceAsync(CancellationToken ct = default)
         {
             try
             {
                 var response = await _httpClient.PostAsync("api/sequence/play/resume", null, ct);
                 var result = await ReadApiResponseAsync(response, ct);
                 Log.Information("[Api] ResumeSequence: {Msg}", result.Message ?? result.Error);
+                return result.Success;
             }
             catch (Exception ex)
             {
                 _lastError = $"HTTP通信エラー: {ex.Message}";
                 Log.Warning("[Api] ResumeSequence HTTP error: {Err}", ex.Message);
+                return false;
             }
             finally
             {
