@@ -948,9 +948,11 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = EditingSteps.Count == 0
-                    ? "「+ 追加」ボタンで行を追加してから色プリセットを押してください。"
-                    : "色を反映する行を先に選択してください。";
+                StatusMessage = _editingSequence == null
+                    ? "シーケンスを選択するか、「新規」で作成してください。"
+                    : EditingSteps.Count == 0
+                        ? "「+ 追加」ボタンで行を追加してから色プリセットを押してください。"
+                        : "色を反映する行を先に選択してください。";
                 return;
             }
 
@@ -972,9 +974,11 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = EditingSteps.Count == 0
-                    ? "「+ 追加」ボタンで行を追加してからカスタム色プリセットを押してください。"
-                    : "色を反映する行を先に選択してください。";
+                StatusMessage = _editingSequence == null
+                    ? "シーケンスを選択するか、「新規」で作成してください。"
+                    : EditingSteps.Count == 0
+                        ? "「+ 追加」ボタンで行を追加してからカスタム色プリセットを押してください。"
+                        : "色を反映する行を先に選択してください。";
                 return;
             }
 
@@ -1018,9 +1022,11 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = EditingSteps.Count == 0
-                    ? "「+ 追加」ボタンで行を追加してから動作プリセットを押してください。"
-                    : "動作を反映する行を先に選択してください。";
+                StatusMessage = _editingSequence == null
+                    ? "シーケンスを選択するか、「新規」で作成してください。"
+                    : EditingSteps.Count == 0
+                        ? "「+ 追加」ボタンで行を追加してから動作プリセットを押してください。"
+                        : "動作を反映する行を先に選択してください。";
                 return;
             }
 
