@@ -948,7 +948,9 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = "色を反映する行を先に選択してください。";
+                StatusMessage = EditingSteps.Count == 0
+                    ? "「+ 追加」ボタンで行を追加してから色プリセットを押してください。"
+                    : "色を反映する行を先に選択してください。";
                 return;
             }
 
@@ -970,7 +972,9 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = "色を反映する行を先に選択してください。";
+                StatusMessage = EditingSteps.Count == 0
+                    ? "「+ 追加」ボタンで行を追加してからカスタム色プリセットを押してください。"
+                    : "色を反映する行を先に選択してください。";
                 return;
             }
 
@@ -1014,7 +1018,9 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (SelectedStep == null)
             {
-                StatusMessage = "動作を反映する行を先に選択してください。";
+                StatusMessage = EditingSteps.Count == 0
+                    ? "「+ 追加」ボタンで行を追加してから動作プリセットを押してください。"
+                    : "動作を反映する行を先に選択してください。";
                 return;
             }
 
@@ -1270,6 +1276,7 @@ namespace Lib.Ui.Screens.ViewModels
                 _aggressivePausedSequence = await _lighting.PauseSequenceAsync();
                 await _lighting.SetColorAsync(Target.All, color);
                 AppendLog("TX", $"{item.Name} ON ({color.R},{color.G},{color.B})");
+                AppendContinuousSendStartLog();
             }
             catch (Exception ex)
             {
@@ -1306,12 +1313,14 @@ namespace Lib.Ui.Screens.ViewModels
                     // 再生中だったシーケンスを続きから再開
                     await _lighting.ResumeSequenceAsync();
                     AppendLog("TX", $"{item?.Name ?? "煽り"} OFF (Resume Sequence)");
+                    AppendContinuousSendStartLog();
                 }
                 else
                 {
                     // 元々何も再生されていなかったので消灯する
                     await _lighting.SetColorAsync(Target.All, new Rgb(0, 0, 0));
                     AppendLog("TX", $"{item?.Name ?? "煽り"} OFF (Off)");
+                    AppendContinuousSendStartLog();
                 }
             }
             catch (Exception ex)
@@ -1368,6 +1377,7 @@ namespace Lib.Ui.Screens.ViewModels
                 await _lighting.StopEffectAsync();
                 StatusMessage = "停止しました。";
                 AppendLog("TX", "EffectStop");
+                AppendContinuousSendStopLog();
             }
             catch (Exception ex)
             {
@@ -1408,16 +1418,19 @@ namespace Lib.Ui.Screens.ViewModels
                     {
                         await _lighting.SetColorAsync(Target.All, new Rgb(0, 0, 0));
                         AppendLog("TX", "Sequence Stop → Off 維持");
+                        AppendContinuousSendStartLog();
                     }
                     else
                     {
                         await _lighting.SetColorAsync(Target.All, color);
                         AppendLog("TX", $"Sequence Stop → Color ({color.R},{color.G},{color.B}) 維持");
+                        AppendContinuousSendStartLog();
                     }
                 }
                 else
                 {
                     AppendLog("TX", "Sequence Stop");
+                    AppendContinuousSendStopLog();
                 }
 
                 StatusMessage = "シーケンス再生を停止しました（停止時の色を維持）。";
@@ -1454,12 +1467,14 @@ namespace Lib.Ui.Screens.ViewModels
                 {
                     case "Color":
                         await _lighting.SetColorAsync(target, color);
-                        AppendLog("TX", $"Color ({step.ColorR},{step.ColorG},{step.ColorB})");
+                        AppendLog("TX", $"Color ({step.ColorR},{step.ColorG},{step.ColorB}) retransmit={step.RetransmitCount}");
+                        AppendContinuousSendStartLog();
                         break;
 
                     case "Off":
                         await _lighting.SetColorAsync(target, new Rgb(0, 0, 0));
-                        AppendLog("TX", "Off");
+                        AppendLog("TX", $"Off retransmit={step.RetransmitCount}");
+                        AppendContinuousSendStartLog();
                         break;
 
                     case "Effect":
@@ -1479,12 +1494,14 @@ namespace Lib.Ui.Screens.ViewModels
                                 : (int?)null,
                             fadeSteps: step.GetFadeStepsOrDefault(),
                             continuous: effectContinuous);
-                        AppendLog("TX", $"Effect {FormatEffectDisplayName(step.EffectType, step.Continuous)} ({step.ColorR},{step.ColorG},{step.ColorB}) cycle={step.GetEffectCycleDurationOrDefault()}ms fade={step.GetFadeStepsOrDefault()} cont={effectContinuous}");
+                        AppendLog("TX", $"Effect {FormatEffectDisplayName(step.EffectType, step.Continuous)} ({step.ColorR},{step.ColorG},{step.ColorB}) {FormatEffectParamsForLog(step.EffectType, step.GetEffectCycleDurationOrDefault(), step.GetFadeStepsOrDefault(), step.RetransmitCount, effectContinuous)}");
+                        AppendContinuousSendStartLog();
                         break;
 
                     case "EffectStop":
                         await _lighting.StopEffectAsync();
                         AppendLog("TX", "EffectStop");
+                        AppendContinuousSendStopLog();
                         break;
 
                     default:
@@ -1785,6 +1802,40 @@ namespace Lib.Ui.Screens.ViewModels
             return effectType ?? "";
         }
 
+        // 連続送信の状態を示すマーカー（送信ログで「20ms 間隔の連続送信が継続中」と明示する）
+        private const string ContinuousSendStartMarker = "↳ API 側で 20ms 間隔の連続送信中（次コマンドまたは停止まで継続）";
+        private const string ContinuousSendStopMarker = "↳ 連続送信を停止";
+
+        /// <summary>
+        /// 連続送信開始マーカーを送信ログに追記する（Color / Off / Effect の TX 直後に使用）
+        /// </summary>
+        private void AppendContinuousSendStartLog()
+        {
+            AppendLog("INFO", ContinuousSendStartMarker);
+        }
+
+        /// <summary>
+        /// 連続送信停止マーカーを送信ログに追記する（EffectStop / Sequence Stop の TX 直後に使用）
+        /// </summary>
+        private void AppendContinuousSendStopLog()
+        {
+            AppendLog("INFO", ContinuousSendStopMarker);
+        }
+
+        /// <summary>
+        /// Effect コマンドのパラメータをログ用文字列に整形する
+        /// Flash の場合は flashInterval（ON/OFF 片側時間 = cycle ÷ 2）も含める
+        /// </summary>
+        private static string FormatEffectParamsForLog(string? effectType, int cycle, int fade, int retransmit, bool continuous)
+        {
+            if (effectType == "Flash")
+            {
+                var flashInterval = Math.Max(50, cycle / 2);
+                return $"cycle={cycle}ms flashInterval={flashInterval}ms fade={fade} retransmit={retransmit} cont={continuous}";
+            }
+            return $"cycle={cycle}ms fade={fade} retransmit={retransmit} cont={continuous}";
+        }
+
         /// <summary>
         /// 連続再生中、進行したステップの内容を [TX] ログに記録
         /// </summary>
@@ -1794,15 +1845,26 @@ namespace Lib.Ui.Screens.ViewModels
 
             var w = EditingSteps[stepIndex];
             int total = EditingSteps.Count;
+            bool effectContinuous = w.Continuous ?? true;
             string detail = w.CommandType switch
             {
-                "Color"      => $"Step {stepIndex + 1}/{total}: Color ({w.ColorR},{w.ColorG},{w.ColorB})",
-                "Off"        => $"Step {stepIndex + 1}/{total}: Off",
-                "Effect"     => $"Step {stepIndex + 1}/{total}: Effect {FormatEffectDisplayName(w.EffectType, w.Continuous)} ({w.ColorR},{w.ColorG},{w.ColorB})",
+                "Color"      => $"Step {stepIndex + 1}/{total}: Color ({w.ColorR},{w.ColorG},{w.ColorB}) retransmit={w.RetransmitCount}",
+                "Off"        => $"Step {stepIndex + 1}/{total}: Off retransmit={w.RetransmitCount}",
+                "Effect"     => $"Step {stepIndex + 1}/{total}: Effect {FormatEffectDisplayName(w.EffectType, w.Continuous)} ({w.ColorR},{w.ColorG},{w.ColorB}) {FormatEffectParamsForLog(w.EffectType, w.EffectCycleDurationMs > 0 ? w.EffectCycleDurationMs : 1000, w.FadeSteps > 0 ? w.FadeSteps : 20, w.RetransmitCount, effectContinuous)}",
                 "EffectStop" => $"Step {stepIndex + 1}/{total}: EffectStop",
                 _            => $"Step {stepIndex + 1}/{total}: {w.CommandType}",
             };
             AppendLog("TX", detail);
+
+            // 各 TX 後の状態マーカー（EffectStop は連続送信停止、その他は連続送信中）
+            if (w.CommandType == "EffectStop")
+            {
+                AppendContinuousSendStopLog();
+            }
+            else
+            {
+                AppendContinuousSendStartLog();
+            }
         }
 
         /// <summary>
