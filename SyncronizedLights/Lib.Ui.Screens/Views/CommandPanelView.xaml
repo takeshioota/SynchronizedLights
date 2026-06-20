@@ -1,0 +1,329 @@
+<UserControl x:Class="Lib.Ui.Screens.Views.CommandPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Background="{StaticResource AppBgBrush}"
+             Foreground="{StaticResource TextBrushMain}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="4"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 色プリセット -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="色:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <ItemsControl Grid.Column="1" ItemsSource="{Binding ColorPresets}" HorizontalAlignment="Left">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectColorPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}" Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                    Tag="{Binding IsSelected}" MinWidth="86" MinHeight="32" Margin="0,0,4,4" Padding="0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Fill="{Binding Hex}" Width="12" Height="12" Stroke="#FFFFFF" StrokeThickness="1" Margin="6,0,4,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+
+            <!-- Custom 色 -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Custom:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <ItemsControl Grid.Column="1" ItemsSource="{Binding CustomColorPresets}" HorizontalAlignment="Left">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectCustomColorPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}" Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                    Tag="{Binding IsSelected}" MinWidth="110" MinHeight="32" Margin="0,0,4,4" Padding="0"
+                                    ToolTip="クリック=選択行に色を反映 / 右クリック=色を編集">
+                                <Button.ContextMenu>
+                                    <ContextMenu><MenuItem Header="色を編集..." Click="CustomColorEdit_Click"/></ContextMenu>
+                                </Button.ContextMenu>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Fill="{Binding Hex}" Width="12" Height="12" Stroke="#FFFFFF" StrokeThickness="1" Margin="6,0,4,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="&#x270F;" FontSize="10" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+
+            <!-- 動作プリセット -->
+            <Grid Grid.Row="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="動作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <ItemsControl Grid.Column="1" ItemsSource="{Binding ActionPresets}" HorizontalAlignment="Left">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectActionPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}" Style="{StaticResource GrandMaSelectableButtonStyle}"
+                                    Tag="{Binding IsSelected}" MinWidth="100" MinHeight="32" Margin="0,0,4,4" Padding="0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Rectangle Fill="{Binding AccentHex}" Width="4" Margin="6,3,4,3" RadiusX="2" RadiusY="2" VerticalAlignment="Stretch"/>
+                                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+
+            <!-- 操作ボタン + Chase/OL -->
+            <Grid Grid.Row="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="操作:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="+ 追加" Command="{Binding AddEmptyStepCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaSelectableButtonStyle}" Tag="True"
+                            MinHeight="34" Width="90" FontWeight="Bold" Margin="0,0,4,4"/>
+                    <Button Content="複製" Command="{Binding DuplicateStepCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"/>
+                    <Button Content="▲" Command="{Binding MoveStepUpCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="40" FontWeight="Bold" Margin="0,0,2,4"/>
+                    <Button Content="▼" Command="{Binding MoveStepDownCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="40" FontWeight="Bold" Margin="0,0,4,4"/>
+                    <Button Content="Chase" Command="{Binding StartChaseCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"
+                            Foreground="#00E5FF" FontWeight="Bold"/>
+                    <Button Content="OL" Command="{Binding StartOverlapCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
+                            Foreground="#69F0AE" FontWeight="Bold"/>
+                    <Button Content="Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"/>
+
+                    <Button Content="行削除" Command="{Binding RemoveStepCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="80" Foreground="#FF5252" Margin="0,0,4,4"/>
+                </WrapPanel>
+            </Grid>
+
+            <!-- テンプレート（簡易登録 + テンプレ統合） -->
+            <Grid Grid.Row="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="テンプレ:" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="11"/>
+                <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="色" Command="{Binding EasyAddColorCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="60" Margin="0,0,4,4"/>
+                    <Button Content="OFF" Command="{Binding EasyAddOffCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="60" Margin="0,0,4,4"/>
+                    <Button Content="色変更" Command="{Binding ApplyTemplateColorChangeCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="80" Margin="0,0,4,4"/>
+                    <Button Content="呼吸" Command="{Binding ApplyTemplateBreathingCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="70" Margin="0,0,4,4"/>
+                    <Button Content="Flash" Command="{Binding ApplyTemplateFlashCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="70" Margin="0,0,4,4"/>
+                    <Button Content="7 色" Command="{Binding ApplyTemplateSevenColorCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="60" Margin="0,0,4,4"/>
+                    <Button Content="カウントダウン" Command="{Binding ApplyTemplateCountdownCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="120" Margin="0,0,4,4"/>
+                    <TextBlock Text="間隔(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                    <TextBox Width="80" Text="{Binding EasyIntervalMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                             Padding="6,2" MinHeight="28"/>
+                </WrapPanel>
+            </Grid>
+            <!-- A1 内蔵プログラム -->
+            <Grid Grid.Row="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="A1:" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 動的プリセットボタン（internal-programs.json から読み込み） -->
+                    <ItemsControl ItemsSource="{Binding InternalProgramPresets}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.PlayInternalProgramCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding FrameNo}"
+                                        Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" MinWidth="70" Margin="0,0,4,4"
+                                        FontWeight="Bold"
+                                        ToolTip="{Binding FrameNo, StringFormat='A1 frame={0}'}"
+                                        Content="{Binding Name}">
+                                    <Button.Visibility>
+                                        <Binding Path="Enabled">
+                                            <Binding.Converter>
+                                                <BooleanToVisibilityConverter/>
+                                            </Binding.Converter>
+                                        </Binding>
+                                    </Button.Visibility>
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="編集..." Click="InternalProgramEdit_Click"/>
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="A1 Stop" Command="{Binding StopInternalProgramCommand}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="80" Margin="0,0,8,4"
+                            Foreground="#FF5252" FontWeight="Bold"
+                            ToolTip="内蔵プログラム停止（A2黒で上書き）"/>
+                    <TextBlock Text="Frame:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                    <TextBox Width="60" Text="{Binding A1FrameNo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                             Padding="6,2" MinHeight="28"/>
+                    <Button Content="Send" Command="{Binding SendA1TestCommand}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="60" Margin="4,0,4,4"
+                            ToolTip="指定フレーム番号でA1テスト送信"/>
+                </WrapPanel>
+            </Grid>
+            <!-- Rainbow レインボー（V4.5: 3.15-3.22） -->
+            <Grid Grid.Row="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Rainbow:" VerticalAlignment="Top" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                <StackPanel Grid.Column="1" Orientation="Vertical">
+                    <!-- カラーパレット -->
+                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="色:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ItemsControl ItemsSource="{Binding RainbowColors}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="24" Height="24" Margin="0,0,2,2" BorderThickness="1" BorderBrush="#555"
+                                            CornerRadius="3" Cursor="Hand"
+                                            Background="{Binding HexColor}"
+                                            ToolTip="{Binding HexColor}">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="削除"
+                                                          Command="{Binding DataContext.RemoveRainbowColorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          CommandParameter="{Binding}"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+" Command="{Binding AddRainbowColorCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" Width="24" Height="24" Margin="2,0,0,2"
+                                FontWeight="Bold" ToolTip="色を追加（最大7色）"/>
+                    </WrapPanel>
+                    <!-- モード選択 + パラメータ -->
+                    <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="Mode:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="120" MinHeight="28"
+                                  SelectedIndex="{Binding RainbowModeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="常時点灯 (Solid)"/>
+                            <ComboBoxItem Content="点滅 (Blink)"/>
+                            <ComboBoxItem Content="FI / FO"/>
+                            <ComboBoxItem Content="Fade In"/>
+                            <ComboBoxItem Content="Fade Out"/>
+                            <ComboBoxItem Content="ランダム"/>
+                        </ComboBox>
+                        <TextBlock Text="速度(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60" Text="{Binding RainbowCycleDurationMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                                 Padding="6,2" MinHeight="28" ToolTip="色切り替え速度（500〜2500ms）"/>
+                        <TextBlock Text="点滅周期(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60" Text="{Binding RainbowBlinkPeriodMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                                 Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（100〜3600ms）"/>
+                        <TextBlock Text="比率:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="40" Text="{Binding RainbowDutyRatio, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                                 Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点灯比率（1-9 = 10%-90%）"/>
+                        <TextBlock Text="FI(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60" Text="{Binding RainbowFadeInMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                                 Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜3000ms）"/>
+                        <TextBlock Text="FO(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="60" Text="{Binding RainbowFadeOutMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
+                                 Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜3000ms）"/>
+                    </WrapPanel>
+                    <!-- 実行ボタン -->
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Content="Rainbow Start" Command="{Binding StartRainbowCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="120" Margin="0,0,4,4"
+                                FontWeight="Bold" Foreground="#4CAF50"
+                                ToolTip="レインボーエフェクト開始（3.15 カラー設定 + 3.16-3.21 モード開始）"/>
+                        <Button Content="Pause" Command="{Binding PauseRainbowCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="70" Margin="0,0,4,4"
+                                Foreground="#FFC107"
+                                ToolTip="7色ランダム一時停止（前回の色を保持）"/>
+                        <Button Content="Rainbow Stop" Command="{Binding StopRainbowCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="120" Margin="0,0,4,4"
+                                Foreground="#FF5252" FontWeight="Bold"
+                                ToolTip="レインボーエフェクト停止"/>
+                    </WrapPanel>
+                    <!-- 個別コマンドボタン（3.15-3.21） -->
+                    <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
+                        <Button Content="3.15 色テーブル" Command="{Binding SendColorTableCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="色テーブルのみ送信（0xA9 0x02）"/>
+                        <Button Content="3.16 レインボー" Command="{Binding StartRainbowDirectCommand}" CommandParameter="0"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="常時点灯（Solid: mode=0x00）"/>
+                        <Button Content="3.17 点滅" Command="{Binding StartRainbowDirectCommand}" CommandParameter="1"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="点滅（Blink: mode=0x01）"/>
+                        <Button Content="3.18 FI/FO" Command="{Binding StartRainbowDirectCommand}" CommandParameter="2"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="フェードイン／フェードアウト（mode=0x02）"/>
+                        <Button Content="3.19 FI" Command="{Binding StartRainbowDirectCommand}" CommandParameter="3"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="フェードインのみ（mode=0x03）"/>
+                        <Button Content="3.20 FO" Command="{Binding StartRainbowDirectCommand}" CommandParameter="4"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" ToolTip="フェードアウトのみ（mode=0x04）"/>
+                        <Button Content="3.21 ランダム" Command="{Binding StartRainbowDirectCommand}" CommandParameter="5"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,4,4"
+                                Padding="8,2" Foreground="#FFC107"
+                                ToolTip="7色ランダム点滅（mode=0x05）— A0座標指定前提のため動作確認用"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
