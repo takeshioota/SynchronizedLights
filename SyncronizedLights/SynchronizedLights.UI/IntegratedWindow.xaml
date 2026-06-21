@@ -387,14 +387,19 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding CurrentStepLabel}"
                                    Foreground="#FFC107" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
-                        <!-- 実行/戻る（キーボード断線時の予備） -->
+                        <!-- 実行/戻る/停止（キーボード断線時の予備） -->
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                             <Button Content="◀ 戻る" Command="{Binding PreviousStepCommand}"
                                     Style="{StaticResource GrandMaButtonStyle}"
                                     FontWeight="Bold" Height="32" MinWidth="70" Margin="0,0,4,0"/>
                             <Button Content="実行 ▶" Command="{Binding ExecuteCurrentStepCommand}"
                                     Style="{StaticResource GrandMaButtonStyle}"
-                                    FontWeight="Bold" Height="32" MinWidth="70"/>
+                                    FontWeight="Bold" Height="32" MinWidth="70" Margin="0,0,4,0"/>
+                            <Button Content="■ 停止" Command="{Binding StopExecutionCommand}"
+                                    Style="{StaticResource GrandMaButtonStyle}"
+                                    Foreground="#FF5252"
+                                    FontWeight="Bold" Height="32" MinWidth="70"
+                                    ToolTip="実行中のエフェクトを停止（Esc キーと同じ動作）"/>
                         </StackPanel>
                         <!-- 操作キーガイド -->
                         <TextBlock Grid.Column="4" VerticalAlignment="Center" FontSize="11" Foreground="#888888" Margin="0,0,8,0">
