@@ -403,7 +403,6 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="{Binding CurrentStepLabel}"
@@ -456,6 +455,16 @@
                     </Button.Style>
                 </Button>
 
+                <Button Grid.Column="3"
+                        Content="■ 停止"
+                        Command="{Binding StopExecutionCommand}"
+                        Style="{StaticResource GrandMaButtonStyle}"
+                        Foreground="#FF5252"
+                        FontWeight="Bold"
+                        Height="28" Width="80"
+                        VerticalAlignment="Center"
+                        Margin="12,0,0,0"
+                        ToolTip="実行中のエフェクトを停止（Esc キーと同じ動作）"/>
                 <TextBlock Grid.Column="5"
                            VerticalAlignment="Center"
                            FontSize="12"
@@ -471,15 +480,6 @@
                     <Run Text="Esc" Foreground="#FFC107" FontWeight="Bold"/>
                     <Run Text="=停止"/>
                 </TextBlock>
-                <Button Grid.Column="6"
-                        Content="■ 停止"
-                        Command="{Binding StopExecutionCommand}"
-                        Style="{StaticResource GrandMaButtonStyle}"
-                        Foreground="#FF5252"
-                        FontWeight="Bold"
-                        Height="28" Width="80"
-                        VerticalAlignment="Center"
-                        ToolTip="実行中のエフェクトを停止（Esc キーと同じ動作）"/>
             </Grid>
         </Border>
 

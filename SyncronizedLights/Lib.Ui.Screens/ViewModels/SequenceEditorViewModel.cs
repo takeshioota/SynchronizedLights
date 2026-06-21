@@ -2046,29 +2046,24 @@ namespace Lib.Ui.Screens.ViewModels
             SaveUndoState();
 
             int insertIndex;
-            int newTimeMs;
             if (SelectedStep != null && EditingSteps.Contains(SelectedStep))
             {
                 insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
-                newTimeMs = SelectedStep.TimeMs + 1000;
             }
             else if (EditingSteps.Count > 0)
             {
                 insertIndex = EditingSteps.Count;
-                var last = EditingSteps.Last();
-                newTimeMs = last.TimeMs + 1000;
             }
             else
             {
                 insertIndex = 0;
-                newTimeMs = 0;
             }
 
             // 追加される行は常に「白 / Color / エフェクトなし」の初期値で統一する。
-            // 直前の色を引き継がないことで、編集時に「複製のように見える」混乱を防ぐ。
+            // TimeMs=0 → 空表示（無限待機）がデフォルト。
             var step = new SequenceStep
             {
-                TimeMs = newTimeMs,
+                TimeMs = 0,
                 CommandType = "Color",
                 EffectType = null,
                 ColorR = 255,
