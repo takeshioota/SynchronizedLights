@@ -2644,17 +2644,31 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 // NO.15,17,18,19 修正: 全コマンド実行前に走行中エフェクトを確実に停止する。
                 // Effect→Effect 遷移時に旧エフェクトが停止されず競合していた問題を解消。
-                try { await _lighting.StopEffectAsync(); }
-                catch { /* 走っていなければ無視 */ }
-
-                if (step.CommandType is not "Rainbow" and not "RainbowStop")
+                // NO.27,28 対策: 停止呼び出しがハングしても全体を長時間ブロックしないよう
+                //   短いタイムアウト(2s)を付与し、遅延区間特定のため所要時間を計測する。
+                var preStopSw = Stopwatch.StartNew();
+                using (var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
                 {
-                    try { await _lighting.StopRainbowAsync(); }
-                    catch { /* 走っていなければ無視 */ }
+                    try { await _lighting.StopEffectAsync(stopCts.Token); }
+                    catch { /* 走っていない/タイムアウトは無視 */ }
+
+                    if (step.CommandType is not "Rainbow" and not "RainbowStop")
+                    {
+                        try { await _lighting.StopRainbowAsync(stopCts.Token); }
+                        catch { /* 走っていない/タイムアウトは無視 */ }
+                    }
                 }
 
-                // API 側の停止処理完了を待つ（Effect→Effect 競合防止）
-                await Task.Delay(30);
+                // API 側の停止処理完了を待つ（Effect→Effect 競合防止）。
+                // NO.15/17/18/19: 30ms では端末側の停止完了に対して短く不作動が残るケースがあったため 50ms に引き上げ。
+                await Task.Delay(50);
+
+                if (preStopSw.ElapsedMilliseconds > 300)
+                {
+                    var msg = $"プリ停止に {preStopSw.ElapsedMilliseconds}ms（cmd={step.CommandType}/{step.EffectType}）";
+                    AppendLog("PERF", msg);
+                    Log.Warning("[PERF] {Msg}", msg); // NO.27/28: 現地ログ解析で遅延を捕捉できるよう永続化
+                }
 
                 switch (step.CommandType)
                 {
@@ -2765,6 +2779,9 @@ namespace Lib.Ui.Screens.ViewModels
                         }
                         // 連続実行フラグ：未指定（null）の場合は繰り返し（true）を採用
                         var effectContinuous = step.Continuous ?? true;
+                        // NO.27,28 計測: シーケンス選択→Fade 開始までの遅延区間特定のため StartEffect の
+                        //   HTTP 往復時間を計測する（300ms 超過時のみログ）。
+                        var startFxSw = Stopwatch.StartNew();
                         await _lighting.StartEffectAsync(
                             effectType: step.EffectType,
                             color: color,
@@ -2774,6 +2791,12 @@ namespace Lib.Ui.Screens.ViewModels
                                 : (int?)null,
                             fadeSteps: step.GetFadeStepsOrDefault(),
                             continuous: effectContinuous);
+                        if (startFxSw.ElapsedMilliseconds > 300)
+                        {
+                            var fxMsg = $"StartEffect HTTP に {startFxSw.ElapsedMilliseconds}ms（{step.EffectType}）";
+                            AppendLog("PERF", fxMsg);
+                            Log.Warning("[PERF] {Msg}", fxMsg); // NO.27/28: 現地ログ解析用に永続化
+                        }
                         AppendLog("TX", $"Effect {FormatEffectDisplayName(step.EffectType, step.Continuous)} ({step.ColorR},{step.ColorG},{step.ColorB}) {FormatEffectParamsForLog(step.EffectType, step.GetEffectCycleDurationOrDefault(), step.GetFadeStepsOrDefault(), step.RetransmitCount, effectContinuous)}");
                         AppendContinuousSendStartLog();
                         _lastExecutedColor = (step.ColorR, step.ColorG, step.ColorB);
@@ -3266,16 +3289,20 @@ namespace Lib.Ui.Screens.ViewModels
         {
             try
             {
-                var sortedSteps = subSeq.SortedSteps.ToList();
-                if (sortedSteps.Count == 0) return;
+                // NO.30: サブシーケンスは保存順で再生し、各行の Time(sec)=その行の表示時間(duration)
+                //        として扱う（親タイムラインの「絶対時刻差分」方式とは別の専用仕様）。
+                //        NO.25 で新規行 TimeMs 既定が 0 になり、隣接差分方式だと全行0で各20ms
+                //        ＝約0.1秒終了の回帰が出ていたため duration 方式に統一する。
+                var playSteps = subSeq.Steps.ToList();
+                if (playSteps.Count == 0) return;
 
                 while (!ct.IsCancellationRequested)
                 {
-                    for (int i = 0; i < sortedSteps.Count; i++)
+                    for (int i = 0; i < playSteps.Count; i++)
                     {
                         if (ct.IsCancellationRequested) break;
 
-                        var step = sortedSteps[i];
+                        var step = playSteps[i];
 
                         // 再帰 Preset 防止：サブシーケンス内の Preset ステップは無視
                         if (step.CommandType == "Preset") continue;
@@ -3283,17 +3310,13 @@ namespace Lib.Ui.Screens.ViewModels
                         await ExecuteSubSequenceStepAsync(step, ct);
                         if (ct.IsCancellationRequested) break;
 
-                        // 次のステップまでの待機時間を計算
+                        // 当該ステップを表示する時間だけ待機（BPM>0 を優先、未設定/0 は既定1秒）。
+                        int bpm = step.Bpm ?? 0;
                         int waitMs;
-                        if (i + 1 < sortedSteps.Count)
-                        {
-                            waitMs = Math.Max(20, sortedSteps[i + 1].TimeMs - step.TimeMs);
-                        }
+                        if (bpm > 0 && bpm != 120)
+                            waitMs = Math.Max(20, 60000 / bpm);
                         else
-                        {
-                            // ループの末尾→先頭に戻る前の待機
-                            waitMs = 1000;
-                        }
+                            waitMs = step.TimeMs > 0 ? step.TimeMs : 1000;
 
                         try { await Task.Delay(waitMs, ct); }
                         catch (OperationCanceledException) { break; }
