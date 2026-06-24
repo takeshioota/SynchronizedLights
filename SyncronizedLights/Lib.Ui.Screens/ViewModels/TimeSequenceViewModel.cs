@@ -633,7 +633,8 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private byte color2B;
 
-        /// <summary>BPM（Color2 時のみ有効、2色交互点灯の周期）— 1〜6000</summary>
+        /// <summary>BPM（Color2 時のみ有効、2色交互点灯の周期）— 0〜6000。
+        /// NO.31: 0 を許可（0=未設定。自動送りせず Time(sec)/手動送りにフォールバック）。</summary>
         private int _bpm = 120;
         public int Bpm
         {
@@ -642,7 +643,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 if (_bpm != value)
                 {
-                    _bpm = Math.Clamp(value, 1, 6000);
+                    _bpm = Math.Clamp(value, 0, 6000);
                     OnPropertyChanged();
                 }
             }

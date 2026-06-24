@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -61,6 +62,22 @@ namespace SynchronizedLights.UI
 
             // デバッグショートカット
             this.KeyDown += OnKeyDown_DebugShortcut;
+
+            // NO.33: バージョン番号を表示（タイトルバー＋ステータスバーに常時表示）
+            ApplyVersionDisplay();
+        }
+
+        /// <summary>
+        /// NO.33: アセンブリのバージョンをタイトルとステータスバーに反映する。
+        /// </summary>
+        private void ApplyVersionDisplay()
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            var ver = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                      ?? asm.GetName().Version?.ToString()
+                      ?? "1.0.0";
+            this.Title = $"SynchronizedLights  v{ver}";
+            VersionText.Text = $"v{ver}";
         }
 
         #region Window ライフサイクル
@@ -334,9 +351,7 @@ namespace SynchronizedLights.UI
                 if (e.Key == Key.Escape)
                 {
                     e.Handled = true;
-                    _sequenceVm.StopLoopExecution();
-                    if (_sequenceVm.StopExecutionCommand.CanExecute(null))
-                        _sequenceVm.StopExecutionCommand.Execute(null);
+                    StopAllAndRestoreGrid();
                 }
                 return;
             }
@@ -383,10 +398,49 @@ namespace SynchronizedLights.UI
                     break;
                 case Key.Escape:
                     e.Handled = true;
-                    _sequenceVm.StopLoopExecution();
-                    if (_sequenceVm.StopExecutionCommand.CanExecute(null))
-                        _sequenceVm.StopExecutionCommand.Execute(null);
+                    StopAllAndRestoreGrid();
                     break;
+            }
+        }
+
+        /// <summary>
+        /// NO.29: Esc 等での全停止と、停止後の DataGrid 編集可否の復帰をまとめて行う。
+        /// OL/Chase は複数行選択(Extended)で起動するため、停止後に複数選択が残ると
+        /// セル編集が始められなくなる（Time(sec)〜Memo が入力不可に見える）。
+        /// 停止後に単一選択へ収束し、編集可能セルとフォーカスを復帰する。
+        /// </summary>
+        private void StopAllAndRestoreGrid()
+        {
+            _sequenceVm.StopLoopExecution();
+            if (_sequenceVm.StopExecutionCommand.CanExecute(null))
+                _sequenceVm.StopExecutionCommand.Execute(null);
+
+            // ループ側の最終 SelectedStep 更新が走り終えてから収束させるため遅延実行する。
+            Dispatcher.BeginInvoke(new Action(RestoreGridEditableAfterStop),
+                System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// NO.29: 複数選択を解除して現在ステップ1行のみ選択し、編集可能セル＋フォーカスを復帰する。
+        /// </summary>
+        private void RestoreGridEditableAfterStop()
+        {
+            try
+            {
+                var current = _sequenceVm.SelectedStep;
+                StepDataGrid.SelectedItems.Clear();
+                if (current != null)
+                {
+                    StepDataGrid.SelectedItem = current;
+                    var editableColumn = StepDataGrid.Columns.FirstOrDefault(c => !c.IsReadOnly);
+                    if (editableColumn != null)
+                        StepDataGrid.CurrentCell = new DataGridCellInfo(current, editableColumn);
+                }
+                StepDataGrid.Focus();
+            }
+            catch
+            {
+                // UI 状態の復帰失敗は致命ではない（停止自体は完了している）
             }
         }
 
