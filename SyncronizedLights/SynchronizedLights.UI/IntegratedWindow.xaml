@@ -21,12 +21,13 @@
         <!-- DataGrid ドロップダウン候補 -->
         <x:Array x:Key="CommandTypeOptions" Type="sys:String">
             <sys:String>Color</sys:String>
-            <sys:String>Color2</sys:String>
+            <!-- NO.35: Color2（2色交互点灯）はボタン・コマンドとも廃止 -->
             <sys:String>Off</sys:String>
             <sys:String>Effect</sys:String>
             <sys:String>EffectStop</sys:String>
             <sys:String>Rainbow</sys:String>
             <sys:String>RainbowStop</sys:String>
+            <sys:String>RainbowPause</sys:String>
             <sys:String>SignalOff</sys:String>
             <sys:String>Preset</sys:String>
             <sys:String>InternalProgram</sys:String>
@@ -128,6 +129,8 @@
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{StaticResource ButtonSelectedBorderBrush}"/>
+                    <!-- NO.41: 選択行(黄背景)の文字を黒系に統一し視認性を確保（白文字対策） -->
+                    <Setter Property="Foreground" Value="#111111"/>
                 </Trigger>
                 <DataTrigger Binding="{Binding IsCurrentlyPlaying}" Value="True">
                     <Setter Property="Background" Value="#1B5E20"/>
@@ -164,12 +167,20 @@
                 <Trigger Property="Text" Value="0">
                     <Setter Property="Foreground" Value="#333333"/>
                 </Trigger>
+                <!-- NO.41: 選択行(黄背景)では数値も黒系にして視認性を確保（0トリガより後＝選択時優先） -->
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                    <Setter Property="Foreground" Value="#111111"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
         <!-- No列: 0（未設定）を空欄表示にするスタイル -->
         <Style x:Key="ZeroBlankTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#F2F2F2"/>
             <Style.Triggers>
+                <!-- NO.41: 選択行は黒系（0トリガより前＝0の空欄(Transparent)表示は維持） -->
+                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                    <Setter Property="Foreground" Value="#111111"/>
+                </DataTrigger>
                 <Trigger Property="Text" Value="0">
                     <Setter Property="Foreground" Value="Transparent"/>
                 </Trigger>
@@ -431,24 +442,8 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <Button Command="{Binding ToggleSignalOffCommand}"
-                                    FontWeight="Bold" Height="42" MinWidth="90" VerticalAlignment="Center"
-                                    ToolTip="信号送出を完全停止し、端末をセルフモードに開放（MC中・休憩中用）。再押下で復帰。">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource GrandMaButtonStyle}">
-                                        <Setter Property="Content" Value="信号Off"/>
-                                        <Setter Property="Background" Value="#555555"/>
-                                        <Setter Property="FontSize" Value="12"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsSignalOffActive}" Value="True">
-                                                <Setter Property="Content" Value="信号On"/>
-                                                <Setter Property="Background" Value="#FF9800"/>
-                                                <Setter Property="Foreground" Value="Black"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
+                            <!-- NO.38: 右上の信号Off/Onトグルは削除。信号Offはコマンドパネル「動作:」内のボタン
+                                 （選択行Cmd=SignalOff上書き）および Cmd ドロップダウンから使用する。 -->
                         </StackPanel>
                     </Grid>
                 </Border>

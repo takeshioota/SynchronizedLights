@@ -171,6 +171,12 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         public event Action? RequestScrollToFirstRow;
 
+        /// <summary>
+        /// NO.40: 選択行（SelectedStep）が見える位置までスクロールをリクエストするイベント。
+        /// クリック・矢印・Enter送り・Chase/OL/再生での行送りすべてで発火する。
+        /// </summary>
+        public event Action? RequestScrollToSelectedItem;
+
         #endregion
 
         /// <summary>
@@ -592,6 +598,9 @@ namespace Lib.Ui.Screens.ViewModels
         /// </summary>
         partial void OnSelectedStepChanged(SequenceStepWrapper? value)
         {
+            // NO.40: 選択行が変わったら常に可視化（手動ナビ＋Chase/OL/再生の行送り含む。実行抑制とは独立）
+            if (value != null) RequestScrollToSelectedItem?.Invoke();
+
             if (_suppressAutoExecute) return;
             if (value == null) return;
 
@@ -1853,6 +1862,8 @@ namespace Lib.Ui.Screens.ViewModels
             SelectedStep.ColorR = item.R;
             SelectedStep.ColorG = item.G;
             SelectedStep.ColorB = item.B;
+            // NO.37: 色変更後にその行を実行し、変更色を実機へ送信する
+            ReExecuteCurrentStep();
             StatusMessage = $"色を反映：{item.Name}（{item.R}, {item.G}, {item.B}）";
         }
 
@@ -1879,6 +1890,8 @@ namespace Lib.Ui.Screens.ViewModels
             SelectedStep.ColorR = item.R;
             SelectedStep.ColorG = item.G;
             SelectedStep.ColorB = item.B;
+            // NO.37: 色変更後にその行を実行し、変更色を実機へ送信する
+            ReExecuteCurrentStep();
             StatusMessage = $"カスタム色を反映：{item.Name}（{item.R}, {item.G}, {item.B}）";
         }
 
@@ -2025,7 +2038,9 @@ namespace Lib.Ui.Screens.ViewModels
                 "FadeOutHold" => ("Effect", "FadeOut",    false), // 1 回フェードアウト後 消灯保持
                 "Breath"      => ("Effect", "Breathing",  null),
                 "SevenColor"  => ("Effect", "SevenColor", null),
-                "Color2"      => ("Color2", null,         null),
+                // NO.38: 信号Off（端末セルフモード開放）
+                "SignalOff"   => ("SignalOff", null,      null),
+                // NO.35: Color2 廃止（マッピング削除）
                 _             => ("Color",  null,         null),
             };
         }
@@ -2256,10 +2271,11 @@ namespace Lib.Ui.Screens.ViewModels
                 }
                 else
                 {
-                    // NO.24 修正: Effect/Rainbow/Color2 ステップの場合はステップを再実行してエフェクトを復帰する
+                    // NO.24 修正: Effect/Rainbow ステップの場合はステップを再実行してエフェクトを復帰する
+                    // （NO.35: Color2 は廃止のため対象から除外）
                     var currentStep = SelectedStep;
                     if (currentStep != null &&
-                        currentStep.CommandType is "Effect" or "Rainbow" or "Color2")
+                        currentStep.CommandType is "Effect" or "Rainbow")
                     {
                         await ExecuteStepWithoutAdvanceAsync();
                         AppendLog("TX", $"{item?.Name ?? "煽り"} OFF → ステップ再実行 ({currentStep.CommandType})");
@@ -2477,21 +2493,32 @@ namespace Lib.Ui.Screens.ViewModels
             StatusMessage = $"Emergency モード ({mode}) 有効 — 照明操作は抑止されています。";
             AppendLog("INFO", $"Emergency ({mode}) 有効");
 
+            // NO.36: 即応性確保 — 色送信より「先に」ローカルの連続送信ループを止める。
+            // Color遷移ループ/Chase/OL/サブシーケンスが単一 HttpClient を占有し続けると、
+            // 緊急の黒送信が後ろに詰まる・直後に旧色で上書きされるため、押下→消灯が遅れていた。
+            // ループを先に止めてから黒を送ることで競合を排除し、即時に消灯させる。
+            StopLoopExecution();
+            _transitionCts?.Cancel();
+            _subSequenceCts?.Cancel();
+
             if (_lighting != null && _lighting.IsConnected)
             {
                 try
                 {
-                    // 色送信を最優先（実機を即座に切替）
+                    // 色送信を最優先（実機を即座に切替）。
+                    // NO.37: SetColorAsync → API 側 StartColorHold は内部で実行中シーケンス/エフェクトを
+                    //   停止した上で「黒の連続送信ホールド（20ms間隔）」を開始する。
+                    //   従来はこの直後に StopSequenceAsync / StopEffectAsync を呼んでいたが、
+                    //   StopEffectAsync は scheduler.Abort 経由で“その黒の連続ホールド自体”を止めてしまい、
+                    //   黒が数パケットしか送られなかった。2.4GHz でそのわずかな黒パケットが落ちると
+                    //   KeepAlive 再送（最短800ms後）まで消灯が反映されず、押下→消灯が遅れていた。
+                    //   よって黒送信後は API への追加停止呼び出しを行わず、連続ホールドを維持して
+                    //   確実かつ即時に消灯させる（停止は StartColorHold 側で実施済み）。
                     await _lighting.SetColorAsync(Target.All, color);
-                    AppendLog("TX", $"Emergency ({mode}): ({color.R},{color.G},{color.B})");
+                    AppendLog("TX", $"Emergency ({mode}): ({color.R},{color.G},{color.B}) — 連続ホールド維持");
 
-                    // 再生中のシーケンス/エフェクトを停止（色送信後でOK）
-                    if (IsPlaying)
-                    {
-                        await _lighting.StopSequenceAsync();
-                        IsPlaying = false;
-                    }
-                    await _lighting.StopEffectAsync();
+                    // UI 状態のみ更新（API 側の再生停止はカラーホールド開始時に完了済み）
+                    IsPlaying = false;
                 }
                 catch (Exception ex)
                 {
@@ -2652,7 +2679,7 @@ namespace Lib.Ui.Screens.ViewModels
                     try { await _lighting.StopEffectAsync(stopCts.Token); }
                     catch { /* 走っていない/タイムアウトは無視 */ }
 
-                    if (step.CommandType is not "Rainbow" and not "RainbowStop")
+                    if (step.CommandType is not "Rainbow" and not "RainbowStop" and not "RainbowPause")
                     {
                         try { await _lighting.StopRainbowAsync(stopCts.Token); }
                         catch { /* 走っていない/タイムアウトは無視 */ }
@@ -2722,54 +2749,9 @@ namespace Lib.Ui.Screens.ViewModels
                         StatusMessage = "Off 送信完了 → API 側で RGB(0,0,0) 連続送信中";
                         break;
 
-                    case "Color2":
-                        // 2色交互点灯：BPMで周期を計算し、Color1↔Color2 を交互送信
-                        var bpmVal = step.Bpm ?? 120;
-                        var cycleDuration = bpmVal > 0 ? 60000 / bpmVal : 500;
-                        var halfCycle = Math.Max(20, cycleDuration / 2);
-                        var color2 = new Rgb(
-                            step.Color2R ?? 0,
-                            step.Color2G ?? 0,
-                            step.Color2B ?? 0);
-
-                        AppendLog("TX", $"Color2 ({step.ColorR},{step.ColorG},{step.ColorB})↔({color2.R},{color2.G},{color2.B}) BPM={bpmVal}");
-                        AppendContinuousSendStartLog();
-
-                        // 2026-05-30 修正: Task.Run(fire-and-forget) を await ループに変更
-                        // 理由: Task.Run だと複数ループが同時に走り _lighting への競合が発生する
-                        // --- 修正前 (Task.Run) ---
-                        // _ = Task.Run(async () =>
-                        // {
-                        //     var isFirst = true;
-                        //     while (!transitionToken.IsCancellationRequested)
-                        //     {
-                        //         var c = isFirst ? color : color2;
-                        //         try { await _lighting.SetColorAsync(target, c); }
-                        //         catch { break; }
-                        //         isFirst = !isFirst;
-                        //         try { await Task.Delay(halfCycle, transitionToken); }
-                        //         catch (OperationCanceledException) { break; }
-                        //     }
-                        // });
-                        // --- 修正後 (await ループ) ---
-                        {
-                            var isFirst = true;
-                            while (!transitionToken.IsCancellationRequested)
-                            {
-                                var c = isFirst ? color : color2;
-                                try
-                                {
-                                    await _lighting.SetColorAsync(target, c);
-                                }
-                                catch { break; }
-
-                                isFirst = !isFirst;
-                                try { await Task.Delay(halfCycle, transitionToken); }
-                                catch (OperationCanceledException) { break; }
-                            }
-                        }
-                        _lastExecutedColor = (step.ColorR, step.ColorG, step.ColorB);
-                        break;
+                    // NO.35: Color2（2色交互点灯）廃止。実行ロジックを削除。
+                    //        旧保存データに Color2 ステップが残っていても該当 case が無いため
+                    //        何も送信されず無害（Cmdドロップダウンからも除外済み）。
 
                     case "Effect":
                         if (string.IsNullOrEmpty(step.EffectType))
@@ -2842,6 +2824,14 @@ namespace Lib.Ui.Screens.ViewModels
                         break;
                     }
 
+                    case "RainbowPause":
+                    {
+                        await _lighting.PauseRainbowAsync();
+                        AppendLog("TX", "RainbowPause");
+                        StatusMessage = "Rainbow 一時停止（色保持）";
+                        break;
+                    }
+
                     case "SignalOff":
                     {
                         // NO.26: シーケンス内から信号Off（端末セルフモード移行）
@@ -2900,19 +2890,22 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
-        /// <summary>
-        /// セル編集確定時に現在ステップを再実行する（コードビハインドから呼び出し用）
-        /// </summary>
-        // 2026-05-30 追加: CellEditEnding と OnSelectedStepChanged の二重発火防止用タイムスタンプ
-        private DateTime _lastExecuteTime = DateTime.MinValue;
-        private const int ExecuteDebounceMs = 100;
+        // NO.37 修正: トレーリングデバウンス用の状態。
+        // 旧実装（前回実行から 100ms 以内はスキップ）は R→G→B のように
+        // 連続でセル編集すると 2 件目以降が捨てられ、最終色が送信されない不具合があった。
+        // 「最後の編集から一定時間経過後に 1 回だけ実行」する方式に変更し、最終値を必ず反映する。
+        private const int ReExecuteTrailingMs = 150;
+        private DateTime _lastReExecuteRequest = DateTime.MinValue;
+        private bool _reExecuteScheduled;
+        private SequenceStepWrapper? _reExecuteTarget;
 
         /// <summary>
-        /// セル編集確定時に現在ステップを再実行する（コードビハインドから呼び出し用）
+        /// セル編集確定・カラーピッカー確定時に現在ステップを再実行する（コードビハインドから呼び出し用）。
         /// </summary>
         /// <remarks>
-        /// 2026-05-30 修正: デバウンス追加。CellEditEnding と OnSelectedStepChanged が
-        /// 同一フレームで連続発火した場合に二重実行を防止する。
+        /// NO.37 修正: トレーリングデバウンス。連続編集（R/G/B を続けて変更等）が落ち着いた後、
+        /// 対象行が選択されたままであれば最終値で 1 回だけ実行する。行を切り替えた場合は
+        /// <see cref="OnSelectedStepChanged"/> 側が新しい行を実行するため、本トレーリングは何もしない。
         /// </remarks>
         public void ReExecuteCurrentStep()
         {
@@ -2921,12 +2914,39 @@ namespace Lib.Ui.Screens.ViewModels
             if (SelectedStep == null) return;
             if (_lighting == null || !_lighting.IsConnected) return;
 
-            // 2026-05-30 修正: 前回実行から 100ms 以内なら無視
-            var now = DateTime.UtcNow;
-            if ((now - _lastExecuteTime).TotalMilliseconds < ExecuteDebounceMs) return;
-            _lastExecuteTime = now;
+            _reExecuteTarget = SelectedStep;
+            _lastReExecuteRequest = DateTime.UtcNow;
+            if (_reExecuteScheduled) return; // 既にトレーリング実行が予約済み
+            _reExecuteScheduled = true;
+            _ = RunTrailingReExecuteAsync();
+        }
 
-            _ = ExecuteStepWithoutAdvanceAsync();
+        /// <summary>
+        /// NO.37: 最後の編集要求から <see cref="ReExecuteTrailingMs"/> 待ってから、対象行を 1 回だけ実行する。
+        /// </summary>
+        private async Task RunTrailingReExecuteAsync()
+        {
+            try
+            {
+                // 連続編集が続く間は待ち続ける（最後の要求から一定時間経過するまで）
+                while (true)
+                {
+                    var remaining = ReExecuteTrailingMs - (DateTime.UtcNow - _lastReExecuteRequest).TotalMilliseconds;
+                    if (remaining <= 0) break;
+                    await Task.Delay((int)Math.Ceiling(remaining));
+                }
+
+                if (_suppressAutoExecute || IsProgressLocked) return;
+                if (_lighting == null || !_lighting.IsConnected) return;
+                // 対象行が選択されたままの時のみ実行（行を切り替えていれば OnSelectedStepChanged が実行済み）
+                if (SelectedStep == null || !ReferenceEquals(SelectedStep, _reExecuteTarget)) return;
+
+                await ExecuteStepWithoutAdvanceAsync();
+            }
+            finally
+            {
+                _reExecuteScheduled = false;
+            }
         }
 
         /// <summary>
@@ -3358,12 +3378,7 @@ namespace Lib.Ui.Screens.ViewModels
                         _lastExecutedColor = (0, 0, 0);
                         break;
 
-                    case "Color2":
-                        // Color2 はサブシーケンスでは交互点滅ループになるため、
-                        // 1色目のみ送信して次ステップに進む（簡易実装）
-                        await _lighting.SetColorAsync(target, color, ct);
-                        _lastExecutedColor = (step.ColorR, step.ColorG, step.ColorB);
-                        break;
+                    // NO.35: Color2 廃止。サブシーケンスでも実行ロジックを削除（該当caseなしで無害）。
 
                     case "Effect":
                         if (string.IsNullOrEmpty(step.EffectType)) break;
@@ -3407,6 +3422,10 @@ namespace Lib.Ui.Screens.ViewModels
 
                     case "RainbowStop":
                         await _lighting.StopRainbowAsync(ct);
+                        break;
+
+                    case "RainbowPause":
+                        await _lighting.PauseRainbowAsync(ct);
                         break;
 
                     case "SignalOff":
@@ -4031,6 +4050,8 @@ namespace Lib.Ui.Screens.ViewModels
             new("Breath",      "Breath",       "#00BCD4"),
             new("SevenColor",  "7 Color",      "#E91E63"),
             new("Off",         "消灯",         "#9E9E9E"),
+            // NO.38: 信号Off を動作プリセットに追加（選択行Cmd=SignalOffに上書き）
+            new("SignalOff",   "信号Off",      "#FF9800"),
         };
 
         #endregion

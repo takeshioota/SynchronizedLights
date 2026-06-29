@@ -31,12 +31,13 @@
 
         <x:Array x:Key="CommandTypeOptions" Type="sys:String">
             <sys:String>Color</sys:String>
-            <sys:String>Color2</sys:String>
+            <!-- NO.35: Color2（2色交互点灯）はボタン・コマンドとも廃止 -->
             <sys:String>Off</sys:String>
             <sys:String>Effect</sys:String>
             <sys:String>EffectStop</sys:String>
             <sys:String>Rainbow</sys:String>
             <sys:String>RainbowStop</sys:String>
+            <sys:String>RainbowPause</sys:String>
             <sys:String>SignalOff</sys:String>
             <sys:String>Preset</sys:String>
             <sys:String>InternalProgram</sys:String>
@@ -142,6 +143,8 @@
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{StaticResource ButtonSelectedBorderBrush}"/>
+                    <!-- NO.41: 選択行(黄背景)の文字を黒系に統一し視認性を確保（白文字対策） -->
+                    <Setter Property="Foreground" Value="#111111"/>
                 </Trigger>
                 <!-- 連続再生中の現在ステップを強調表示（緑色 + 太枠） -->
                 <DataTrigger Binding="{Binding IsCurrentlyPlaying}" Value="True">
@@ -432,28 +435,8 @@
                     </Button.Style>
                 </Button>
 
-                <!-- 信号Off ボタン（セルフモード用） -->
-                <Button Grid.Column="2"
-                        Command="{Binding ToggleSignalOffCommand}"
-                        FontWeight="Bold"
-                        Height="28" MinWidth="100"
-                        VerticalAlignment="Center"
-                        Margin="12,0,0,0"
-                        ToolTip="信号送出を完全停止し、端末をセルフモードに開放します（MC中・休憩中用）。再押下で制御モードに復帰。">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GrandMaButtonStyle}">
-                            <Setter Property="Content" Value="信号Off"/>
-                            <Setter Property="Background" Value="#555555"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsSignalOffActive}" Value="True">
-                                    <Setter Property="Content" Value="信号On"/>
-                                    <Setter Property="Background" Value="#FF9800"/>
-                                    <Setter Property="Foreground" Value="Black"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <!-- NO.38: 上部の信号Off/Onトグルは削除。信号Offはコマンドパネル「動作:」内の
+                     信号Offボタン（選択行Cmd=SignalOff上書き）および Cmd ドロップダウンから使用する。 -->
 
                 <Button Grid.Column="3"
                         Content="■ 停止"
