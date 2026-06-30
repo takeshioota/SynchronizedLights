@@ -236,9 +236,8 @@
                                             ToolTip="{Binding HexColor}">
                                         <Border.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="削除"
-                                                          Command="{Binding DataContext.RemoveRainbowColorCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                          CommandParameter="{Binding}"/>
+                                                <MenuItem Header="色を編集..." Click="RainbowColorEdit_Click"/>
+                                                <MenuItem Header="削除" Click="RainbowColorDelete_Click"/>
                                             </ContextMenu>
                                         </Border.ContextMenu>
                                     </Border>
