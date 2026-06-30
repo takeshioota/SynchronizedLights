@@ -524,6 +524,13 @@ namespace Lib.Ui.Screens.ViewModels
 
         partial void OnSelectedSequenceChanged(TimeBasedSequence? oldValue, TimeBasedSequence? newValue)
         {
+            // FAB#1 修正: シーケンス切替前に走行中の Chase/OL ループを必ず停止する。
+            // EditingSteps を作り直すと旧 wrapper が孤児化し、停止しないとループが固着→
+            // 選択変更が無視され Chase/OL が再設定不能（PC再起動が必要）になる。
+            StopLoopExecution();
+            // 旧シーケンスの選択キャッシュ（孤児 wrapper）を破棄。再選択時に新 wrapper で更新される。
+            _currentSelectedSteps = new List<SequenceStepWrapper>();
+
             // v3.9: 切替前のシーケンスに未保存の変更があれば自動保存
             if (oldValue != null && _editingSequence != null && HasUnsavedEdits())
             {
@@ -669,6 +676,10 @@ namespace Lib.Ui.Screens.ViewModels
             // 重複なし → エラー表示をクリア
             IsNameDuplicate = false;
             NameErrorMessage = "";
+
+            // FAB#1 修正: 保存（ReloadSequences→EditingSteps 再構築）の前に走行中ループを停止する。
+            // 停止しないと旧 wrapper が孤児化してループが固着し、Chase/OL が再設定不能になる。
+            StopLoopExecution();
 
             _editingSequence.Name = EditingName.Trim();
             _editingSequence.Description = EditingDescription ?? "";
@@ -1583,6 +1594,37 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
             RainbowColors.Remove(item);
+        }
+
+        /// <summary>
+        /// レインボーカラーを変更する（右クリック → コンテキストメニュー「色を編集...」から呼ばれる）。
+        /// 概要：DlgColorPicker を起動し、確定色を当該 RgbColorItem に反映する（スウォッチが即更新）。
+        ///       レインボーパレットは色テーブル送信(SendColorTable)/Rainbow コマンドで使用される。
+        ///       カスタム色と異なり実機へのライブ送信・JSON 永続化は行わない。
+        /// </summary>
+        [RelayCommand]
+        private void EditRainbowColor(RgbColorItem? item)
+        {
+            if (item == null) return;
+
+            var dlg = new DlgColorPicker { Owner = System.Windows.Application.Current?.MainWindow };
+            dlg.SetInitialColor(item.R, item.G, item.B);
+
+            // プレビュー：スウォッチをリアルタイム更新（HexColor 通知で反映）
+            dlg.OnColorChanged = (r, g, b) =>
+            {
+                item.R = r;
+                item.G = g;
+                item.B = b;
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                item.R = dlg.SelectedR;
+                item.G = dlg.SelectedG;
+                item.B = dlg.SelectedB;
+                StatusMessage = $"レインボーカラーを更新（{item.R}, {item.G}, {item.B}）";
+            }
         }
 
         /// <summary>3.15 色テーブルのみ送信する（0xA9 0x02）</summary>
@@ -3064,9 +3106,15 @@ namespace Lib.Ui.Screens.ViewModels
         #region v3.9: Chase（往復）/ Overlap（OL）
 
         /// <summary>
+        /// Chase/OL で Time・BPM が未設定（Time=0 かつ BPM が既定 120 または 0）のときに用いる
+        /// 1 ステップあたりの既定周期（ms）。これにより未設定でも一定ペースで自動サイクルする。
+        /// </summary>
+        private const int DefaultLoopStepMs = 1000;
+
+        /// <summary>
         /// v3.9: Chase（往復）実行を開始する
         /// 概要：DataGrid で選択された連続行(2-7行)で [Chase] ボタン押下 → 往復サイクル実行。
-        ///       各行の点灯時間は Time 列(秒)。0秒の場合は100ms。
+        ///       各行の点灯時間は Time 列(秒)。Time/BPM 未設定時は既定 1 秒/ステップで自動サイクル。
         ///       BPM > 0 の場合は BPM から待機時間を算出。
         ///       Trig 列に "Chase" を表示。
         ///       ↑↓カーソルや別行選択で中断、その行を実行して点灯継続。
@@ -3085,7 +3133,7 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>
         /// v3.9: Overlap（OL）実行を開始する
         /// 概要：DataGrid で選択された連続行(2-7行)で [OL] ボタン押下 → 色クロスフェードのループ。
-        ///       フェード時間は次の行の Time 列(秒)。0秒の場合は即座にOL。
+        ///       フェード時間は次の行の Time 列(秒)。Time/BPM 未設定時は既定 1 秒/ステップで自動サイクル。
         ///       BPM > 0 の場合は BPM から時間を算出。
         ///       Trig 列に "OL" を表示。
         ///       ↓カーソルで中断、最終行の色で点灯継続。
@@ -3117,10 +3165,18 @@ namespace Lib.Ui.Screens.ViewModels
                 .Where(i => i >= 0)
                 .OrderBy(i => i)
                 .ToList();
-            if (indices.Count != selectedSteps.Count) return;
+            if (indices.Count != selectedSteps.Count)
+            {
+                StatusMessage = "Chase: 連続する2〜7行を選択し直してから実行してください。";
+                return;
+            }
             for (int i = 1; i < indices.Count; i++)
             {
-                if (indices[i] != indices[i - 1] + 1) return;
+                if (indices[i] != indices[i - 1] + 1)
+                {
+                    StatusMessage = "Chase: 連続した行を選択してください。";
+                    return;
+                }
             }
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
@@ -3159,7 +3215,7 @@ namespace Lib.Ui.Screens.ViewModels
                         if (token.IsCancellationRequested) break;
 
                         // 待機時間: BPM > 0 なら BPM 優先、そうでなければ Time 列
-                        // NO.25: TimeMs=0 + BPM未設定 → キャンセルされるまで無限待機（手動送り）
+                        // 未設定（Time=0 かつ BPM 既定120/0）のときは既定周期で自動サイクル（1色目で固着しない）
                         int waitMs;
                         if (step.Bpm > 0 && step.Bpm != 120)
                         {
@@ -3167,23 +3223,14 @@ namespace Lib.Ui.Screens.ViewModels
                         }
                         else
                         {
-                            waitMs = step.TimeMs > 0 ? step.TimeMs : -1;
+                            waitMs = step.TimeMs > 0 ? step.TimeMs : DefaultLoopStepMs;
                         }
 
-                        if (waitMs < 0)
-                        {
-                            // 無限待機 — キャンセル（Esc/停止）でのみ抜ける
-                            try { await Task.Delay(Timeout.Infinite, token); }
-                            catch (OperationCanceledException) { break; }
-                        }
-                        else
-                        {
-                            // API レイテンシを差し引いて正確なテンポを維持
-                            var elapsed = (int)sw.ElapsedMilliseconds;
-                            var adjustedWait = Math.Max(1, waitMs - elapsed);
-                            try { await Task.Delay(adjustedWait, token); }
-                            catch (OperationCanceledException) { break; }
-                        }
+                        // API レイテンシを差し引いて正確なテンポを維持（waitMs は常に正）
+                        var elapsed = (int)sw.ElapsedMilliseconds;
+                        var adjustedWait = Math.Max(1, waitMs - elapsed);
+                        try { await Task.Delay(adjustedWait, token); }
+                        catch (OperationCanceledException) { break; }
                     }
                 }
             }
@@ -3211,10 +3258,18 @@ namespace Lib.Ui.Screens.ViewModels
                 .Where(i => i >= 0)
                 .OrderBy(i => i)
                 .ToList();
-            if (indices.Count != selectedSteps.Count) return;
+            if (indices.Count != selectedSteps.Count)
+            {
+                StatusMessage = "OL: 連続する2〜7行を選択し直してから実行してください。";
+                return;
+            }
             for (int i = 1; i < indices.Count; i++)
             {
-                if (indices[i] != indices[i - 1] + 1) return;
+                if (indices[i] != indices[i - 1] + 1)
+                {
+                    StatusMessage = "OL: 連続した行を選択してください。";
+                    return;
+                }
             }
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
@@ -3241,20 +3296,21 @@ namespace Lib.Ui.Screens.ViewModels
                         var current = steps[i];
                         var next = steps[(i + 1) % steps.Count];
 
-                        // フェード時間: 次の行の Time、0なら即座
+                        // フェード時間: 次の行の BPM/Time。
+                        // 未設定（Time=0 かつ BPM 既定120/0）は既定周期で自動サイクル（0 だと無遅延ループ＝暴走するため）
                         int fadeMs;
                         if (next.Bpm > 0 && next.Bpm != 120)
                         {
-                            fadeMs = Math.Max(0, 60000 / next.Bpm);
+                            fadeMs = Math.Max(20, 60000 / next.Bpm);
                         }
                         else
                         {
-                            fadeMs = next.TimeMs;
+                            fadeMs = next.TimeMs > 0 ? next.TimeMs : DefaultLoopStepMs;
                         }
 
-                        // フェードステップ数
-                        int fadeStepCount = fadeMs > 0 ? Math.Max(1, fadeMs / 20) : 1;
-                        int stepInterval = fadeMs > 0 ? fadeMs / fadeStepCount : 0;
+                        // フェードステップ数。stepInterval は常に >=1 ＝毎フレーム必ず throttle（暴走防止）
+                        int fadeStepCount = Math.Max(1, fadeMs / 20);
+                        int stepInterval = Math.Max(1, fadeMs / fadeStepCount);
 
                         // 現在色→次色へ補間（API レイテンシ補正付き）
                         for (int s = 0; s <= fadeStepCount; s++)
@@ -3269,7 +3325,7 @@ namespace Lib.Ui.Screens.ViewModels
                             var sw = Stopwatch.StartNew();
                             await _lighting.SetColorAsync(Target.All, new Rgb(r, g, b));
 
-                            if (stepInterval > 0 && s < fadeStepCount)
+                            if (s < fadeStepCount)
                             {
                                 var elapsed = (int)sw.ElapsedMilliseconds;
                                 var adjustedDelay = Math.Max(1, stepInterval - elapsed);
@@ -4247,12 +4303,15 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HexColor))]
         private byte r;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HexColor))]
         private byte g;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HexColor))]
         private byte b;
 
         /// <summary>WPF バインド用: "#RRGGBB" 形式の文字列</summary>
