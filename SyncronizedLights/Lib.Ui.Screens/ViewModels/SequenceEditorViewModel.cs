@@ -524,6 +524,10 @@ namespace Lib.Ui.Screens.ViewModels
 
         partial void OnSelectedSequenceChanged(TimeBasedSequence? oldValue, TimeBasedSequence? newValue)
         {
+            // 別シーケンス選択も Chase/OL の離脱手段。切替前にループ中だったかを記録し、
+            // 離脱時に読み込んだ先頭行が off なら停止ボタン相当にする（下の実行分岐で使用）。
+            bool wasLooping = IsLoopRunning;
+
             // FAB#1 修正: シーケンス切替前に走行中の Chase/OL ループを必ず停止する。
             // EditingSteps を作り直すと旧 wrapper が孤児化し、停止しないとループが固着→
             // 選択変更が無視され Chase/OL が再設定不能（PC再起動が必要）になる。
@@ -594,7 +598,15 @@ namespace Lib.Ui.Screens.ViewModels
             // 接続チェックは ExecuteStepWithoutAdvanceAsync 内部で行うため、ここでは常に呼ぶ
             if (SelectedStep != null)
             {
-                _ = ExecuteStepWithoutAdvanceAsync();
+                // Chase/OL からの離脱で切り替えた先頭が off（消灯 / 信号Off）なら停止ボタン相当。
+                if (wasLooping && IsOffStep(SelectedStep))
+                {
+                    _ = StopExecutionAsync();
+                }
+                else
+                {
+                    _ = ExecuteStepWithoutAdvanceAsync();
+                }
             }
         }
 
@@ -610,6 +622,22 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (_suppressAutoExecute) return;
             if (value == null) return;
+
+            // マウスクリックによる Chase/OL 離脱要求の確定処理。
+            // このフラグは実ユーザー入力（行クリック）でのみ RequestLoopExit() で立つ。
+            // ループ自身のプログラム的な選択変更（＝抑制ウィンドウ外に漏れるエコー）では立たないため、
+            // エコーで誤ってループ停止・off判定することはない。
+            if (_loopExitRequested)
+            {
+                _loopExitRequested = false;
+                // 離脱先が off（消灯 / 信号Off）なら、通常実行せず停止ボタン相当の全停止にする。
+                if (IsOffStep(value))
+                {
+                    _ = StopExecutionAsync();
+                    return;
+                }
+                // off でなければ下の通常実行へフォールスルー（ループは RequestLoopExit で停止済み）。
+            }
 
             // サブシーケンス実行中なら停止（最終色は維持）
             StopSubSequence();
@@ -1489,6 +1517,85 @@ namespace Lib.Ui.Screens.ViewModels
             new(128, 0, 128),   // 紫
         };
 
+        /// <summary>
+        /// UserState からコマンドパネルの Rainbow 設定（色/モード/速度等）を復元する（起動時に呼ぶ）。
+        /// 色は 2 色以上保存されている場合のみ反映し、未保存時は既定7色を維持する。
+        /// </summary>
+        public void LoadRainbowSettings(UserState? state)
+        {
+            if (state == null) return;
+            if (state.RainbowColors != null && state.RainbowColors.Count >= 2)
+            {
+                RainbowColors = new ObservableCollection<RgbColorItem>(
+                    state.RainbowColors.Select(c => new RgbColorItem(c.R, c.G, c.B)));
+            }
+            RainbowMode = (RainbowMode)Math.Clamp(state.RainbowMode, 0, 5);
+            if (state.RainbowCycleDurationMs > 0) RainbowCycleDurationMs = state.RainbowCycleDurationMs;
+            if (state.RainbowBlinkPeriodMs > 0) RainbowBlinkPeriodMs = state.RainbowBlinkPeriodMs;
+            if (state.RainbowDutyRatio >= 1 && state.RainbowDutyRatio <= 9) RainbowDutyRatio = state.RainbowDutyRatio;
+            if (state.RainbowFadeInMs > 0) RainbowFadeInMs = state.RainbowFadeInMs;
+            if (state.RainbowFadeOutMs > 0) RainbowFadeOutMs = state.RainbowFadeOutMs;
+        }
+
+        /// <summary>
+        /// 現在のコマンドパネルの Rainbow 設定を UserState へ書き出す（終了時に呼ぶ）。
+        /// </summary>
+        public void SaveRainbowSettings(UserState? state)
+        {
+            if (state == null) return;
+            state.RainbowMode = (int)RainbowMode;
+            state.RainbowColors = RainbowColors.Select(c => new Rgb(c.R, c.G, c.B)).ToList();
+            state.RainbowCycleDurationMs = RainbowCycleDurationMs;
+            state.RainbowBlinkPeriodMs = RainbowBlinkPeriodMs;
+            state.RainbowDutyRatio = RainbowDutyRatio;
+            state.RainbowFadeInMs = RainbowFadeInMs;
+            state.RainbowFadeOutMs = RainbowFadeOutMs;
+        }
+
+        /// <summary>
+        /// 現在のコマンドパネルの Rainbow 設定（モード/色/速度/点滅/フェード）を、
+        /// 選択中のシーケンス行に取り込む。行ごとに保存・再現され、実行時はその行の設定で Rainbow が動く。
+        /// 複数行選択時は全行へ適用。適用先が現在の選択行なら即時に再実行して見た目を確認できる。
+        /// </summary>
+        [RelayCommand]
+        private async Task ApplyRainbowToStepAsync()
+        {
+            // 対象: 複数選択があればその全行、無ければ SelectedStep 単一
+            var targets = (_currentSelectedSteps != null && _currentSelectedSteps.Count > 0)
+                ? _currentSelectedSteps.ToList()
+                : (SelectedStep != null
+                    ? new List<SequenceStepWrapper> { SelectedStep }
+                    : new List<SequenceStepWrapper>());
+            if (targets.Count == 0)
+            {
+                StatusMessage = "Rainbow を適用する行を選択してください。";
+                return;
+            }
+
+            foreach (var w in targets)
+            {
+                w.CommandType = "Rainbow";
+                w.RainbowMode = RainbowMode;
+                w.RainbowColors = new ObservableCollection<RgbColorItem>(
+                    RainbowColors.Select(c => new RgbColorItem(c.R, c.G, c.B)));
+                w.RainbowCycleDurationMs = RainbowCycleDurationMs;
+                w.RainbowBlinkPeriodMs = RainbowBlinkPeriodMs;
+                w.RainbowDutyRatio = RainbowDutyRatio;
+                w.RainbowFadeInMs = RainbowFadeInMs;
+                w.RainbowFadeOutMs = RainbowFadeOutMs;
+            }
+
+            StatusMessage = $"Rainbow 設定を {targets.Count} 行に適用しました（未保存。保存で永続化）。";
+            AppendLog("INFO", $"Rainbow 設定を {targets.Count} 行に適用（mode={RainbowMode}, {RainbowColors.Count}色, cycle={RainbowCycleDurationMs}ms）");
+
+            // 即時反映: 適用先が現在の選択行なら、新パラメータでその行を再実行する
+            if (SelectedStep != null && targets.Contains(SelectedStep)
+                && _lighting != null && _lighting.IsConnected && !IsEmergencyActive)
+            {
+                await ExecuteStepWithoutAdvanceAsync();
+            }
+        }
+
         /// <summary>レインボーエフェクトを開始する</summary>
         [RelayCommand]
         private async Task StartRainbow()
@@ -2200,6 +2307,11 @@ namespace Lib.Ui.Screens.ViewModels
         private void PreviousStep()
         {
             if (EditingSteps.Count == 0) return;
+
+            // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
+            bool wasLooping = IsLoopRunning;
+            if (wasLooping) StopLoopExecution();
+
             if (CurrentStepIndex <= 0)
             {
                 StatusMessage = "最初のステップです。";
@@ -2207,6 +2319,8 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             var newIndex = CurrentStepIndex - 1;
+            if (MoveSelectionForLoopExit(wasLooping, newIndex)) return;
+
             CurrentStepIndex = newIndex;
             SelectedStep = EditingSteps[newIndex];
             StatusMessage = $"前ステップ：{newIndex + 1} / {EditingSteps.Count}";
@@ -2217,6 +2331,11 @@ namespace Lib.Ui.Screens.ViewModels
         private void NextStep()
         {
             if (EditingSteps.Count == 0) return;
+
+            // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
+            bool wasLooping = IsLoopRunning;
+            if (wasLooping) StopLoopExecution();
+
             if (CurrentStepIndex >= EditingSteps.Count - 1)
             {
                 StatusMessage = "最後のステップです。";
@@ -2224,9 +2343,34 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             var newIndex = CurrentStepIndex + 1;
+            if (MoveSelectionForLoopExit(wasLooping, newIndex)) return;
+
             CurrentStepIndex = newIndex;
             SelectedStep = EditingSteps[newIndex];
             StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
+        }
+
+        /// <summary>
+        /// Chase/OL からの矢印キー離脱時、移動先が off（消灯 / 信号Off）なら停止ボタン相当にする。
+        /// off停止を実行した場合は true を返す（呼び出し側は以降の通常移動をスキップする）。
+        /// </summary>
+        private bool MoveSelectionForLoopExit(bool wasLooping, int newIndex)
+        {
+            if (!wasLooping) return false;
+            var target = EditingSteps[newIndex];
+            if (!IsOffStep(target)) return false;
+
+            // 選択は移すが自動実行は抑制し、停止ボタン相当の全停止を行う。
+            _suppressAutoExecute = true;
+            try
+            {
+                CurrentStepIndex = newIndex;
+                SelectedStep = target;
+            }
+            finally { _suppressAutoExecute = false; }
+
+            _ = StopExecutionAsync();
+            return true;
         }
 
         /// <summary>
@@ -2843,16 +2987,35 @@ namespace Lib.Ui.Screens.ViewModels
 
                     case "Rainbow":
                     {
-                        var rbMode = step.RainbowMode ?? RainbowMode.Solid;
-                        var colors = step.RainbowColors ?? DefaultRainbowColors()
-                            .Select(c => new Rgb(c.R, c.G, c.B)).ToList();
-                        var cycle = step.RainbowCycleDurationMs ?? 1000;
-                        await _lighting.StartRainbowAsync(
-                            rbMode, colors, cycle,
-                            step.RainbowBlinkPeriodMs,
-                            step.RainbowDutyRatio,
-                            step.RainbowFadeInMs,
-                            step.RainbowFadeOutMs);
+                        // 行に個別の色設定があればそれを優先（「この行に適用」で取り込んだ再現可能な設定）。
+                        // 無ければ（プルダウンで Rainbow にしただけの行）コマンドパネルの現在設定を使う
+                        //   → プルダウンでセットするだけで動き、パネルの速度/モード変更も反映される。
+                        RainbowMode rbMode;
+                        List<Rgb> colors;
+                        int cycle;
+                        int? blink, fadeIn, fadeOut;
+                        byte? duty;
+                        if (step.RainbowColors != null && step.RainbowColors.Count >= 2)
+                        {
+                            rbMode = step.RainbowMode ?? RainbowMode.Solid;
+                            colors = step.RainbowColors;
+                            cycle = step.RainbowCycleDurationMs ?? 1000;
+                            blink = step.RainbowBlinkPeriodMs;
+                            duty = step.RainbowDutyRatio;
+                            fadeIn = step.RainbowFadeInMs;
+                            fadeOut = step.RainbowFadeOutMs;
+                        }
+                        else
+                        {
+                            rbMode = RainbowMode;
+                            colors = RainbowColors.Select(c => new Rgb(c.R, c.G, c.B)).ToList();
+                            cycle = RainbowCycleDurationMs;
+                            blink = RainbowMode == RainbowMode.Blink ? RainbowBlinkPeriodMs : (int?)null;
+                            duty = RainbowMode == RainbowMode.Blink ? RainbowDutyRatio : (byte?)null;
+                            fadeIn = RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeIn ? RainbowFadeInMs : (int?)null;
+                            fadeOut = RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeOut ? RainbowFadeOutMs : (int?)null;
+                        }
+                        await _lighting.StartRainbowAsync(rbMode, colors, cycle, blink, duty, fadeIn, fadeOut);
                         AppendLog("TX", $"Rainbow {rbMode} ({colors.Count}色, cycle={cycle}ms)");
                         StatusMessage = $"Rainbow {rbMode} 開始";
                         break;
@@ -3002,7 +3165,7 @@ namespace Lib.Ui.Screens.ViewModels
             // 前のループをキャンセル
             StopLoopExecution();
 
-            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 7) return;
+            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
             if (_lighting == null || !_lighting.IsConnected) return;
             if (IsEmergencyActive) return;
 
@@ -3091,8 +3254,9 @@ namespace Lib.Ui.Screens.ViewModels
             _loopCts?.Dispose();
             _loopCts = null;
 
-            // Trig 表示をクリアし、UI に状態変更を通知
-            foreach (var s in EditingSteps) s.Trig = "";
+            // Trig（Chase/OL 指定）は保存対象なので停止では消さない（開き直しで復元するため）。
+            // 別グループで Chase/OL を開始したときに StartChase/StartOverlap 側で付け替える。
+            // ここでは実行状態の変化のみ UI へ通知する。
             OnPropertyChanged(nameof(IsLoopRunning));
         }
 
@@ -3100,6 +3264,32 @@ namespace Lib.Ui.Screens.ViewModels
         /// ループ実行中かどうか（SelectionChanged 抑制にも使用）
         /// </summary>
         public bool IsLoopRunning => _loopCts != null && !_loopCts.IsCancellationRequested;
+
+        /// <summary>
+        /// 指定行が「off」動作（消灯 / 信号Off）かどうか。
+        /// Chase/OL からの離脱先が off のとき、停止ボタン相当の全停止に切り替える判定に使う。
+        /// </summary>
+        private static bool IsOffStep(SequenceStepWrapper? w)
+            => w != null && (w.CommandType == "Off" || w.CommandType == "SignalOff");
+
+        /// <summary>
+        /// マウスクリックで Chase/OL を抜ける際に立てる一回限りのフラグ。
+        /// 直後に確定する <see cref="SelectedStep"/> の変更（OnSelectedStepChanged）で消費し、
+        /// 離脱先が off なら停止ボタン相当にするために使う。
+        /// </summary>
+        private bool _loopExitRequested;
+
+        /// <summary>
+        /// ユーザー入力（行クリック）による Chase/OL 離脱要求。ループを停止し、
+        /// 直後の選択確定で off 判定を行うためのフラグを立てる。
+        /// 実ユーザー入力のときだけ呼ばれるため、ループのプログラム的選択エコーで誤停止しない。
+        /// </summary>
+        public void RequestLoopExit()
+        {
+            if (!IsLoopRunning) return;
+            _loopExitRequested = true;
+            StopLoopExecution();
+        }
 
         #endregion
 
@@ -3122,12 +3312,13 @@ namespace Lib.Ui.Screens.ViewModels
         [RelayCommand]
         private async Task StartChaseAsync()
         {
-            if (_currentSelectedSteps.Count < 2 || _currentSelectedSteps.Count > 7)
+            var group = ResolveLoopGroup("Chase");
+            if (group == null)
             {
-                StatusMessage = "Chase: 2〜7行の連続行を選択してからボタンを押してください。";
+                StatusMessage = "Chase: 2〜15行の連続行を選択、または Chase マーカー行を選択してください。";
                 return;
             }
-            await StartChaseExecutionAsync(_currentSelectedSteps);
+            await StartChaseExecutionAsync(group);
         }
 
         /// <summary>
@@ -3141,12 +3332,77 @@ namespace Lib.Ui.Screens.ViewModels
         [RelayCommand]
         private async Task StartOverlapAsync()
         {
-            if (_currentSelectedSteps.Count < 2 || _currentSelectedSteps.Count > 7)
+            var group = ResolveLoopGroup("OL");
+            if (group == null)
             {
-                StatusMessage = "OL: 2〜7行の連続行を選択してからボタンを押してください。";
+                StatusMessage = "OL: 2〜15行の連続行を選択、または OL マーカー行を選択してください。";
                 return;
             }
-            await StartOverlapExecutionAsync(_currentSelectedSteps);
+            await StartOverlapExecutionAsync(group);
+        }
+
+        /// <summary>
+        /// Chase/OL ボタン押下時に、実行対象の連続行グループを解決する。
+        /// ① 連続 2〜7 行が選択されていればそれ（新規グループ定義／再定義）を優先。
+        /// ② そうでなければ（1行だけ選択など）、選択行を含む同種マーカー(mode)の連続ブロックを対象にする。
+        ///    → 保存済み Chase/OL 行を1行選んで押すだけで、そのグループ全体を再実行できる。
+        /// どちらも満たさなければ null。
+        /// </summary>
+        private IList<SequenceStepWrapper>? ResolveLoopGroup(string mode)
+        {
+            // ① 明示的な連続 2〜15 行選択を優先
+            var sel = _currentSelectedSteps;
+            if (sel != null && sel.Count >= 2 && sel.Count <= 15)
+            {
+                var idxs = sel.Select(s => EditingSteps.IndexOf(s))
+                              .Where(i => i >= 0).OrderBy(i => i).ToList();
+                if (idxs.Count == sel.Count && IsContiguousIndices(idxs))
+                    return idxs.Select(i => EditingSteps[i]).ToList();
+            }
+
+            // ② 選択行（単一含む）が mode マーカーのブロック内なら、その連続ブロックを対象にする
+            var anchor = (sel != null && sel.Count > 0) ? sel[0] : SelectedStep;
+            if (anchor != null)
+            {
+                int idx = EditingSteps.IndexOf(anchor);
+                if (idx >= 0 && EditingSteps[idx].Trig == mode)
+                {
+                    int start = idx, end = idx;
+                    while (start - 1 >= 0 && EditingSteps[start - 1].Trig == mode) start--;
+                    while (end + 1 < EditingSteps.Count && EditingSteps[end + 1].Trig == mode) end++;
+                    int count = end - start + 1;
+                    if (count >= 2 && count <= 15)
+                    {
+                        var group = new List<SequenceStepWrapper>();
+                        for (int i = start; i <= end; i++) group.Add(EditingSteps[i]);
+                        return group;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>インデックス列が連続（+1 ずつ）かどうか。</summary>
+        private static bool IsContiguousIndices(List<int> idxs)
+        {
+            for (int i = 1; i < idxs.Count; i++)
+                if (idxs[i] != idxs[i - 1] + 1) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Chase/OL の指定（Trig マーカー）を解除する。選択行があればその行のみ、無ければ全行。
+        /// 複数個所に設定した指定を個別に消したいときに使う。実行中ループがあれば停止する。
+        /// </summary>
+        [RelayCommand]
+        private void ClearLoopMark()
+        {
+            StopLoopExecution();
+            var targets = (_currentSelectedSteps != null && _currentSelectedSteps.Count > 0)
+                ? _currentSelectedSteps.ToList()
+                : EditingSteps.ToList();
+            foreach (var w in targets) w.Trig = "";
+            StatusMessage = $"Chase/OL 指定を解除しました（{targets.Count} 行）。";
         }
 
         /// <summary>
@@ -3156,7 +3412,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             StopLoopExecution();
 
-            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 7) return;
+            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
             if (_lighting == null || !_lighting.IsConnected) return;
             if (IsEmergencyActive) return;
 
@@ -3167,7 +3423,7 @@ namespace Lib.Ui.Screens.ViewModels
                 .ToList();
             if (indices.Count != selectedSteps.Count)
             {
-                StatusMessage = "Chase: 連続する2〜7行を選択し直してから実行してください。";
+                StatusMessage = "Chase: 連続する2〜15行を選択し直してから実行してください。";
                 return;
             }
             for (int i = 1; i < indices.Count; i++)
@@ -3181,8 +3437,8 @@ namespace Lib.Ui.Screens.ViewModels
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
 
-            // Trig 列にマーク
-            foreach (var s in EditingSteps) s.Trig = "";
+            // Trig 列にマーク（複数個所の Chase/OL を共存させるため、他グループの指定はクリアしない。
+            // 対象行のみ上書きする。指定の全消去は「解除」ボタンで行う）
             foreach (var s in steps) s.Trig = "Chase";
 
             _loopCts = new CancellationTokenSource();
@@ -3237,7 +3493,7 @@ namespace Lib.Ui.Screens.ViewModels
             catch (OperationCanceledException) { }
             catch (Exception ex) { AppendLog("ERR", $"Chase エラー: {ex.Message}"); }
 
-            foreach (var s in steps) s.Trig = "";
+            // Trig（Chase 指定）は保存対象なのでループ終了時も残す。
             StatusMessage = "Chase 停止";
             AppendLog("INFO", "Chase 停止");
         }
@@ -3249,7 +3505,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             StopLoopExecution();
 
-            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 7) return;
+            if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
             if (_lighting == null || !_lighting.IsConnected) return;
             if (IsEmergencyActive) return;
 
@@ -3260,7 +3516,7 @@ namespace Lib.Ui.Screens.ViewModels
                 .ToList();
             if (indices.Count != selectedSteps.Count)
             {
-                StatusMessage = "OL: 連続する2〜7行を選択し直してから実行してください。";
+                StatusMessage = "OL: 連続する2〜15行を選択し直してから実行してください。";
                 return;
             }
             for (int i = 1; i < indices.Count; i++)
@@ -3274,8 +3530,7 @@ namespace Lib.Ui.Screens.ViewModels
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
 
-            // Trig 列にマーク
-            foreach (var s in EditingSteps) s.Trig = "";
+            // Trig 列にマーク（他グループの指定はクリアせず対象行のみ上書き＝複数個所の共存を許可）
             foreach (var s in steps) s.Trig = "OL";
 
             _loopCts = new CancellationTokenSource();
@@ -3348,7 +3603,7 @@ namespace Lib.Ui.Screens.ViewModels
             catch (OperationCanceledException) { }
             catch (Exception ex) { AppendLog("ERR", $"Overlap エラー: {ex.Message}"); }
 
-            foreach (var s in steps) s.Trig = "";
+            // Trig（OL 指定）は保存対象なのでループ終了時も残す。
             StatusMessage = "Overlap 停止";
             AppendLog("INFO", "Overlap 停止");
         }
@@ -4080,9 +4335,28 @@ namespace Lib.Ui.Screens.ViewModels
                 if (a.RetransmitCount != b.RetransmitCount) return true;
                 if ((a.Comment ?? "") != (b.Comment ?? "")) return true;
                 if ((a.Note ?? "") != (b.Note ?? "")) return true;
+                if ((a.LoopTrig ?? "") != (b.Trig ?? "")) return true;
                 if (a.TransitionMs != b.TransitionMs) return true;
                 if ((a.Color2R ?? 0) != b.Color2R || (a.Color2G ?? 0) != b.Color2G || (a.Color2B ?? 0) != b.Color2B) return true;
                 if ((a.Bpm ?? 120) != b.Bpm) return true;
+
+                // Rainbow 行のみ: パラメータのみ変更（Cmd 据え置き）でも未保存と判定する。
+                // b.ToModel() で mode 別の条件付き null 化を a と同一に揃えてから比較（非Rainbow行の誤検知を防止）。
+                if (b.CommandType == "Rainbow")
+                {
+                    var bm = b.ToModel();
+                    if (a.RainbowMode != bm.RainbowMode) return true;
+                    if ((a.RainbowCycleDurationMs ?? 0) != (bm.RainbowCycleDurationMs ?? 0)) return true;
+                    if ((a.RainbowBlinkPeriodMs ?? 0) != (bm.RainbowBlinkPeriodMs ?? 0)) return true;
+                    if ((a.RainbowDutyRatio ?? 0) != (bm.RainbowDutyRatio ?? 0)) return true;
+                    if ((a.RainbowFadeInMs ?? 0) != (bm.RainbowFadeInMs ?? 0)) return true;
+                    if ((a.RainbowFadeOutMs ?? 0) != (bm.RainbowFadeOutMs ?? 0)) return true;
+                    var ac = a.RainbowColors; var bc = bm.RainbowColors;
+                    if ((ac?.Count ?? 0) != (bc?.Count ?? 0)) return true;
+                    if (ac != null && bc != null)
+                        for (int k = 0; k < ac.Count; k++)
+                            if (ac[k].R != bc[k].R || ac[k].G != bc[k].G || ac[k].B != bc[k].B) return true;
+                }
             }
             return false;
         }

@@ -127,6 +127,9 @@
                     <Button Content="OL" Command="{Binding StartOverlapCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
                             Foreground="#69F0AE" FontWeight="Bold"/>
+                    <Button Content="解除" Command="{Binding ClearLoopMarkCommand}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
+                            ToolTip="選択行（未選択なら全行）の Chase/OL 指定を解除する"/>
                     <Button Content="Undo" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"/>
 
@@ -295,6 +298,11 @@
                                 Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="120" Margin="0,0,4,4"
                                 Foreground="#FF5252" FontWeight="Bold"
                                 ToolTip="レインボーエフェクト停止"/>
+                        <Button Content="この行に適用" Command="{Binding ApplyRainbowToStepCommand}"
+                                IsEnabled="{Binding HasSelectedSequence}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="32" Width="110" Margin="0,0,4,4"
+                                Foreground="#00E5FF" FontWeight="Bold"
+                                ToolTip="現在の Rainbow 設定（色/モード/速度）を、選択中のシーケンス行に取り込む（Cmd=Rainbow）"/>
                     </WrapPanel>
                     <!-- 個別コマンドボタン（3.15-3.21） -->
                     <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
