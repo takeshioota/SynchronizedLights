@@ -510,6 +510,8 @@ namespace Lib.Ui.Screens.ViewModels
             // F1: StepNumber があればそのまま使用（なければ RenumberEditingSteps で自動採番される）
             if (src.StepNumber.HasValue) rowNumber = src.StepNumber.Value;
             isLocked = src.IsLocked;
+            // Chase/OL 指定（実行モード）の永続化を復元 → Trig 列に表示（実行はしない）
+            trig = string.IsNullOrEmpty(src.LoopTrig) ? "" : src.LoopTrig;
             subSequenceComment = src.SubSequenceComment ?? "";
             presetSequenceName = src.PresetSequenceName ?? "";
             frameNo = src.FrameNo ?? 0;
@@ -836,14 +838,17 @@ namespace Lib.Ui.Screens.ViewModels
                 // Effect 以外では連続実行フラグは意味を持たないため null 化する
                 Continuous = (CommandType == "Effect") ? Continuous : null,
                 TransitionMs = TransitionMs,
-                // Color2 コマンド時のみ 2 色目と BPM を保存
+                // Color2 コマンド時のみ 2 色目を保存
                 Color2R = (CommandType == "Color2") ? Color2R : null,
                 Color2G = (CommandType == "Color2") ? Color2G : null,
                 Color2B = (CommandType == "Color2") ? Color2B : null,
-                Bpm = (CommandType == "Color2") ? Bpm : null,
+                // BPM は Chase/OL のテンポにも使うため常時保存する（Color2 廃止後は限定保存だと 120 に戻っていた）
+                Bpm = Bpm,
                 // F1: ステップ番号を永続化
                 StepNumber = RowNumber,
                 IsLocked = IsLocked,
+                // Chase/OL 指定（実行モード）を永続化
+                LoopTrig = string.IsNullOrEmpty(Trig) ? "" : Trig,
                 SubSequenceComment = SubSequenceComment ?? "",
                 PresetSequenceName = (CommandType == "Preset") ? PresetSequenceName : "",
                 FrameNo = (CommandType == "InternalProgram") ? FrameNo : null,

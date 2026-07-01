@@ -40,6 +40,7 @@ namespace SynchronizedLights.UI
             App.MainVm = _commandVm;
 
             // NO.22: カラーピッカー確定時にシーケンス行にも色を反映
+            // NO.37: 反映後にその行を再実行し、変更した色を実機へ送信する（旧実装は反映のみで未送信だった）
             _commandVm.ColorPickerConfirmed += (r, g, b) =>
             {
                 if (_sequenceVm.SelectedStep != null)
@@ -47,13 +48,26 @@ namespace SynchronizedLights.UI
                     _sequenceVm.SelectedStep.ColorR = r;
                     _sequenceVm.SelectedStep.ColorG = g;
                     _sequenceVm.SelectedStep.ColorB = b;
+                    _sequenceVm.ReExecuteCurrentStep();
                 }
+            };
+
+            // NO.40: 選択行が変わったら DataGrid を自動スクロールして常に可視にする
+            _sequenceVm.RequestScrollToSelectedItem += () =>
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (StepDataGrid.SelectedItem != null)
+                        StepDataGrid.ScrollIntoView(StepDataGrid.SelectedItem);
+                }));
             };
 
             // UserState 復元
             if (App.LoadedUserState != null)
             {
                 _commandVm.ApplyUserState(App.LoadedUserState);
+                // Rainbow パネル設定（色/モード/速度）は SequenceEditorViewModel 側にあるため個別復元
+                _sequenceVm.LoadRainbowSettings(App.LoadedUserState);
                 System.Diagnostics.Debug.WriteLine("[IntegratedWindow] UserState applied on startup.");
             }
 
@@ -196,6 +210,8 @@ namespace SynchronizedLights.UI
             try
             {
                 var state = _commandVm.CaptureUserState();
+                // Rainbow パネル設定を書き出してから保存
+                _sequenceVm.SaveRainbowSettings(state);
                 App.UserStateService.Save(state);
                 System.Diagnostics.Debug.WriteLine("[IntegratedWindow] UserState saved on closing.");
             }
@@ -506,6 +522,37 @@ namespace SynchronizedLights.UI
                 // 単一行選択 → ループ停止
                 _sequenceVm.StopLoopExecution();
             }
+        }
+
+        /// <summary>
+        /// Chase/OL 実行中にユーザーが行をクリックしたら、その操作でループを抜ける。
+        /// PreviewMouseLeftButtonDown は実マウス入力でのみ発火し、ループのプログラム的な
+        /// 選択変更（エコー）では呼ばれないため、誤停止せず確実にユーザー操作だけを拾える。
+        /// ここでループを止め、続くクリックの選択変更（OnSelectedStepChanged）で
+        /// 移動先の off 判定＋実行が行われる。
+        /// </summary>
+        private void StepDataGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!_sequenceVm.IsLoopRunning) return;
+
+            // クリック対象がデータ行のときだけ離脱（ヘッダ・スクロールバー等は無視）
+            if (e.OriginalSource is DependencyObject src && FindAncestor<DataGridRow>(src) != null)
+            {
+                _sequenceVm.RequestLoopExit();
+                // e.Handled は立てない。クリックはそのまま継続して行選択→実行させる。
+            }
+        }
+
+        /// <summary>ビジュアルツリーを遡って指定型の祖先を探す。</summary>
+        private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T typed) return typed;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current)
+                          ?? LogicalTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
         /// <summary>

@@ -497,6 +497,7 @@
                           BeginningEdit="StepDataGrid_BeginningEdit"
                           CellEditEnding="StepDataGrid_CellEditEnding"
                           SelectionChanged="StepDataGrid_SelectionChanged"
+                          PreviewMouseLeftButtonDown="StepDataGrid_PreviewMouseLeftButtonDown"
                           Sorting="StepDataGrid_Sorting"
                           Margin="0,0,0,4">
                     <DataGrid.Columns>
