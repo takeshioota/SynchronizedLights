@@ -500,7 +500,11 @@ namespace Lib.Ui.Screens.ViewModels
         /// 送信ログにエントリを追加する
         /// </summary>
         /// <param name="type">"TX" / "RX" / "INFO" / "ERR"</param>
-        private void AppendLog(string type, string message)
+        /// <remarks>
+        /// public: 送信機初期化など他 VM（SettingViewModel 経由）のコマンドログを
+        /// IntegratedWindow が本ログへ橋渡しするために公開している。UI スレッドから呼ぶこと。
+        /// </remarks>
+        public void AppendLog(string type, string message)
         {
             LogEntries.Add(new LogEntry { Type = type, Message = message });
             while (LogEntries.Count > LogEntryLimit)
@@ -2321,8 +2325,11 @@ namespace Lib.Ui.Screens.ViewModels
             var newIndex = CurrentStepIndex - 1;
             if (MoveSelectionForLoopExit(wasLooping, newIndex)) return;
 
+            var prev = SelectedStep;                 // 移動前の行（enter-from-outside 判定用）
             CurrentStepIndex = newIndex;
             SelectedStep = EditingSteps[newIndex];
+            // 矢印でマーカー行に「外から」入ったら自動起動（離脱操作中=wasLooping は起動しない）
+            if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
             StatusMessage = $"前ステップ：{newIndex + 1} / {EditingSteps.Count}";
         }
 
@@ -2345,8 +2352,11 @@ namespace Lib.Ui.Screens.ViewModels
             var newIndex = CurrentStepIndex + 1;
             if (MoveSelectionForLoopExit(wasLooping, newIndex)) return;
 
+            var prev = SelectedStep;                 // 移動前の行（enter-from-outside 判定用）
             CurrentStepIndex = newIndex;
             SelectedStep = EditingSteps[newIndex];
+            // 矢印でマーカー行に「外から」入ったら自動起動（離脱操作中=wasLooping は起動しない）
+            if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
             StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
         }
 
@@ -3388,6 +3398,55 @@ namespace Lib.Ui.Screens.ViewModels
             for (int i = 1; i < idxs.Count; i++)
                 if (idxs[i] != idxs[i - 1] + 1) return false;
             return true;
+        }
+
+        /// <summary>
+        /// クリック入口：選択中の行が Chase/OL マーカーなら、そのブロックのループを自動起動する。
+        /// View の PreviewMouseLeftButtonDown（ループ非実行中）から選択確定後に呼ばれる。
+        /// クリックは明示操作なので enter-from-outside 判定は行わない（同じ行の再クリック＝再実行も可）。
+        /// </summary>
+        public void TryAutoStartLoopForSelectedRow()
+            => TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
+
+        /// <summary>
+        /// マーカー行に「カーソルが当たった」ときの Chase/OL 自動起動。
+        /// 起動条件：対象行が "Chase"/"OL" マーカー、接続済み、非常停止/進行ロックでない、
+        /// 同種マーカーの連続ブロック(2〜15行)が成立すること。
+        /// prevForEnterCheck != null（矢印）の場合、直前行が同ブロック内なら起動しない
+        /// （ブロック内を矢印で移動＝離脱側の操作。起動⇔停止の往復ジャンクを防ぐ）。
+        /// ※ ユーザー操作の2入口（クリック / 矢印）からのみ呼ぶこと。プログラム的な
+        ///    SelectedStep 変更（編集・読込・ループのエコー）から呼ぶと誤起動する。
+        /// </summary>
+        private void TryAutoStartLoop(SequenceStepWrapper? row, SequenceStepWrapper? prevForEnterCheck)
+        {
+            if (row == null) return;
+            var mode = row.Trig;                       // "Chase" / "OL" / ""
+            if (mode != "Chase" && mode != "OL") return;
+            if (_lighting == null || !_lighting.IsConnected) return;
+            if (IsEmergencyActive || IsProgressLocked) return;
+
+            int idx = EditingSteps.IndexOf(row);
+            if (idx < 0) return;
+
+            // 同種マーカーの連続ブロックを展開（ResolveLoopGroup② と同じ規則）
+            int start = idx, end = idx;
+            while (start - 1 >= 0 && EditingSteps[start - 1].Trig == mode) start--;
+            while (end + 1 < EditingSteps.Count && EditingSteps[end + 1].Trig == mode) end++;
+            int count = end - start + 1;
+            if (count < 2 || count > 15) return;
+
+            // 矢印：ブロック外→内へ入った時のみ起動（同ブロック内移動では起動しない）
+            if (prevForEnterCheck != null)
+            {
+                int p = EditingSteps.IndexOf(prevForEnterCheck);
+                if (p >= start && p <= end) return;
+            }
+
+            var group = new List<SequenceStepWrapper>();
+            for (int i = start; i <= end; i++) group.Add(EditingSteps[i]);
+
+            if (mode == "Chase") _ = StartChaseExecutionAsync(group);
+            else                 _ = StartOverlapExecutionAsync(group);
         }
 
         /// <summary>
