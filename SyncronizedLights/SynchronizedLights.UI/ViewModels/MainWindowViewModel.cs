@@ -473,6 +473,12 @@ namespace SynchronizedLights.UI.ViewModels
         private byte lastTransmitterPower = 3;
 
         /// <summary>
+        /// コマンドログへの出力要求（type, message）。
+        /// SettingViewModel（送信機初期化など）からのログを統合ウィンドウのコマンドログへ橋渡しする。
+        /// </summary>
+        public event Action<string, string>? CommandLogRequested;
+
+        /// <summary>
         /// 送信機初期化済みフラグ
         /// </summary>
         [ObservableProperty]
@@ -736,6 +742,9 @@ namespace SynchronizedLights.UI.ViewModels
                 IsTransmitterInitialized = true;
                 OnPropertyChanged(nameof(TransmitterInitLabel));
             };
+
+            // 送信機初期化などのログをコマンドログへ橋渡し（統合ウィンドウが購読）
+            vm.CommandLogRequested += (type, msg) => CommandLogRequested?.Invoke(type, msg);
 
             // 切断時に Init 状態をリセット
             vm.Disconnected += (s, e) =>

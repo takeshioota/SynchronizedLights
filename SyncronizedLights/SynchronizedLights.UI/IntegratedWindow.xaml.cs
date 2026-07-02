@@ -52,6 +52,15 @@ namespace SynchronizedLights.UI
                 }
             };
 
+            // 送信機初期化などのコマンドログを、統合ウィンドウ下部のコマンドログへ流す。
+            // 初期化イベントは UI スレッドで発火するが、念のため UI スレッドへマーシャルして
+            // ObservableCollection(LogEntries) の更新を安全に行う。
+            _commandVm.CommandLogRequested += (type, msg) =>
+            {
+                if (Dispatcher.CheckAccess()) _sequenceVm.AppendLog(type, msg);
+                else Dispatcher.BeginInvoke(new Action(() => _sequenceVm.AppendLog(type, msg)));
+            };
+
             // NO.40: 選択行が変わったら DataGrid を自動スクロールして常に可視にする
             _sequenceVm.RequestScrollToSelectedItem += () =>
             {
@@ -525,21 +534,30 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
-        /// Chase/OL 実行中にユーザーが行をクリックしたら、その操作でループを抜ける。
-        /// PreviewMouseLeftButtonDown は実マウス入力でのみ発火し、ループのプログラム的な
-        /// 選択変更（エコー）では呼ばれないため、誤停止せず確実にユーザー操作だけを拾える。
-        /// ここでループを止め、続くクリックの選択変更（OnSelectedStepChanged）で
-        /// 移動先の off 判定＋実行が行われる。
+        /// データ行クリック時の Chase/OL 制御。PreviewMouseLeftButtonDown は実マウス入力でのみ
+        /// 発火し、ループのプログラム的な選択変更（エコー）や編集操作では呼ばれないため、
+        /// 確実にユーザーのクリック操作だけを拾える。
+        /// ・ループ実行中のクリック … 従来どおり離脱（RequestLoopExit）。続く選択変更で off 判定＋実行。
+        /// ・ループ非実行中のクリック … 選択確定後にマーカー行の自動起動を試みる（Chase/OL）。
         /// </summary>
         private void StepDataGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!_sequenceVm.IsLoopRunning) return;
-
-            // クリック対象がデータ行のときだけ離脱（ヘッダ・スクロールバー等は無視）
+            // クリック対象がデータ行のときだけ処理（ヘッダ・スクロールバー等は無視）
             if (e.OriginalSource is DependencyObject src && FindAncestor<DataGridRow>(src) != null)
             {
-                _sequenceVm.RequestLoopExit();
-                // e.Handled は立てない。クリックはそのまま継続して行選択→実行させる。
+                if (_sequenceVm.IsLoopRunning)
+                {
+                    _sequenceVm.RequestLoopExit();
+                    // e.Handled は立てない。クリックはそのまま継続して行選択→実行させる。
+                }
+                else
+                {
+                    // 非実行中：PreviewMouseDown 時点では SelectedStep が未更新のため、
+                    // 選択確定後（Input 優先度）にマーカー行の自動起動を試みる。
+                    Dispatcher.BeginInvoke(
+                        new Action(() => _sequenceVm.TryAutoStartLoopForSelectedRow()),
+                        System.Windows.Threading.DispatcherPriority.Input);
+                }
             }
         }
 
