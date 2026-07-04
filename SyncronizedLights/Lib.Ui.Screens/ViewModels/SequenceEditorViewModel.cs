@@ -2269,9 +2269,10 @@ namespace Lib.Ui.Screens.ViewModels
         #region コマンド：ステップ実行
 
         /// <summary>
-        /// 現在ステップを実行 + 次ステップへ移動（Enter / Space キー）
-        /// 概要：本コマンドは選択行の移動のみを行う。
-        ///       実行は <see cref="OnSelectedStepChanged"/> による自動実行に任せる。
+        /// 現在ステップを実行 + 次ステップへ移動（Enter / Space キー・「実行 ▶」ボタン）
+        /// 概要：選択行を1つ進める。単発の実行は <see cref="OnSelectedStepChanged"/> に任せ、
+        ///       マーカー行(Chase/OL)に「外から」着地した場合は矢印キーと同じく自動起動する。
+        ///       挙動は <see cref="NextStep"/> と完全一致させ、クリック／矢印／Enter を同じ規則で統一する。
         /// </summary>
         [RelayCommand]
         private void ExecuteCurrentStep()
@@ -2282,11 +2283,16 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
-            // 未選択時は先頭行を選択（OnSelectedStepChanged が自動実行する）
+            // 矢印キーと同じく、Chase/OL 実行中ならまずループを停止してから移動する（Enter も離脱手段）
+            bool wasLooping = IsLoopRunning;
+            if (wasLooping) StopLoopExecution();
+
+            // 未選択時は先頭行を選択し、マーカー行なら自動起動（クリック相当＝enter-from-outside 判定なし）
             if (CurrentStepIndex < 0)
             {
                 CurrentStepIndex = 0;
                 SelectedStep = EditingSteps[0];
+                if (!wasLooping) TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
                 return;
             }
 
@@ -2297,10 +2303,15 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
-            // 次行へ移動（OnSelectedStepChanged が自動実行する）
+            // 次行へ移動。off 行への離脱なら全停止（矢印キーと同じ）
             var newIndex = CurrentStepIndex + 1;
+            if (MoveSelectionForLoopExit(wasLooping, newIndex)) return;
+
+            var prev = SelectedStep;                 // 移動前の行（enter-from-outside 判定用）
             CurrentStepIndex = newIndex;
             SelectedStep = EditingSteps[newIndex];
+            // 矢印でマーカー行に「外から」入ったら自動起動（同ブロック内移動では起動しない）
+            if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
             StatusMessage = $"実行: ステップ {newIndex + 1} / {EditingSteps.Count}";
         }
 
@@ -2872,8 +2883,15 @@ namespace Lib.Ui.Screens.ViewModels
                 var preStopSw = Stopwatch.StartNew();
                 using (var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
                 {
-                    try { await _lighting.StopEffectAsync(stopCts.Token); }
-                    catch { /* 走っていない/タイムアウトは無視 */ }
+                    // RainbowPause は「その時の色を保持」するコマンド。ここで走行中のレインボー
+                    // （API 内部では Effect 扱いのループ）を止めてしまうと保持すべき色が失われ、
+                    // 直後の A9 04（現在色ホールド）が白点灯になる。事前停止せず、下部ボタンと同じく
+                    // PauseRainbow 自身に停止→現在色ホールドを任せる（StartPacketHold が内部で停止する）。
+                    if (step.CommandType is not "RainbowPause")
+                    {
+                        try { await _lighting.StopEffectAsync(stopCts.Token); }
+                        catch { /* 走っていない/タイムアウトは無視 */ }
+                    }
 
                     if (step.CommandType is not "Rainbow" and not "RainbowStop" and not "RainbowPause")
                     {
