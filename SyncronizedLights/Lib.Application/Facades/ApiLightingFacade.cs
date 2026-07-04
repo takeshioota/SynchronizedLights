@@ -697,6 +697,11 @@ namespace Lib.Application.Facades
             if (ShouldDropCommand($"Effect.{effectType}")) return;
 
             _apiEffectRunning = true;
+            // StartRainbowAsync と同様に更新する。これを怠ると、エフェクトの各ステップ間
+            // （事前停止で _apiEffectRunning が一瞬 false になる隙間）で KeepAlive が
+            // api/light/global に古い色を送り、StartColorHold 経由で走行中エフェクトを
+            // 止めてしまう（Chase 途中で色が落ちる一因）。
+            _lastCommandTime = DateTime.UtcNow;
             var startTs = Stopwatch.GetTimestamp();
             try
             {
