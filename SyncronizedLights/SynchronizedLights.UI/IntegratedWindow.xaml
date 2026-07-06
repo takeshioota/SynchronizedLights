@@ -289,6 +289,7 @@
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Text="シーケンス一覧" FontWeight="Bold" FontSize="14"
@@ -311,18 +312,24 @@
                                  Background="#0F0F0F" Foreground="#F2F2F2"
                                  BorderBrush="{StaticResource BorderBrushAmber}" BorderThickness="1"
                                  Margin="0,0,0,4"/>
-                        <Grid Grid.Row="3">
+                        <!-- 新規（全幅） -->
+                        <Button Grid.Row="3" Content="新規" Command="{Binding NewSequenceCommand}"
+                                Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,0,4"/>
+                        <!-- 削除 / 複製（2列） -->
+                        <Grid Grid.Row="4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Content="新規" Command="{Binding NewSequenceCommand}"
+                            <Button Grid.Column="0" Content="削除" Command="{Binding DeleteSequenceCommand}"
+                                    IsEnabled="{Binding HasSelectedSequence}"
                                     Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,2,0"/>
-                            <Button Grid.Column="1" Content="削除" Command="{Binding DeleteSequenceCommand}"
+                            <Button Grid.Column="1" Content="複製" Command="{Binding DuplicateSequenceCommand}"
                                     IsEnabled="{Binding HasSelectedSequence}"
                                     Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="2,0,0,0"/>
                         </Grid>
-                        <Button Grid.Row="4" Content="更新" Command="{Binding RefreshListCommand}"
+                        <!-- 更新（全幅） -->
+                        <Button Grid.Row="5" Content="更新" Command="{Binding RefreshListCommand}"
                                 Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,4,0,0"/>
                     </Grid>
                 </Border>
@@ -486,7 +493,11 @@
                 </Border>
 
                 <!-- DataGrid -->
+                <!-- 2026-07-06 オペレータ要望: 押し間違い防止のため列ヘッダークリックソートを無効化（CanUserSortColumns="False"）。
+                     機能は温存（Sorting配線／StepDataGrid_Sorting／SortEditingStepsByColumn はそのまま）。
+                     再有効化は CanUserSortColumns を True に戻すか同属性を削除する。共有スタイルより優先されるローカル指定。 -->
                 <DataGrid x:Name="StepDataGrid" Grid.Row="3"
+                          CanUserSortColumns="False"
                           Style="{StaticResource GrandMaDataGridStyle}"
                           ItemsSource="{Binding EditingSteps}"
                           SelectedItem="{Binding SelectedStep, Mode=TwoWay}"
