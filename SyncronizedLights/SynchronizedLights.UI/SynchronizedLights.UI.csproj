@@ -7,8 +7,8 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<!-- NO.33: 実行中に画面表示するバージョン番号 -->
-		<Version>1.3.1</Version>
-		<InformationalVersion>1.3.1 (SNO夏)</InformationalVersion>
+		<Version>1.3.2</Version>
+		<InformationalVersion>1.3.2 (SNO夏)</InformationalVersion>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 	</PropertyGroup>
 

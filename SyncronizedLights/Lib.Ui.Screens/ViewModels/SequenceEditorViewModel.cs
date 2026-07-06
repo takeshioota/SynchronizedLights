@@ -762,6 +762,65 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>
+        /// 選択中シーケンスを複製する。
+        /// 概要：ストアから完全なコピー（ステップ含む）を読み込み、新しい Id を採番し、
+        ///       名前は Windows のファイルコピー命名規則（「<元名> - コピー」「… - コピー (2)」…）で採番して
+        ///       別ファイルとして保存する。保存後は複製をエディタで開く。
+        /// </summary>
+        [RelayCommand]
+        private void DuplicateSequence()
+        {
+            if (SelectedSequence == null) { StatusMessage = "複製対象が選択されていません。"; return; }
+
+            // ストアから読み込み直すことでステップまで含む独立したディープコピーを得る
+            var copy = _store.Load(SelectedSequence.Id);
+            if (copy == null)
+            {
+                StatusMessage = "複製元の読み込みに失敗しました。";
+                AppendLog("ERR", $"複製失敗(読込): {SelectedSequence.Name}");
+                return;
+            }
+
+            var sourceName = copy.Name;
+            // 新規シーケンスとして採番（別ファイル化）し、Windows コピー命名で新しい名前を付ける
+            copy.Id = Guid.NewGuid().ToString("N");
+            copy.Name = GenerateCopyName(sourceName);
+            copy.CreatedAt = DateTime.Now.ToString("o");
+
+            if (_store.Save(copy))
+            {
+                ReloadSequences();
+                SelectedSequence = Sequences.FirstOrDefault(s => s.Id == copy.Id);
+                StatusMessage = $"複製完了: {copy.Name}";
+                AppendLog("INFO", $"複製: {sourceName} → {copy.Name}");
+            }
+            else
+            {
+                StatusMessage = "複製に失敗しました。ログを確認してください。";
+                AppendLog("ERR", $"複製失敗: {sourceName}");
+            }
+        }
+
+        /// <summary>
+        /// Windows のファイルコピー命名規則に合わせた複製名を生成する。
+        /// 例：「オープニング」→「オープニング - コピー」→「オープニング - コピー (2)」…
+        ///     既存名と衝突しなくなるまで連番を上げる。
+        /// </summary>
+        private string GenerateCopyName(string baseName)
+        {
+            baseName = (baseName ?? "").Trim();
+            var first = $"{baseName} - コピー";
+            if (!_store.ExistsByName(first)) return first;
+            for (int n = 2; n < 10000; n++)
+            {
+                var candidate = $"{baseName} - コピー ({n})";
+                if (!_store.ExistsByName(candidate)) return candidate;
+            }
+            // フォールバック（通常到達しない）
+            return $"{baseName} - コピー ({DateTime.Now:HHmmss})";
+        }
+
         [RelayCommand]
         private void DiscardChanges()
         {
