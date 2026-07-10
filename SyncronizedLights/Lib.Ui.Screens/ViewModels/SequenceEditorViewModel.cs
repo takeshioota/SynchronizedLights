@@ -2386,6 +2386,10 @@ namespace Lib.Ui.Screens.ViewModels
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
 
+            // 現在行が Chase/OL ブロック内なら、マーカー位置に関係なくブロックごと
+            // 飛び越えて直前の一般行へ離脱する（中間行からでも確実に抜けられる）。
+            if (TryJumpOutOfLoopBlock(wasLooping, forward: false)) return;
+
             if (CurrentStepIndex <= 0)
             {
                 StatusMessage = "最初のステップです。";
@@ -2412,6 +2416,10 @@ namespace Lib.Ui.Screens.ViewModels
             // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
+
+            // 現在行が Chase/OL ブロック内なら、マーカー位置に関係なくブロックごと
+            // 飛び越えて直後の一般行へ離脱する（中間行からでも確実に抜けられる）。
+            if (TryJumpOutOfLoopBlock(wasLooping, forward: true)) return;
 
             if (CurrentStepIndex >= EditingSteps.Count - 1)
             {
@@ -2450,6 +2458,59 @@ namespace Lib.Ui.Screens.ViewModels
             finally { _suppressAutoExecute = false; }
 
             _ = StopExecutionAsync();
+            return true;
+        }
+
+        /// <summary>
+        /// 現在行が Chase/OL マーカーの連続ブロック(2行以上)内にあるとき、矢印キーで
+        /// ブロックごと飛び越えて外側の行へ着地させる。ブロック内のどの行にいても、
+        /// forward=false(↑/←)ならブロック先頭の直前行、forward=true(↓/→)なら
+        /// ブロック末尾の直後行へ一気に移動する。
+        /// 概要：Chase 実行中は SelectedStep/CurrentStepIndex がブロック内を往復するため、
+        ///       単純な ±1 移動ではマーカーが端に来た瞬間しか離脱できない。この処理で
+        ///       中間行からでも確実に一般シーケンス行へ抜けられるようにする。
+        /// 戻り値：移動（または端到達メッセージ）を行ったら true。ブロック外・単独行の
+        ///        場合は false（呼び出し側の通常 ±1 移動に委ねる）。
+        /// </summary>
+        private bool TryJumpOutOfLoopBlock(bool wasLooping, bool forward)
+        {
+            int idx = CurrentStepIndex;
+            if (idx < 0 || idx >= EditingSteps.Count) return false;
+
+            var mode = EditingSteps[idx].Trig;              // "Chase" / "OL" / ""
+            if (mode != "Chase" && mode != "OL") return false;
+
+            // 同種マーカーの連続ブロックを展開（TryAutoStartLoop と同じ規則）
+            int start = idx, end = idx;
+            while (start - 1 >= 0 && EditingSteps[start - 1].Trig == mode) start--;
+            while (end + 1 < EditingSteps.Count && EditingSteps[end + 1].Trig == mode) end++;
+            if (end - start + 1 < 2) return false;          // ブロック未成立（単独行）は通常移動
+
+            int exitIndex = forward ? end + 1 : start - 1;
+
+            // ブロックが端に接していて外側に行が無い場合は端メッセージのみ（ブロック内へは戻さない）
+            if (exitIndex < 0)
+            {
+                StatusMessage = "最初のステップです。";
+                return true;
+            }
+            if (exitIndex >= EditingSteps.Count)
+            {
+                StatusMessage = "最後のステップです。";
+                return true;
+            }
+
+            // off 行への離脱なら停止ボタン相当（既存の矢印離脱ルールを踏襲）
+            if (MoveSelectionForLoopExit(wasLooping, exitIndex)) return true;
+
+            var prev = SelectedStep;                        // 移動前の行（enter-from-outside 判定用）
+            CurrentStepIndex = exitIndex;
+            SelectedStep = EditingSteps[exitIndex];
+            // 矢印でマーカー行に「外から」入ったら自動起動（離脱操作中=wasLooping は起動しない）
+            if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
+            StatusMessage = forward
+                ? $"次ステップへ移動：{exitIndex + 1} / {EditingSteps.Count}"
+                : $"前ステップ：{exitIndex + 1} / {EditingSteps.Count}";
             return true;
         }
 
