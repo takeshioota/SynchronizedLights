@@ -773,6 +773,13 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (SelectedSequence == null) { StatusMessage = "複製対象が選択されていません。"; return; }
 
+            // 未保存の画面編集があれば、別シーケンス選択時（OnSelectedSequenceChanged）と同じく
+            // 複製前に自動保存し、ディスク内容を画面と一致させてから複製する。
+            if (_editingSequence != null && HasUnsavedEdits())
+            {
+                SaveSequence();
+            }
+
             // ストアから読み込み直すことでステップまで含む独立したディープコピーを得る
             var copy = _store.Load(SelectedSequence.Id);
             if (copy == null)
@@ -904,19 +911,10 @@ namespace Lib.Ui.Screens.ViewModels
                 newTimeMs = src.TimeMs + 1000;
             }
 
-            var newStep = new SequenceStep
-            {
-                TimeMs = newTimeMs,
-                CommandType = src.CommandType,
-                EffectType = src.EffectType,
-                ColorR = src.ColorR,
-                ColorG = src.ColorG,
-                ColorB = src.ColorB,
-                EffectCycleDurationMs = src.EffectCycleDurationMs,
-                FadeSteps = src.FadeSteps,
-                RetransmitCount = src.RetransmitCount,
-                Note = src.Note
-            };
+            // src は ToModel() で得た全フィールドを保持する独立コピー。
+            // 時刻だけずらして全項目をそのまま複製する（フィールド追加時の取りこぼしも防止）。
+            var newStep = src;
+            newStep.TimeMs = newTimeMs;
             var wrapper = new SequenceStepWrapper(newStep);
 
             int insertIndex = EditingSteps.IndexOf(SelectedStep) + 1;
@@ -1455,7 +1453,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             if (IsEmergencyActive)
@@ -1493,7 +1491,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             try
@@ -1665,7 +1663,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             if (IsEmergencyActive)
@@ -1703,7 +1701,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             try
@@ -1725,7 +1723,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             try
@@ -1803,7 +1801,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             if (IsEmergencyActive)
@@ -1837,7 +1835,7 @@ namespace Lib.Ui.Screens.ViewModels
             if (!int.TryParse(modeStr, out var modeInt) || modeInt < 0 || modeInt > 5) return;
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             if (IsEmergencyActive)
@@ -1897,7 +1895,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
 
@@ -1941,7 +1939,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             try
@@ -1967,7 +1965,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             if (SelectedBleDevice == null)
@@ -2011,7 +2009,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
 
@@ -2954,7 +2952,7 @@ namespace Lib.Ui.Screens.ViewModels
             }
             if (_lighting == null || !_lighting.IsConnected)
             {
-                StatusMessage = "未接続のため実行できません。";
+                StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
             // SelectedStep を直接参照することで、CurrentStepIndex のバインド同期タイミングに左右されない
@@ -3037,31 +3035,15 @@ namespace Lib.Ui.Screens.ViewModels
                         // スムーズ遷移：TransitionMs > 0 かつ前回の色がある場合
                         if (step.TransitionMs > 0 && _lastExecutedColor.HasValue)
                         {
-                            var from = _lastExecutedColor.Value;
-                            var toR = step.ColorR;
-                            var toG = step.ColorG;
-                            var toB = step.ColorB;
-                            var intervalMs = 30; // 補間間隔
-                            var totalSteps = Math.Max(1, step.TransitionMs / intervalMs);
+                            var prev = _lastExecutedColor.Value;
+                            var from = new Rgb(prev.R, prev.G, prev.B);
 
-                            AppendLog("TX", $"Color 遷移 ({from.R},{from.G},{from.B})→({toR},{toG},{toB}) {step.TransitionMs}ms");
+                            AppendLog("TX", $"Color 遷移 ({from.R},{from.G},{from.B})→({step.ColorR},{step.ColorG},{step.ColorB}) {step.TransitionMs}ms (API補間/≈50fps)");
                             AppendContinuousSendStartLog();
 
-                            for (int i = 1; i <= totalSteps; i++)
-                            {
-                                if (transitionToken.IsCancellationRequested) break;
-
-                                var t = (double)i / totalSteps;
-                                var r = (byte)(from.R + (toR - from.R) * t);
-                                var g = (byte)(from.G + (toG - from.G) * t);
-                                var b = (byte)(from.B + (toB - from.B) * t);
-                                await _lighting.SetColorAsync(target, new Rgb(r, g, b));
-                                if (i < totalSteps)
-                                {
-                                    try { await Task.Delay(intervalMs, transitionToken); }
-                                    catch (OperationCanceledException) { break; }
-                                }
-                            }
+                            // 補間はサーバ(API)側で ≈50fps・各フレーム保持中も再送する堅牢方式に統一。
+                            // HTTP は1回だけ（旧実装は 30ms 間隔で1フレームずつ HTTP 送信していたためカクつき/ジッタの原因だった）。
+                            await _lighting.FadeColorAsync(from, color, step.TransitionMs, step.GetFadeStepsOrDefault());
                         }
                         else
                         {
@@ -3314,7 +3296,7 @@ namespace Lib.Ui.Screens.ViewModels
             StopLoopExecution();
 
             if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
-            if (_lighting == null || !_lighting.IsConnected) return;
+            // オフライン（未接続）でも行送りプレビューのためループは起動する。実送信は各ステップ側でスキップ。
             if (IsEmergencyActive) return;
 
             // 連続行かチェック（EditingSteps内でインデックスが連続しているか）
@@ -3334,7 +3316,8 @@ namespace Lib.Ui.Screens.ViewModels
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
-            StatusMessage = $"ループ実行中: {steps.Count} ステップ";
+            StatusMessage = $"ループ実行中: {steps.Count} ステップ"
+                + (IsLightingOffline ? "（オフライン：送信なし）" : "");
             AppendLog("INFO", $"ループ実行開始: {steps.Count} ステップ (No {steps.First().RowNumber:0.##}〜{steps.Last().RowNumber:0.##})");
 
             try
@@ -3412,6 +3395,12 @@ namespace Lib.Ui.Screens.ViewModels
         /// ループ実行中かどうか（SelectionChanged 抑制にも使用）
         /// </summary>
         public bool IsLoopRunning => _loopCts != null && !_loopCts.IsCancellationRequested;
+
+        /// <summary>
+        /// 送信機に接続されていない（オフライン）か。オフライン時は実送信をスキップし、
+        /// Chase/OL・行送り等のプレビューのみ行う（PC 単体でのシーケンス作成用）。
+        /// </summary>
+        private bool IsLightingOffline => _lighting == null || !_lighting.IsConnected;
 
         /// <summary>
         /// 指定行が「off」動作（消灯 / 信号Off）かどうか。
@@ -3560,7 +3549,7 @@ namespace Lib.Ui.Screens.ViewModels
             if (row == null) return;
             var mode = row.Trig;                       // "Chase" / "OL" / ""
             if (mode != "Chase" && mode != "OL") return;
-            if (_lighting == null || !_lighting.IsConnected) return;
+            // オフライン（未接続）でも自動起動を許可（行送りプレビュー）。実送信は各ステップ側でスキップ。
             if (IsEmergencyActive || IsProgressLocked) return;
 
             int idx = EditingSteps.IndexOf(row);
@@ -3610,7 +3599,7 @@ namespace Lib.Ui.Screens.ViewModels
             StopLoopExecution();
 
             if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
-            if (_lighting == null || !_lighting.IsConnected) return;
+            // オフライン（未接続）でも行送りプレビューのためループは起動する。実送信は各ステップ側でスキップ。
             if (IsEmergencyActive) return;
 
             var indices = selectedSteps
@@ -3642,7 +3631,8 @@ namespace Lib.Ui.Screens.ViewModels
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
-            StatusMessage = $"Chase 実行中: {steps.Count} ステップ";
+            StatusMessage = $"Chase 実行中: {steps.Count} ステップ"
+                + (IsLightingOffline ? "（オフライン：送信なし）" : "");
             AppendLog("INFO", $"Chase 開始: {steps.Count} ステップ");
 
             try
@@ -3703,7 +3693,7 @@ namespace Lib.Ui.Screens.ViewModels
             StopLoopExecution();
 
             if (selectedSteps == null || selectedSteps.Count < 2 || selectedSteps.Count > 15) return;
-            if (_lighting == null || !_lighting.IsConnected) return;
+            // オフライン（未接続）でも行送りプレビューのためループは起動する。実送信は各ステップ側でスキップ。
             if (IsEmergencyActive) return;
 
             var indices = selectedSteps
@@ -3734,7 +3724,8 @@ namespace Lib.Ui.Screens.ViewModels
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
-            StatusMessage = $"Overlap 実行中: {steps.Count} ステップ";
+            StatusMessage = $"Overlap 実行中: {steps.Count} ステップ"
+                + (IsLightingOffline ? "（オフライン：送信なし）" : "");
             AppendLog("INFO", $"Overlap 開始: {steps.Count} ステップ");
 
             try
@@ -3760,31 +3751,24 @@ namespace Lib.Ui.Screens.ViewModels
                             fadeMs = next.TimeMs > 0 ? next.TimeMs : DefaultLoopStepMs;
                         }
 
-                        // フェードステップ数。stepInterval は常に >=1 ＝毎フレーム必ず throttle（暴走防止）
-                        int fadeStepCount = Math.Max(1, fadeMs / 20);
-                        int stepInterval = Math.Max(1, fadeMs / fadeStepCount);
+                        var from = new Rgb(current.ColorR, current.ColorG, current.ColorB);
+                        var to = new Rgb(next.ColorR, next.ColorG, next.ColorB);
 
-                        // 現在色→次色へ補間（API レイテンシ補正付き）
-                        for (int s = 0; s <= fadeStepCount; s++)
-                        {
-                            if (token.IsCancellationRequested) break;
+                        // 現在色→次色へクロスフェード。シーケンスの Color 遷移（TransitionMs）と同じ堅牢経路
+                        // （API 側で ≈50fps 補間＋各フレーム保持中も再送）に統一する。HTTP は 1 セグメント 1 回だけ。
+                        // 旧実装は UI 側で毎フレーム SetColorAsync（HTTP≈50回/秒）を叩いており、API 側の StartColorHold が
+                        // 毎回「全停止＋キューフラッシュ＋連続送信タスク生成」を行う churn で、多ポート構成のフレーム落ち／
+                        // チラつき（＝OL が安定しない）の原因になっていた。
+                        // オフラインでは送信のみスキップ（フェード時間の待機と行送りプレビューは継続）。
+                        var sw = Stopwatch.StartNew();
+                        if (_lighting != null && _lighting.IsConnected)
+                            await _lighting.FadeColorAsync(from, to, fadeMs, next.ToModel().GetFadeStepsOrDefault());
 
-                            float t = fadeStepCount > 0 ? (float)s / fadeStepCount : 1f;
-                            byte r = (byte)(current.ColorR + (next.ColorR - current.ColorR) * t);
-                            byte g = (byte)(current.ColorG + (next.ColorG - current.ColorG) * t);
-                            byte b = (byte)(current.ColorB + (next.ColorB - current.ColorB) * t);
-
-                            var sw = Stopwatch.StartNew();
-                            await _lighting.SetColorAsync(Target.All, new Rgb(r, g, b));
-
-                            if (s < fadeStepCount)
-                            {
-                                var elapsed = (int)sw.ElapsedMilliseconds;
-                                var adjustedDelay = Math.Max(1, stepInterval - elapsed);
-                                try { await Task.Delay(adjustedDelay, token); }
-                                catch (OperationCanceledException) { break; }
-                            }
-                        }
+                        // フェード所要時間だけ待機（API レイテンシを差し引いて正確なテンポを維持。待機は常に正）。
+                        var elapsed = (int)sw.ElapsedMilliseconds;
+                        var adjustedWait = Math.Max(1, fadeMs - elapsed);
+                        try { await Task.Delay(adjustedWait, token); }
+                        catch (OperationCanceledException) { break; }
 
                         // 選択をUIに反映
                         _suppressAutoExecute = true;
@@ -4083,6 +4067,14 @@ namespace Lib.Ui.Screens.ViewModels
                     AppendLog("ERR", $"Sequence Stop 失敗: {ex.Message}");
                 }
                 finally { await PollStatusAsync(); }
+                return;
+            }
+
+            // オフライン時は API 側一括再生（アップロード→再生）ができないため明示して終了。
+            // 行送りプレビューは Chase/OL を利用してもらう。
+            if (IsLightingOffline)
+            {
+                StatusMessage = "オフラインのため一括再生（API側）は実行できません。Chase/OL で行送りプレビューをご利用ください。";
                 return;
             }
 
