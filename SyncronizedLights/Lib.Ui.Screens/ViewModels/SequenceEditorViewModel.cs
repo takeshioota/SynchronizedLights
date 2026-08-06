@@ -53,6 +53,13 @@ namespace Lib.Ui.Screens.ViewModels
         private bool _suppressAutoExecute;
 
         /// <summary>
+        /// BUG-20260728-04/03: シーケンス一覧の再読込（ReloadSequences の Clear→再選択）や
+        /// 切替キャンセル復帰の間だけ true。この間は OnSelectedSequenceChanged を full no-op にして、
+        /// 一覧の一時的な選択変化でエディタを再構築/クリア（表示消失・食い違い）しないようにする。
+        /// </summary>
+        private bool _reloadingSequenceList;
+
+        /// <summary>
         /// 連続再生中、最後に送信ログに記録したステップ番号
         /// 概要：ポーリング検知で currentStepIndex の変化を見て、進んだステップごとに [TX] ログを残すために使用。
         ///       再生開始時に -1 にリセット、ポーリングで重複ログを防ぐ。
@@ -86,6 +93,21 @@ namespace Lib.Ui.Screens.ViewModels
         /// 複数行ループ実行のキャンセル用トークンソース
         /// </summary>
         private CancellationTokenSource? _loopCts;
+
+        /// <summary>
+        /// BUG-20260729-06/09: 実行中ループタスクの完了通知。off/SignalOff 行への離脱時に、
+        /// ループの in-flight 送信（Chase の ExecuteStep / OL の FadeColorAsync）の完了を待ってから
+        /// off を送るために使う（後着の色送信が off を上書きするのを防ぐ）。
+        /// </summary>
+        private TaskCompletionSource<bool>? _loopCompletion;
+
+        /// <summary>
+        /// BUG-20260725-01: Emergency 進入時に Chase/OL ループが実行中だったかを記録する。
+        /// Emergency 解除時、これが true かつ選択行が Chase/OL マーカーなら、単発の再実行ではなく
+        /// そのブロックのループを再起動して復帰させる（Chase 行は単色 Color のため、単発再実行では
+        /// 単色固着してしまう）。
+        /// </summary>
+        private bool _wasLoopRunningBeforeEmergency;
 
         /// <summary>
         /// サブシーケンス（Preset）実行のキャンセル用トークンソース
@@ -528,9 +550,23 @@ namespace Lib.Ui.Screens.ViewModels
 
         partial void OnSelectedSequenceChanged(TimeBasedSequence? oldValue, TimeBasedSequence? newValue)
         {
+            // BUG-20260728-04/03: 保存後の一覧再読込（ReloadSequences の Clear→再選択）や、
+            //   切替キャンセルの復帰中は、一覧の一時的な選択変化を無視する（エディタの再構築/
+            //   クリアによる表示消失・一覧と編集画面の食い違いを防止）。
+            if (_reloadingSequenceList) return;
+
             // 別シーケンス選択も Chase/OL の離脱手段。切替前にループ中だったかを記録し、
             // 離脱時に読み込んだ先頭行が off なら停止ボタン相当にする（下の実行分岐で使用）。
             bool wasLooping = IsLoopRunning;
+
+            // No.85(BUG-20260729-03) 撤回（顧客判断 2026-07-30）: 実シーケンス間の切替（old/new とも非 null）で
+            //   未保存の変更がある場合は、確認ダイアログを出さず「保存優先」で静かに保存する（v1.4.2 の挙動へ戻す）。
+            //   SaveSequenceCore(reselectAfter:false) は一覧の再選択を伴わない静か保存で、
+            //   一覧選択と編集画面の食い違い（BUG-20260728-03/04）を起こさない。
+            if (oldValue != null && newValue != null && _editingSequence != null && HasUnsavedEdits())
+            {
+                SaveSequenceCore(reselectAfter: false);
+            }
 
             // FAB#1 修正: シーケンス切替前に走行中の Chase/OL ループを必ず停止する。
             // EditingSteps を作り直すと旧 wrapper が孤児化し、停止しないとループが固着→
@@ -538,13 +574,6 @@ namespace Lib.Ui.Screens.ViewModels
             StopLoopExecution();
             // 旧シーケンスの選択キャッシュ（孤児 wrapper）を破棄。再選択時に新 wrapper で更新される。
             _currentSelectedSteps = new List<SequenceStepWrapper>();
-
-            // v3.9: 切替前のシーケンスに未保存の変更があれば自動保存
-            if (oldValue != null && _editingSequence != null && HasUnsavedEdits())
-            {
-                SaveSequence();
-                AppendLog("INFO", $"自動保存: {_editingSequence.Name}");
-            }
 
             // v3.9: シーケンス切替時は進行ロックを自動解除
             if (IsProgressLocked)
@@ -565,6 +594,8 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 if (newValue == null)
                 {
+                    // シーケンス未選択に戻る場合もパネルを既定へ戻し、前シーケンスのパレットを残さない。
+                    if (oldValue != null) ResetRainbowPanel();
                     EditingName = "";
                     EditingDescription = "";
                     EditingSteps.Clear();
@@ -584,6 +615,22 @@ namespace Lib.Ui.Screens.ViewModels
                     EditingSteps.Add(new SequenceStepWrapper(step));
                 }
                 RenumberEditingSteps();
+
+                // BUG-20260729-01（再修正 2026-08-03）: シーケンス切替時の Rainbow パネル同期。
+                //   旧修正は「切替時は常に既定へリセット」だったため、切替先に保存済みの Rainbow
+                //   パレットがあってもパネルへ反映されず、先頭が Rainbow 行でないと既定色（＝保存内容が
+                //   リセットされたように見える）まま残っていた（顧客報告 BUG-20260729-01 の再発）。
+                //   対策: まず既定へ戻して前シーケンスからのパレット引き継ぎを断ち、切替先に Rainbow 行が
+                //   あればその「最初の Rainbow 行」の保存パレットをパネルへ反映する（引き継ぎ防止 + 保存反映）。
+                //   ・先頭行が Rainbow なら下の SelectedStep 設定→SyncRainbowPanelFromStep でも同値に再同期。
+                //   ・起動時(oldValue==null)は UserState 復元を尊重し、ここでは触らない（従来どおり）。
+                if (oldValue != null)
+                {
+                    ResetRainbowPanel();
+                    var firstRainbow = EditingSteps.FirstOrDefault(s => s.CommandType == "Rainbow");
+                    if (firstRainbow != null) SyncRainbowPanelFromStep(firstRainbow);
+                }
+
                 CurrentStepIndex = EditingSteps.Count > 0 ? 0 : -1;
                 SelectedStep = CurrentStepIndex >= 0 ? EditingSteps[CurrentStepIndex] : null;
                 OnPropertyChanged(nameof(CurrentStepLabel));
@@ -607,6 +654,13 @@ namespace Lib.Ui.Screens.ViewModels
                 {
                     _ = StopExecutionAsync();
                 }
+                // BUG-20260729-02: 先頭ステップが Chase/OL マーカーなら、単発実行ではなくループを自動起動し、
+                //   Color/Effect と同様に「シーケンス選択で即再生」する（クリック入口と同じ prevForEnterCheck:null）。
+                //   非マーカー先頭（Color/Effect 等）は従来どおり単発実行。
+                else if (SelectedStep.Trig == "Chase" || SelectedStep.Trig == "OL")
+                {
+                    TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
+                }
                 else
                 {
                     _ = ExecuteStepWithoutAdvanceAsync();
@@ -623,6 +677,11 @@ namespace Lib.Ui.Screens.ViewModels
         {
             // NO.40: 選択行が変わったら常に可視化（手動ナビ＋Chase/OL/再生の行送り含む。実行抑制とは独立）
             if (value != null) RequestScrollToSelectedItem?.Invoke();
+
+            // BUG-20260728-02: Rainbow 行を選択したら、その行の Rainbow パラメータをコマンドパネルへ
+            //                  逆同期する（保存値がパネル Mode/パレットに表示されない問題を解消）。
+            //                  発光は step 値を使うので従来どおり。実行抑制とは独立に常に行う。
+            SyncRainbowPanelFromStep(value);
 
             if (_suppressAutoExecute) return;
             if (value == null) return;
@@ -659,10 +718,58 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (_lighting == null || !_lighting.IsConnected) return;
 
+            // BUG-20260806-01: 選択行が「自動起動できる Chase/OL ブロック」の一員なら、ここでは
+            // 選択即実行しない。直後に走る TryAutoStartLoop（クリック=Input 優先度の遅延実行／
+            // 矢印=NextStep 内）が Chase ループ／OL クロスフェードとして色を送る。ここで先に
+            // ExecuteStepWithoutAdvanceAsync（SetColorAsync＝_apiEffectRunning=false 化＋api/light/global）
+            // を撃つと、OL 初回フェード直前に冗長なグローバル色送信が挟まり、送信 churn や先頭色固着の
+            // 一因になる。OnSelectedSequenceChanged の先頭行ガードと挙動を揃える。
+            // ※ ループ実行中はそもそも _suppressAutoExecute で抑止されるため、ここは非ループ時のみ通る。
+            if (!IsLoopRunning && IsAutoStartableLoopBlockRow(value)) return;
+
             // F8/F9: 選択即実行（fire-and-forget、内部で例外は捕捉される）
             // 後だし優先: ExecuteStepWithoutAdvanceAsync 内で _transitionCts をキャンセルし、
             // 最新の選択だけが実行される
             _ = ExecuteStepWithoutAdvanceAsync();
+        }
+
+        /// <summary>
+        /// BUG-20260728-02: 選択行が Rainbow 行なら、その行に保存された Rainbow パラメータを
+        /// コマンドパネルの各プロパティへ書き戻す（逆同期）。パネルへ値を代入するのみで、
+        /// ステップへの再適用（ApplyRainbowToStep）や実機送信は行わない。
+        /// </summary>
+        private void SyncRainbowPanelFromStep(SequenceStepWrapper? value)
+        {
+            if (value == null || value.CommandType != "Rainbow") return;
+
+            RainbowMode = value.RainbowMode;
+            // 色パレットは 2 色以上保存されている場合のみ反映（空/不正時はパネル現状を維持）
+            if (value.RainbowColors != null && value.RainbowColors.Count >= 2)
+            {
+                RainbowColors = new ObservableCollection<RgbColorItem>(
+                    value.RainbowColors.Select(c => new RgbColorItem(c.R, c.G, c.B)));
+            }
+            RainbowCycleDurationMs = value.RainbowCycleDurationMs;
+            RainbowBlinkPeriodMs = value.RainbowBlinkPeriodMs;
+            RainbowDutyRatio = value.RainbowDutyRatio;
+            RainbowFadeInMs = value.RainbowFadeInMs;
+            RainbowFadeOutMs = value.RainbowFadeOutMs;
+        }
+
+        /// <summary>
+        /// BUG-20260729-01: Rainbow コマンドパネル（Mode/色パレット/速度/点滅/フェード）を既定値へ初期化する。
+        /// シーケンス切替時に呼び、前シーケンスで編集したパレットが引き継がれるのを防ぐ。
+        /// 既定値は各 [ObservableProperty] のフィールド初期化子と一致させている。
+        /// </summary>
+        private void ResetRainbowPanel()
+        {
+            RainbowMode = RainbowMode.Solid;
+            RainbowColors = new ObservableCollection<RgbColorItem>(DefaultRainbowColors());
+            RainbowCycleDurationMs = 1000;
+            RainbowBlinkPeriodMs = 500;
+            RainbowDutyRatio = 5;
+            RainbowFadeInMs = 1000;
+            RainbowFadeOutMs = 1000;
         }
 
         #endregion
@@ -687,7 +794,17 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         [RelayCommand]
-        private void SaveSequence()
+        private void SaveSequence() => SaveSequenceCore(reselectAfter: true);
+
+        /// <summary>
+        /// シーケンスを保存する本体。
+        /// <paramref name="reselectAfter"/> = true（更新ボタン）は保存後に一覧を再読込して選択を更新するが、
+        /// BUG-20260728-04 対策として再読込・再選択中は <see cref="_reloadingSequenceList"/> を立て、
+        /// OnSelectedSequenceChanged を no-op にしてエディタの再構築（表示消失）を防ぐ。
+        /// reselectAfter = false（切替時の静かな保存）は永続化のみで一覧再選択を行わない
+        /// （一覧選択と編集画面の食い違い＝BUG-20260728-03 の原因を断つ）。
+        /// </summary>
+        private void SaveSequenceCore(bool reselectAfter)
         {
             if (_editingSequence == null) { StatusMessage = "保存対象が選択されていません。"; return; }
             if (string.IsNullOrWhiteSpace(EditingName))
@@ -723,8 +840,21 @@ namespace Lib.Ui.Screens.ViewModels
 
             if (_store.Save(_editingSequence))
             {
-                ReloadSequences();
-                SelectedSequence = Sequences.FirstOrDefault(s => s.Id == savedId);
+                if (reselectAfter)
+                {
+                    // BUG-20260728-04: 一覧再読込＋再選択中はエディタ（EditingSteps）を再構築しない。
+                    //   Clear 駆動の一時 null 選択でエディタが空になる／再選択で食い違う問題を防ぐ。
+                    //   EditingSteps は保存済み内容のまま維持し、参照だけ新インスタンスへ更新する。
+                    _reloadingSequenceList = true;
+                    try
+                    {
+                        ReloadSequences();
+                        var refreshed = Sequences.FirstOrDefault(s => s.Id == savedId);
+                        SelectedSequence = refreshed;
+                        if (refreshed != null) _editingSequence = refreshed;
+                    }
+                    finally { _reloadingSequenceList = false; }
+                }
                 StatusMessage = $"保存完了: {savedName}（{savedStepCount} ステップ）";
                 AppendLog("INFO", $"保存: {savedName} ({savedStepCount} ステップ)");
             }
@@ -1049,7 +1179,7 @@ namespace Lib.Ui.Screens.ViewModels
 
         /// <summary>
         /// F2: 全ステップをステップ番号（No列）昇順でソート
-        /// 概要：ユーザーが手入力した番号（1.1, 2.5 等）の昇順に並び替える。
+        /// 概要：ユーザーが手入力した番号（0 以上の整数）の昇順に並び替える。
         /// </summary>
         [RelayCommand]
         private void SortByStepNumber()
@@ -2069,6 +2199,9 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // BUG-20260728-06: 色プリセット変更を Undo 対象にする（変更前にスナップショット）
+            SaveUndoState();
+
             SelectedStep.ColorR = item.R;
             SelectedStep.ColorG = item.G;
             SelectedStep.ColorB = item.B;
@@ -2097,6 +2230,9 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // BUG-20260728-06: カスタム色プリセット変更を Undo 対象にする（変更前にスナップショット）
+            SaveUndoState();
+
             SelectedStep.ColorR = item.R;
             SelectedStep.ColorG = item.G;
             SelectedStep.ColorB = item.B;
@@ -2113,6 +2249,10 @@ namespace Lib.Ui.Screens.ViewModels
         private void EditCustomColor(CustomColorPresetItem? item)
         {
             if (item == null) return;
+
+            // BUG-20260728-06: ダイアログの色編集は選択行へリアルタイム反映されるため、
+            //                  編集前に一度だけ Undo スナップショットを取る（選択行がある場合）。
+            if (SelectedStep != null) SaveUndoState();
 
             var dlg = new DlgColorPicker { Owner = System.Windows.Application.Current?.MainWindow };
             dlg.SetInitialColor(item.R, item.G, item.B);
@@ -2185,6 +2325,9 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // BUG-20260728-06: Cmd（動作）変更を Undo 対象にする（変更前にスナップショット）
+            SaveUndoState();
+
             var (cmdType, effType, continuous) = MapActionToCommand(item.Command);
             SelectedStep.CommandType = cmdType;
             SelectedStep.EffectType = effType ?? "";
@@ -2217,7 +2360,9 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             // 動作確定の手応えとして、当該行を即時実行（接続中のみ）
-            if (_lighting != null && _lighting.IsConnected)
+            // BUG-20260728-05: 進行ロック中は送信しない（色経路 ReExecuteCurrentStep と同じ挙動に揃える）。
+            //                  Cmd 値の反映は許可し、実機への送信のみ抑止する。
+            if (!IsProgressLocked && _lighting != null && _lighting.IsConnected)
             {
                 _ = ExecuteStepWithoutAdvanceAsync();
             }
@@ -2455,8 +2600,33 @@ namespace Lib.Ui.Screens.ViewModels
             }
             finally { _suppressAutoExecute = false; }
 
-            _ = StopExecutionAsync();
+            // BUG-20260729-06/09: 「■停止相当（色ホールド）」ではなく off 行を実際に実行して黒(Cmd:Off)/
+            //   信号Off(Cmd:SignalOff)を「最後に」送る。加えて離脱前にループの in-flight 送信の完了を待つことで、
+            //   後着の色送信が off を上書きするのを防ぐ（Chase/OL の 1行目/2行目どちらから到達しても
+            //   確実に消灯/信号Off になる）。旧実装は StopExecutionAsync で「停止時の色を保持」する仕様(No.74)を
+            //   流用していたため、off 行に来ても点灯が残っていた。
+            _ = ExecuteOffExitAsync();
             return true;
+        }
+
+        /// <summary>
+        /// Chase/OL 離脱先が off 行のとき、ループ停止 → in-flight 送信の完了待ち → off 行の実行の順で
+        /// 確実に反映する（BUG-20260729-06/09）。SelectedStep は呼び出し側で off 行に設定済み。
+        /// </summary>
+        private async Task ExecuteOffExitAsync()
+        {
+            StopLoopExecution();            // ループをキャンセル（呼び出し側で実行済みでも冪等）
+            await AwaitLoopStoppedAsync();  // ループの現イテレーション（in-flight 送信）の完了を待つ
+            try { await ExecuteStepWithoutAdvanceAsync(); }  // off 行を実行して黒/SignalOff を送る
+            catch (Exception ex) { AppendLog("ERR", $"Off 離脱実行失敗: {ex.Message}"); }
+        }
+
+        /// <summary>実行中ループの現イテレーション（in-flight 送信）が完了するまで待つ（最大 timeoutMs）。</summary>
+        private async Task AwaitLoopStoppedAsync(int timeoutMs = 1500)
+        {
+            var completion = _loopCompletion;
+            if (completion == null) return;
+            await Task.WhenAny(completion.Task, Task.Delay(timeoutMs));
         }
 
         /// <summary>
@@ -2504,8 +2674,13 @@ namespace Lib.Ui.Screens.ViewModels
             var prev = SelectedStep;                        // 移動前の行（enter-from-outside 判定用）
             CurrentStepIndex = exitIndex;
             SelectedStep = EditingSteps[exitIndex];
-            // 矢印でマーカー行に「外から」入ったら自動起動（離脱操作中=wasLooping は起動しない）
-            if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
+            // BUG-20260728-01: 離脱着地先が「隣接する別の Chase/OL ブロック」のマーカーなら、
+            //   ループ離脱中（wasLooping=true）でもそのブロックを起動して乗り継げるようにする
+            //   （後半 OL → 次 Chase への切替が効かなかった問題の解消）。
+            //   exitIndex は必ず離脱元ブロックの外側（end+1 / start-1）なので、離脱元ブロックが
+            //   誤って再起動されることはない。一般行(off含む)へ着地した場合は TryAutoStartLoop 側で
+            //   マーカー判定に弾かれ何も起動しない。
+            TryAutoStartLoop(SelectedStep, prev);
             StatusMessage = forward
                 ? $"次ステップへ移動：{exitIndex + 1} / {EditingSteps.Count}"
                 : $"前ステップ：{exitIndex + 1} / {EditingSteps.Count}";
@@ -2681,8 +2856,7 @@ namespace Lib.Ui.Screens.ViewModels
             // セマフォが保持されたままの場合に強制解放（Chase 中の API 呼び出しがブロックしている場合の救済）
             if (_executionSemaphore.CurrentCount == 0)
             {
-                try { _executionSemaphore.Release(); }
-                catch (SemaphoreFullException) { /* already released */ }
+                ReleaseExecutionSemaphoreSafe();
             }
 
             // 一括再生中ならシーケンス停止＋停止時の色を維持する
@@ -2707,6 +2881,21 @@ namespace Lib.Ui.Screens.ViewModels
                 StatusMessage = $"停止失敗: {ex.Message}";
                 AppendLog("ERR", $"Stop 失敗: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// _executionSemaphore を解放する。BUG-20260803-01: Chase 実行中の行送り境界で停止を押すと、
+        /// StopExecutionAsync の救済解放（CurrentCount==0 を見て Release）と、ちょうど終了しかけた
+        /// ExecuteStepWithoutAdvanceAsync の解放が競合し、二重解放で SemaphoreFullException
+        /// （"Adding the specified count to the semaphore would cause it to exceed its maximum count."）
+        /// が finally から Chase ループの catch まで伝播して誤エラーログが出ていた。
+        /// SemaphoreSlim は最大数超過時にインクリメント前に throw するため、二重解放してもカウントは
+        /// 1（available）のままで状態は正常。ここで SemaphoreFullException を握りつぶし、誤ログを抑止する。
+        /// </summary>
+        private void ReleaseExecutionSemaphoreSafe()
+        {
+            try { _executionSemaphore.Release(); }
+            catch (SemaphoreFullException) { /* 救済解放と競合した二重解放。無害なので無視 */ }
         }
 
         /// <summary>
@@ -2803,20 +2992,55 @@ namespace Lib.Ui.Screens.ViewModels
                 // 解除
                 IsEmergencyActive = false;
                 EmergencyMode = null;
+                // BUG-20260729-08: Emergency Black 抑止を解除（この後の選択行再実行で通常色に復帰させる）。
+                _lighting?.SetEmergencyHold(false);
                 StatusMessage = "Emergency モードを解除しました。";
                 AppendLog("INFO", $"Emergency ({mode}) 解除");
 
-                // 解除時は選択行を再実行して復帰
-                try { await ExecuteStepWithoutAdvanceAsync(); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
+                // 復帰処理は退避フラグをここで消費する（例外経路でも取りこぼさない）
+                var wasLoopRunning = _wasLoopRunningBeforeEmergency;
+                _wasLoopRunningBeforeEmergency = false;
+
+                // BUG-20260725-01: Emergency 進入前に Chase/OL ループが走っていて、かつ選択行が
+                // Chase/OL マーカーのままなら、そのブロックのループを再起動して動的点灯に復帰させる。
+                // 単発の ExecuteStepWithoutAdvanceAsync だけだと、Chase 行は CommandType="Color"（単色）
+                // のため1色を出して固着していた（7色/Rainbow 等の Effect 行はAPI側が自走するため復帰できていた）。
+                if (wasLoopRunning && SelectedStep != null
+                    && (SelectedStep.Trig == "Chase" || SelectedStep.Trig == "OL"))
+                {
+                    // IsEmergencyActive は上で false 済みのため TryAutoStartLoop のガードを通過する。
+                    TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
+                    AppendLog("INFO", $"Emergency 解除: {SelectedStep.Trig} ループを再起動");
+
+                    // マーカー消失/進行ロック等で再起動できなかった場合は従来どおり単発再実行にフォールバック。
+                    if (!IsLoopRunning)
+                    {
+                        try { await ExecuteStepWithoutAdvanceAsync(); }
+                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
+                    }
+                }
+                else
+                {
+                    // 解除時は選択行を再実行して復帰（単発 Color/Effect/Rainbow はこれで正しく戻る）
+                    try { await ExecuteStepWithoutAdvanceAsync(); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
+                }
                 return;
             }
 
             // 有効化 — UIを即座に更新してから送信（ラグ防止）
             IsEmergencyActive = true;
             EmergencyMode = mode;
+            // BUG-20260729-08: 抜線中でも再接続後に黒を保持できるよう、接続状態に依らず抑止フラグを立てる。
+            // （下の黒送信は IsConnected ガードでスキップされ得るが、抑止フラグは Facade 側の
+            //   KeepAlive/再接続で黒を送らせるため、旧点灯色の復活を防ぐ。）
+            _lighting?.SetEmergencyHold(true);
             StatusMessage = $"Emergency モード ({mode}) 有効 — 照明操作は抑止されています。";
             AppendLog("INFO", $"Emergency ({mode}) 有効");
+
+            // BUG-20260725-01: ループ停止で状態が失われる前に、Chase/OL ループ実行中だったかを退避する。
+            // 解除時にこれを見て、単発再実行ではなくループ再起動で復帰させる。
+            _wasLoopRunningBeforeEmergency = IsLoopRunning;
 
             // NO.36: 即応性確保 — 色送信より「先に」ローカルの連続送信ループを止める。
             // Color遷移ループ/Chase/OL/サブシーケンスが単一 HttpClient を占有し続けると、
@@ -2984,7 +3208,8 @@ namespace Lib.Ui.Screens.ViewModels
             // B7: セマフォ待ち中にキャンセルされた場合はスキップ
             if (transitionToken.IsCancellationRequested)
             {
-                _executionSemaphore.Release();
+                // BUG-20260803-01: 停止（StopExecutionAsync の救済解放）と競合し得るため安全解放。
+                ReleaseExecutionSemaphoreSafe();
                 return;
             }
 
@@ -3220,8 +3445,8 @@ namespace Lib.Ui.Screens.ViewModels
             }
             finally
             {
-                // B7: セマフォを解放
-                _executionSemaphore.Release();
+                // B7: セマフォを解放。BUG-20260803-01: 停止の救済解放と競合し得るため安全解放で二重解放を無害化。
+                ReleaseExecutionSemaphoreSafe();
             }
         }
 
@@ -3254,6 +3479,22 @@ namespace Lib.Ui.Screens.ViewModels
             if (_reExecuteScheduled) return; // 既にトレーリング実行が予約済み
             _reExecuteScheduled = true;
             _ = RunTrailingReExecuteAsync();
+        }
+
+        /// <summary>
+        /// カラーピッカー（Color ボタン）で確定した色を選択行へ反映する。
+        /// BUG-20260728-06: 反映前に Undo スナップショットを取り、色変更を Undo 可能にする。
+        /// IntegratedWindow の ColorPickerConfirmed から呼ばれる。
+        /// </summary>
+        public void ApplyColorFromPicker(byte r, byte g, byte b)
+        {
+            if (SelectedStep == null) return;
+            SaveUndoState();
+            SelectedStep.ColorR = r;
+            SelectedStep.ColorG = g;
+            SelectedStep.ColorB = b;
+            // NO.37: 反映後にその行を再実行し、変更色を実機へ送信する（進行ロック等は内部で判定）
+            ReExecuteCurrentStep();
         }
 
         /// <summary>
@@ -3536,6 +3777,29 @@ namespace Lib.Ui.Screens.ViewModels
             => TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
 
         /// <summary>
+        /// BUG-20260806-01: 指定行が「自動起動できる Chase/OL ブロック」に属するか判定する。
+        /// 対象行が "Chase"/"OL" マーカーで、同種マーカーの連続ブロック(2〜15行)が成立するとき true。
+        /// 選択即実行（OnSelectedStepChanged の auto-execute）を、この直後に走る TryAutoStartLoop へ
+        /// 委譲してよいか（＝冗長な色送信を抑止してよいか）の判断に使う。TryAutoStartLoop のブロック
+        /// 検出規則と一致させること。
+        /// </summary>
+        private bool IsAutoStartableLoopBlockRow(SequenceStepWrapper? row)
+        {
+            if (row == null) return false;
+            var mode = row.Trig;
+            if (mode != "Chase" && mode != "OL") return false;
+
+            int idx = EditingSteps.IndexOf(row);
+            if (idx < 0) return false;
+
+            int start = idx, end = idx;
+            while (start - 1 >= 0 && EditingSteps[start - 1].Trig == mode) start--;
+            while (end + 1 < EditingSteps.Count && EditingSteps[end + 1].Trig == mode) end++;
+            int count = end - start + 1;
+            return count >= 2 && count <= 15;
+        }
+
+        /// <summary>
         /// マーカー行に「カーソルが当たった」ときの Chase/OL 自動起動。
         /// 起動条件：対象行が "Chase"/"OL" マーカー、接続済み、非常停止/進行ロックでない、
         /// 同種マーカーの連続ブロック(2〜15行)が成立すること。
@@ -3628,6 +3892,8 @@ namespace Lib.Ui.Screens.ViewModels
             foreach (var s in steps) s.Trig = "Chase";
 
             _loopCts = new CancellationTokenSource();
+            var loopDone = new TaskCompletionSource<bool>();  // BUG-20260729-06/09: off 離脱時の in-flight 完了待ち用
+            _loopCompletion = loopDone;
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
@@ -3657,6 +3923,10 @@ namespace Lib.Ui.Screens.ViewModels
                         await ExecuteStepWithoutAdvanceAsync();
                         if (token.IsCancellationRequested) break;
 
+                        // BUG-20260729-06/09: ループ内に off/SignalOff 行があれば、実行後にループを止める
+                        //   （継続すると次サイクルの色送信で off が打ち消されるため）。
+                        if (IsOffStep(step)) { StopLoopExecution(); break; }
+
                         // 待機時間: BPM > 0 なら BPM 優先、そうでなければ Time 列
                         // 未設定（Time=0 かつ BPM 既定120/0）のときは既定周期で自動サイクル（1色目で固着しない）
                         int waitMs;
@@ -3680,6 +3950,7 @@ namespace Lib.Ui.Screens.ViewModels
             catch (OperationCanceledException) { }
             catch (Exception ex) { AppendLog("ERR", $"Chase エラー: {ex.Message}"); }
 
+            loopDone.TrySetResult(true);  // BUG-20260729-06/09: off 離脱側の完了待ちを解除
             // Trig（Chase 指定）は保存対象なのでループ終了時も残す。
             StatusMessage = "Chase 停止";
             AppendLog("INFO", "Chase 停止");
@@ -3721,6 +3992,8 @@ namespace Lib.Ui.Screens.ViewModels
             foreach (var s in steps) s.Trig = "OL";
 
             _loopCts = new CancellationTokenSource();
+            var loopDone = new TaskCompletionSource<bool>();  // BUG-20260729-06/09: off 離脱時の in-flight 完了待ち用
+            _loopCompletion = loopDone;
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
@@ -3738,6 +4011,29 @@ namespace Lib.Ui.Screens.ViewModels
 
                         var current = steps[i];
                         var next = steps[(i + 1) % steps.Count];
+
+                        // Chase と同じく、セグメント開始時に選択（ハイライト）を「現在行 current」へ即時反映する。
+                        // これで Chase/OL の「群に入る/出る」体感（マーカー位相・退場キー数・着地行）が一致する。
+                        // 旧実装はフェード完了後に next へ更新していたため、群に入った瞬間はマーカーが入場行に
+                        // 居座り、Chase（即・群先頭へジャンプ）と位相がずれ、Ret 退場のキー数・着地が食い違っていた。
+                        // フェードは from=current / to=next のまま（見た目の色遷移は不変）。
+                        _suppressAutoExecute = true;
+                        try
+                        {
+                            SelectedStep = current;
+                            CurrentStepIndex = EditingSteps.IndexOf(current);
+                        }
+                        finally { _suppressAutoExecute = false; }
+
+                        // BUG-20260729-06/09: OL ブロック内に off/SignalOff 行があれば、色フェードせず
+                        //   off を実行してループを止める（継続すると次セグメントの色送信で off が打ち消される）。
+                        if (IsOffStep(current))
+                        {
+                            try { await ExecuteStepWithoutAdvanceAsync(); }
+                            catch (Exception ex) { AppendLog("ERR", $"OL off 実行失敗: {ex.Message}"); }
+                            StopLoopExecution();
+                            break;
+                        }
 
                         // フェード時間: 次の行の BPM/Time。
                         // 未設定（Time=0 かつ BPM 既定120/0）は既定周期で自動サイクル（0 だと無遅延ループ＝暴走するため）
@@ -3769,21 +4065,13 @@ namespace Lib.Ui.Screens.ViewModels
                         var adjustedWait = Math.Max(1, fadeMs - elapsed);
                         try { await Task.Delay(adjustedWait, token); }
                         catch (OperationCanceledException) { break; }
-
-                        // 選択をUIに反映
-                        _suppressAutoExecute = true;
-                        try
-                        {
-                            SelectedStep = next;
-                            CurrentStepIndex = EditingSteps.IndexOf(next);
-                        }
-                        finally { _suppressAutoExecute = false; }
                     }
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { AppendLog("ERR", $"Overlap エラー: {ex.Message}"); }
 
+            loopDone.TrySetResult(true);  // BUG-20260729-06/09: off 離脱側の完了待ちを解除
             // Trig（OL 指定）は保存対象なのでループ終了時も残す。
             StatusMessage = "Overlap 停止";
             AppendLog("INFO", "Overlap 停止");
@@ -4159,19 +4447,23 @@ namespace Lib.Ui.Screens.ViewModels
         {
             var currentId = SelectedSequence?.Id;
 
-            // 再読込に伴う選択遷移は自動実行を抑制
-            _suppressAutoExecute = true;
+            // BUG-20260728-03/04: 一覧再読込中は OnSelectedSequenceChanged を no-op にして、
+            //   編集中セッション（EditingSteps）をクリア/再構築しない（未保存編集を保持）。
+            //   選択と編集対象の参照だけ新インスタンスへ張り替える。
+            _reloadingSequenceList = true;
             try
             {
                 ReloadSequences();
                 if (!string.IsNullOrEmpty(currentId))
                 {
-                    SelectedSequence = Sequences.FirstOrDefault(s => s.Id == currentId);
+                    var refreshed = Sequences.FirstOrDefault(s => s.Id == currentId);
+                    SelectedSequence = refreshed;
+                    if (refreshed != null) _editingSequence = refreshed;
                 }
             }
             finally
             {
-                _suppressAutoExecute = false;
+                _reloadingSequenceList = false;
             }
             StatusMessage = $"一覧を更新しました（{Sequences.Count} 件）。";
         }
