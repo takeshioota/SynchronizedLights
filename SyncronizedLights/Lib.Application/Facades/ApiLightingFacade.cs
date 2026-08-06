@@ -79,6 +79,32 @@ namespace Lib.Application.Facades
         /// </summary>
         private bool _apiEffectRunning;
 
+        /// <summary>
+        /// BUG-20260729-08: Emergency Black 抑止中フラグ。
+        /// true の間、KeepAlive・再接続時の色再送を黒(0,0,0)に固定し、
+        /// 抜線中に Emergency Black を押した場合でも再接続後の点灯復活を防ぐ。
+        /// </summary>
+        private volatile bool _emergencyHold;
+
+        /// <summary>
+        /// BUG-20260806-01: 送信ゲート。KeepAlive（api/light/global 再送）とグローバル発光/
+        /// エフェクト送信を直列化するための排他。OL/エフェクト開始直後に走り出した遷移を、
+        /// 直前にガードを通過して発行済みの KeepAlive が StartColorHold 経由で打ち消す TOCTOU
+        /// レース（OL 先頭色がまれに一瞬で消えて次色へ移る不具合）を防ぐ。
+        /// KeepAlive 側は非ブロッキング取得（取れなければスキップ＝無害）、コマンド側は短い
+        /// タイムアウトで取得し、取れなければゲート無しで続行して OL ループのテンポを止めない。
+        /// </summary>
+        private readonly SemaphoreSlim _sendGate = new(1, 1);
+
+        /// <summary>コマンド側が _sendGate を取得する際の最大待機（ms）。取得失敗時はゲート無しで続行。</summary>
+        private const int SendGateTimeoutMs = 300;
+
+        /// <summary>
+        /// 診断用：最後に FadeColorAsync を発行した時刻（UTC）。KeepAlive がフェード直後に
+        /// api/light/global を送っていないか（＝レース裏取り）のログ判定に使う。
+        /// </summary>
+        private DateTime _lastFadeStartTime = DateTime.MinValue;
+
         #endregion フィールド
 
         #region プロパティ (ILightingFacade)
@@ -189,6 +215,23 @@ namespace Lib.Application.Facades
             return false;
         }
 
+        /// <summary>
+        /// BUG-20260806-01: コマンド送信用に _sendGate を短時間で取得する。
+        /// 取得できたら true（呼び出し側は finally で <see cref="ReleaseSendGate"/> を呼ぶこと）。
+        /// 取得できなければ false＝ゲート無しで続行する（OL/エフェクトのテンポを止めない）。
+        /// </summary>
+        private async Task<bool> TryEnterSendGateAsync(CancellationToken ct)
+        {
+            try { return await _sendGate.WaitAsync(SendGateTimeoutMs, ct); }
+            catch (OperationCanceledException) { return false; }
+        }
+
+        /// <summary><see cref="TryEnterSendGateAsync"/> で取得したゲートを解放する。</summary>
+        private void ReleaseSendGate(bool entered)
+        {
+            if (entered) _sendGate.Release();
+        }
+
         #endregion ポリシー判定
 
         #region 接続管理 (ILightingFacade)
@@ -297,6 +340,66 @@ namespace Lib.Application.Facades
             }
         }
 
+        public async Task SetReceiverChannelAsync(byte channel, CancellationToken ct = default)
+        {
+            try
+            {
+                _lastError = null;
+                var request = new { channel = (int)channel };
+                var response = await _httpClient.PostAsJsonAsync("api/light/rx-channel", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? "受信端チャンネル設定(A6)に失敗しました";
+                    throw new InvalidOperationException(_lastError);
+                }
+
+                Log.Information("[Api] SetReceiverChannel (A6): ch={Ch}, {Msg}", channel, result.Message);
+            }
+            catch (HttpRequestException ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] SetReceiverChannel (A6) HTTP error");
+                throw;
+            }
+            finally
+            {
+                await RefreshStatusAsync();
+                RaiseStatusChanged();
+            }
+        }
+
+        public async Task SetReceiverChannelColAsync(byte channel, CancellationToken ct = default)
+        {
+            try
+            {
+                _lastError = null;
+                var request = new { channel = (int)channel };
+                var response = await _httpClient.PostAsJsonAsync("api/light/rx-channel-col", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _lastError = result.Error ?? "受信端チャンネル設定(AD)に失敗しました";
+                    throw new InvalidOperationException(_lastError);
+                }
+
+                Log.Information("[Api] SetReceiverChannelCol (AD): ch={Ch}, {Msg}", channel, result.Message);
+            }
+            catch (HttpRequestException ex)
+            {
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Error(ex, "[Api] SetReceiverChannelCol (AD) HTTP error");
+                throw;
+            }
+            finally
+            {
+                await RefreshStatusAsync();
+                RaiseStatusChanged();
+            }
+        }
+
         public void ClearError()
         {
             _lastError = null;
@@ -360,6 +463,10 @@ namespace Lib.Application.Facades
                         "[Api] Reconnected {Count} port(s). TotalReconnect={Total}",
                         reconnected, ReconnectCount);
                     RaiseStatusChanged();
+
+                    // BUG-20260729-08: 再接続時に Emergency Black 抑止中なら、KeepAlive を待たず即座に黒を送って
+                    // 消灯を維持する（抜線中に押した Emergency Black を確実に反映する）。
+                    if (_emergencyHold) await SendBlackHoldAsync(ct);
                 }
                 else
                 {
@@ -383,10 +490,63 @@ namespace Lib.Application.Facades
 
         #region 制御 (ILightingFacade)
 
+        public async Task FadeColorAsync(Rgb from, Rgb to, int durationMs, int fadeSteps = 20, CancellationToken ct = default)
+        {
+            if (ShouldDropCommand("Fade")) return;
+
+            // BUG-20260806-01: 送信ゲートを取得してから発行する。KeepAlive の api/light/global が
+            // このフェード直後に割り込んで StartColorHold で打ち消す TOCTOU レースを防ぐ。
+            var entered = await TryEnterSendGateAsync(ct);
+            // API 側が補間フレームを連続送信するため、StartEffectAsync と同様に KeepAlive を抑止する。
+            // これを怠ると KeepAlive が api/light/global を叩き、StartColorHold 経由で遷移が停止してしまう。
+            _apiEffectRunning = true;
+            _lastCommandTime = DateTime.UtcNow;
+            _lastFadeStartTime = DateTime.UtcNow;   // 診断用
+            try
+            {
+                var request = new
+                {
+                    from = new { r = (int)from.R, g = (int)from.G, b = (int)from.B },
+                    to = new { r = (int)to.R, g = (int)to.G, b = (int)to.B },
+                    durationMs,
+                    fadeSteps,
+                    field = 0,
+                };
+                var response = await _httpClient.PostAsJsonAsync("api/effect/fade", request, _jsonOptions, ct);
+                var result = await ReadApiResponseAsync(response, ct);
+
+                if (!result.Success)
+                {
+                    _apiEffectRunning = false;
+                    _lastError = result.Error ?? "Fade 開始失敗";
+                    Log.Warning("[Api] Fade failed: {Err}", _lastError);
+                }
+                else
+                {
+                    // 遷移後は API が to を保持する。KeepAlive 用に最終色を記録しておく。
+                    _lastSentColor = to;
+                    Log.Information("[Api] Fade started. ({FR},{FG},{FB})→({TR},{TG},{TB}) {Ms}ms",
+                        from.R, from.G, from.B, to.R, to.G, to.B, durationMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                _apiEffectRunning = false;
+                _lastError = $"HTTP通信エラー: {ex.Message}";
+                Log.Warning("[Api] Fade HTTP error: {Err}", ex.Message);
+            }
+            finally
+            {
+                ReleaseSendGate(entered);
+            }
+        }
+
         public async Task SetColorAsync(Target target, Rgb color, CancellationToken ct = default)
         {
             if (ShouldDropCommand("SetColor")) return;
 
+            // BUG-20260806-01: 送信ゲート取得後にフラグ更新＋送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             _apiEffectRunning = false;
             var startTs = Stopwatch.GetTimestamp();
             try
@@ -402,6 +562,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RecordLatency(startTs);
                 RaiseStatusChanged();
             }
@@ -528,6 +689,8 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("Rainbow")) return;
 
+            // BUG-20260806-01: 送信ゲート取得後にフラグ更新＋送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             _apiEffectRunning = true;
             _lastCommandTime = DateTime.UtcNow;
             var startTs = Stopwatch.GetTimestamp();
@@ -567,6 +730,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RecordLatency(startTs);
                 RaiseStatusChanged();
             }
@@ -576,6 +740,8 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("RainbowStop")) return;
 
+            // BUG-20260806-01: 送信ゲート取得後にフラグ更新＋送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             _apiEffectRunning = false;
             var startTs = Stopwatch.GetTimestamp();
             try
@@ -600,6 +766,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RecordLatency(startTs);
                 RaiseStatusChanged();
             }
@@ -609,6 +776,8 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand("RainbowPause")) return;
 
+            // BUG-20260806-01: 送信ゲート取得後に送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             var startTs = Stopwatch.GetTimestamp();
             try
             {
@@ -632,6 +801,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RecordLatency(startTs);
                 RaiseStatusChanged();
             }
@@ -696,6 +866,8 @@ namespace Lib.Application.Facades
         {
             if (ShouldDropCommand($"Effect.{effectType}")) return;
 
+            // BUG-20260806-01: 送信ゲート取得後にフラグ更新＋送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             _apiEffectRunning = true;
             // StartRainbowAsync と同様に更新する。これを怠ると、エフェクトの各ステップ間
             // （事前停止で _apiEffectRunning が一瞬 false になる隙間）で KeepAlive が
@@ -757,6 +929,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RecordLatency(startTs);
                 RaiseStatusChanged();
             }
@@ -767,6 +940,8 @@ namespace Lib.Application.Facades
         /// </summary>
         public async Task StopEffectAsync(CancellationToken ct = default)
         {
+            // BUG-20260806-01: 送信ゲート取得後にフラグ更新＋送信（KeepAlive との割り込みを直列化）。
+            var entered = await TryEnterSendGateAsync(ct);
             _apiEffectRunning = false;
             try
             {
@@ -781,6 +956,7 @@ namespace Lib.Application.Facades
             }
             finally
             {
+                ReleaseSendGate(entered);
                 RaiseStatusChanged();
             }
         }
@@ -1068,6 +1244,29 @@ namespace Lib.Application.Facades
         }
 
         /// <summary>
+        /// BUG-20260729-08: Emergency Black 抑止フラグを設定する。
+        /// true の間、SendKeepAliveAsync は _lastSentColor ではなく黒(0,0,0)を送る。
+        /// </summary>
+        public void SetEmergencyHold(bool active)
+        {
+            _emergencyHold = active;
+            // 次の KeepAlive を待たずに黒を反映できるよう、直近送信時刻をリセットする。
+            if (active) _lastCommandTime = DateTime.MinValue;
+        }
+
+        /// <summary>黒(0,0,0)を api/light/global へ送る（Emergency Black 抑止の共通処理）。</summary>
+        private async Task SendBlackHoldAsync(CancellationToken ct)
+        {
+            try
+            {
+                var blackReq = new { color = new { r = 0, g = 0, b = 0 } };
+                await _httpClient.PostAsJsonAsync("api/light/global", blackReq, _jsonOptions, ct);
+                _lastCommandTime = DateTime.UtcNow;
+            }
+            catch { /* 失敗は次回リトライで回復 */ }
+        }
+
+        /// <summary>
         /// KeepAlive: 最後に送信した色を再送する。
         /// SNO端末は 2.4GHz 信号途絶後 1〜3 秒でセルフモードに復帰するため、
         /// 定期的に再送して制御モードを維持する。
@@ -1076,24 +1275,59 @@ namespace Lib.Application.Facades
         public async Task SendKeepAliveAsync(CancellationToken ct = default)
         {
             if (!_isConnected) return;
-            if (_lastSentColor == null) return;
-            // API 側エフェクト実行中は KeepAlive 不要（エフェクト自身が連続送信している）
-            // KeepAlive が api/light/global を叩くと StartColorHold でエフェクトが停止してしまう
-            if (_apiEffectRunning) return;
-            // 直近 800ms 以内にコマンド送信済みなら再送不要
-            if ((DateTime.UtcNow - _lastCommandTime).TotalMilliseconds < 800) return;
 
+            // BUG-20260806-01: 送信ゲートを非ブロッキングで取得する。取得できない＝別のコマンド送信中
+            // なので KeepAlive はスキップ（無害）。取得後にガードを「再判定」することで、
+            // 「ガード通過（_apiEffectRunning=false）→ await 送信」の隙間にフェード/エフェクト送信が
+            // 割り込み、KeepAlive の api/light/global が StartColorHold で走行中フェードを打ち消す
+            // TOCTOU レース（OL 先頭色がまれに一瞬で消えて次色へ移る不具合）を防ぐ。
+            if (!_sendGate.Wait(0)) return;
             try
             {
-                var color = _lastSentColor!;
-                var colorObj = new { r = (int)color.R, g = (int)color.G, b = (int)color.B };
-                var request = new { color = colorObj };
-                await _httpClient.PostAsJsonAsync("api/light/global", request, _jsonOptions, ct);
-                _lastCommandTime = DateTime.UtcNow;
+                // BUG-20260729-08: Emergency Black 抑止中は _lastSentColor（旧点灯色の可能性）ではなく黒を送る。
+                // 抜線→Emergency Black→再接続 で旧点灯色が復活する不具合を防ぐ。
+                if (_emergencyHold)
+                {
+                    if (_apiEffectRunning) return;
+                    if ((DateTime.UtcNow - _lastCommandTime).TotalMilliseconds < 800) return;
+                    await SendBlackHoldAsync(ct);
+                    return;
+                }
+                if (_lastSentColor == null) return;
+                // API 側エフェクト実行中は KeepAlive 不要（エフェクト自身が連続送信している）
+                // KeepAlive が api/light/global を叩くと StartColorHold でエフェクトが停止してしまう
+                if (_apiEffectRunning) return;
+                // 直近 800ms 以内にコマンド送信済みなら再送不要
+                if ((DateTime.UtcNow - _lastCommandTime).TotalMilliseconds < 800) return;
+
+                try
+                {
+                    var color = _lastSentColor!;
+
+                    // 診断（BUG-20260806-01）: フェード直後に KeepAlive が api/light/global を送るのは
+                    // フェード中断レースの痕跡。ゲート導入後は基本的に発火しないはず（発火＝再発の兆候）。
+                    var sinceFadeMs = (DateTime.UtcNow - _lastFadeStartTime).TotalMilliseconds;
+                    if (sinceFadeMs < 1500)
+                    {
+                        Log.Warning(
+                            "[Api][診断] KeepAlive が api/light/global を送信（直近フェードから {Ms:F0}ms、色=({R},{G},{B})）。" +
+                            "フェード中断レースの可能性あり。",
+                            sinceFadeMs, color.R, color.G, color.B);
+                    }
+
+                    var colorObj = new { r = (int)color.R, g = (int)color.G, b = (int)color.B };
+                    var request = new { color = colorObj };
+                    await _httpClient.PostAsJsonAsync("api/light/global", request, _jsonOptions, ct);
+                    _lastCommandTime = DateTime.UtcNow;
+                }
+                catch
+                {
+                    // KeepAlive 失敗はアクション不要（次回リトライで回復）
+                }
             }
-            catch
+            finally
             {
-                // KeepAlive 失敗はアクション不要（次回リトライで回復）
+                _sendGate.Release();
             }
         }
 
@@ -1432,6 +1666,7 @@ namespace Lib.Application.Facades
             _disposed = true;
 
             try { _httpClient?.Dispose(); } catch { /* ignore */ }
+            try { _sendGate?.Dispose(); } catch { /* ignore */ }
 
             GC.SuppressFinalize(this);
         }
