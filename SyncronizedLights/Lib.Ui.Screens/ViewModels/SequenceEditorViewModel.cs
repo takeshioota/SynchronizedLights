@@ -2656,15 +2656,21 @@ namespace Lib.Ui.Screens.ViewModels
 
             int exitIndex = forward ? end + 1 : start - 1;
 
-            // ブロックが端に接していて外側に行が無い場合は端メッセージのみ（ブロック内へは戻さない）
-            if (exitIndex < 0)
+            // ブロックが端に接していて外側に行が無い場合（抜け先なし）。
+            //   ・実行中(wasLooping)の初回押下 … 呼び出し側で停止済み。端メッセージのみ＝その時の色を
+            //     ホールドしたまま（No.74 の停止仕様どおり）。
+            //   ・停止中(!wasLooping)の再押下 … 抜け先が無いので、その場で Chase/OL を先頭から再開する
+            //     （No.94: 従来はマウスクリックでしか再開できず「↑↓で再開できない」違和感があった）。
+            //     クリック入口と同じ prevForEnterCheck:null で起動する（enter-from-outside 判定なし＝確実に起動）。
+            if (exitIndex < 0 || exitIndex >= EditingSteps.Count)
             {
-                StatusMessage = "最初のステップです。";
-                return true;
-            }
-            if (exitIndex >= EditingSteps.Count)
-            {
-                StatusMessage = "最後のステップです。";
+                if (!wasLooping)
+                {
+                    TryAutoStartLoop(EditingSteps[idx], prevForEnterCheck: null);
+                    StatusMessage = $"{mode} を先頭から再開しました。";
+                    return true;
+                }
+                StatusMessage = exitIndex < 0 ? "最初のステップです。" : "最後のステップです。";
                 return true;
             }
 
