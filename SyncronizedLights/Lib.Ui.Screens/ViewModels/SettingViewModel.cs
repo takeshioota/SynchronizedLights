@@ -62,6 +62,20 @@ namespace Lib.Ui.Screens.ViewModels
         private bool isBusy;
 
         /// <summary>
+        /// 送信機初期化(FA/FB)実行中かどうか
+        /// 概要：初期化中は接続設定ダイアログの「閉じる」を無効化するためのフラグ。
+        ///       手動初期化・接続時の自動初期化の双方でセット/クリアする。
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanClose))]
+        private bool isInitializing;
+
+        /// <summary>
+        /// 接続設定ダイアログを閉じてよいか（初期化中は false）。
+        /// </summary>
+        public bool CanClose => !IsInitializing;
+
+        /// <summary>
         /// Transport 接続状態
         /// 概要：ILightingFacade.IsConnected を追跡。
         /// Connect / Disconnect ボタン および COM チェックボックスの
@@ -131,12 +145,18 @@ namespace Lib.Ui.Screens.ViewModels
 
         /// <summary>
         /// 送信機チャネル設定値（FA）
-        /// 概要：範囲 1〜4（プロトコル仕様）。
-        ///       ch=1:2405MHz / ch=2:2.434GHz / ch=3:2.451GHz / ch=4:2.475GHz
+        /// 概要：使用可能は 2〜4。ch=1(2405MHz) は端末未実装のため使用不可。
+        ///       ch=2:2.434GHz / ch=3:2.451GHz / ch=4:2.475GHz（端末既定）
+        /// 既定：4（端末の工場既定に合わせる）。
         /// </summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsChannelValid))]
-        private byte channelValue = 1;
+        private byte channelValue = 4;
+
+        /// <summary>
+        /// Channel 選択肢（ComboBox 用）。CH1 は表示のみで選択不可。
+        /// </summary>
+        public IReadOnlyList<ChannelOption> ChannelOptions => ChannelOption.All;
 
         /// <summary>
         /// 送信機送信電力設定値（FB）
@@ -148,9 +168,10 @@ namespace Lib.Ui.Screens.ViewModels
         private byte powerValue = 3;
 
         /// <summary>
-        /// Channel値が有効範囲内かどうか（1〜4）
+        /// Channel値が有効範囲内かどうか（2〜4）。
+        /// CH1(2405MHz) は端末未実装のため無効扱い（選択・送信させない）。
         /// </summary>
-        public bool IsChannelValid => ChannelValue >= 1 && ChannelValue <= 4;
+        public bool IsChannelValid => ChannelValue >= 2 && ChannelValue <= 4;
 
         /// <summary>
         /// Power値が有効範囲内かどうか（0〜3）
@@ -336,6 +357,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (!IsChannelValid || !IsPowerValid) return;
 
+            IsInitializing = true; // 初期化中は接続設定ダイアログの「閉じる」を無効化
             try
             {
                 CommandLogRequested?.Invoke("TX", $"送信機初期化(自動) 開始 (ch={ChannelValue}, pwr={PowerValue})");
@@ -348,6 +370,10 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 SettingStatusMessage = $"自動初期化失敗: {ex.Message}";
                 CommandLogRequested?.Invoke("ERR", $"送信機初期化(自動) 失敗: {ex.Message}");
+            }
+            finally
+            {
+                IsInitializing = false;
             }
         }
 
@@ -409,10 +435,10 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (IsBusy) return;
 
-            // プロトコル範囲チェック（ch=1..4, pwr=0..3）
+            // プロトコル範囲チェック（ch=2..4, pwr=0..3）。CH1(2405MHz)は端末未実装で使用不可。
             if (!IsChannelValid)
             {
-                SettingStatusMessage = "Channel は 1〜4 の範囲で入力してください。";
+                SettingStatusMessage = "Channel は 2〜4 を選択してください（CH1/2405MHzは端末未実装で使用不可）。";
                 return;
             }
             if (!IsPowerValid)
@@ -421,23 +447,11 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
-            // 約4秒ブロックの警告ダイアログ
-            var result = System.Windows.MessageBox.Show(
-                $"送信機を初期化します（Channel={ChannelValue}, Power={PowerValue}）。\n" +
-                "初期化には約4秒かかり、その間は送信ができません。\n" +
-                "本番演出中の場合は中断されます。\n\n実行してよろしいですか？",
-                "送信機初期化確認 / Initialize Transmitter",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Information,
-                System.Windows.MessageBoxResult.Yes);  // 既定は Yes（通常は実行想定）
-
-            if (result != System.Windows.MessageBoxResult.Yes)
-            {
-                SettingStatusMessage = "初期化をキャンセルしました";
-                return;
-            }
+            // 初期化(FA→2秒→FB→2秒 ≈ 約4秒)は確認ダイアログを出さず即実行し、
+            // 完了まで接続設定ダイアログの「閉じる」を無効化する（IsInitializing / CanClose）。
 
             IsBusy = true;
+            IsInitializing = true; // 初期化中は接続設定ダイアログの「閉じる」を無効化
             try
             {
                 CommandLogRequested?.Invoke("TX", $"送信機初期化 開始 (ch={ChannelValue}, pwr={PowerValue})");
@@ -450,6 +464,105 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 SettingStatusMessage = $"送信機初期化失敗: {ex.Message}";
                 CommandLogRequested?.Invoke("ERR", $"送信機初期化 失敗: {ex.Message}");
+            }
+            finally
+            {
+                IsBusy = false;
+                IsInitializing = false;
+            }
+        }
+
+        /// <summary>
+        /// 受信端末チャンネル変更コマンド（A6/AD）
+        /// 概要：選択中の Channel(2〜4) へ「受信端末」の受信chを移動する。正しい順序で実行する：
+        ///   ① 送信機を CH4→CH3→CH2 と切替えながら、各chで A6（前後分区・行）＋ AD（左右分区・列）で
+        ///      目的 ch を全端末へ送信。A6/AD は「端末が今いるchで送信機が電波を出している時」しか届かず、
+        ///      端末の現在chはアプリから観測できないため、全有効chを基準に順次送って必ず届かせる。
+        ///      （実行時は端末が点灯＝通信中であること）
+        ///   ② 約1.5秒待機（端末が受信chを切替。資料 3.6/3.7）
+        ///   ③ 送信機を目的の ch に設定（FA/FB 初期化）→ 端末と送信機の周波数が一致し新chで復帰
+        /// この方式により、1度目だけでなく2度目以降の連続変更でも端末の電源OFFは不要。
+        /// 注意：CH1(2405MHz)は端末未実装のため送信しない。電源断で端末は既定(CH4/2475MHz)に戻る。
+        /// 送信機側のみ変える「送信機初期化」とは別物（こちらは端末側の周波数を動かす）。
+        /// </summary>
+        [RelayCommand]
+        private async Task ChangeReceiverChannelAsync()
+        {
+            if (IsBusy) return;
+
+            // CH1(2405MHz)は端末未実装で使用不可。有効範囲は 2〜4。
+            if (!IsChannelValid)
+            {
+                SettingStatusMessage = "Channel は 2〜4 を選択してください（CH1/2405MHzは端末未実装で使用不可）。";
+                return;
+            }
+            if (!IsConnected)
+            {
+                SettingStatusMessage = "ポートが未接続です。先に接続してください。";
+                return;
+            }
+
+            byte ch = ChannelValue;
+
+            // A6/AD は「端末が今いる ch で送信機が電波を出している時」しか届かない。
+            // 端末の現在 ch は電源投入直後は CH4、以降は前回変更した ch になり得るが、アプリからは観測できない。
+            // そこで送信機を有効な全 ch(4→3→2) に順に合わせ、各 ch で A6/AD(目的ch) を送る＝
+            // 端末が今どの ch に居ても必ず1回は受信できる（=2回目以降も電源OFF不要で切替可能）。
+            // CH1(2405MHz)は端末未実装のため基準からも除外。
+            byte[] baselineChannels = { 4, 3, 2 };
+
+            var confirm = System.Windows.MessageBox.Show(
+                $"受信端末のチャンネルを CH{ch} に変更します。\n\n" +
+                "自動手順: 送信機を CH4→CH3→CH2 と切替えながら、各chで A6/AD により CH" + ch + " を全端末へ通知 → 約1.5秒 → 送信機も CH" + ch + " へ。\n" +
+                "端末が現在どのch(2/3/4)に居ても切替わります（連続変更でも電源OFFは不要）。\n" +
+                $"端末は一瞬消灯し、CH{ch} で復帰します。\n\n" +
+                "※実行時は端末が点灯（通信中）していること。CH1(2405MHz)は端末未実装で使用不可。\n\n" +
+                "実行してよろしいですか？",
+                "受信端チャンネル変更 / Change Receiver Channel",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No);
+
+            if (confirm != System.Windows.MessageBoxResult.Yes)
+            {
+                SettingStatusMessage = "受信端チャンネル変更をキャンセルしました";
+                return;
+            }
+
+            IsBusy = true;
+            try
+            {
+                CommandLogRequested?.Invoke("TX", $"受信端ch変更 開始 → CH{ch}");
+
+                // ① 端末が現在どの ch に居ても届くよう、送信機を 4→3→2 と切替えながら
+                //    各 ch で A6/AD(目的ch) を送信する（A6=前後分区/行, AD=左右分区/列）。
+                //    連続する色送信に紛れて取りこぼされないよう各3回送る（実機検証済みの堅牢手順）。
+                foreach (var baseCh in baselineChannels)
+                {
+                    SettingStatusMessage = $"送信機を CH{baseCh} に合わせて CH{ch} を通知中…";
+                    await _lighting.InitializeTransmitterAsync(baseCh, PowerValue);
+                    await Task.Delay(200);
+
+                    CommandLogRequested?.Invoke("TX", $"[基準CH{baseCh}] A6/AD で CH{ch} を通知（各3回）");
+                    for (int i = 0; i < 3; i++) { await _lighting.SetReceiverChannelAsync(ch); await Task.Delay(150); }
+                    for (int i = 0; i < 3; i++) { await _lighting.SetReceiverChannelColAsync(ch); await Task.Delay(150); }
+                }
+
+                // ② 端末が受信chを切替えるまで待機（資料: 約1.5秒）
+                SettingStatusMessage = $"端末を CH{ch} へ切替中…（約1.5秒）";
+                await Task.Delay(1500);
+
+                // ③ 送信機を目的の ch に合わせる（FA/FB）。これで端末と送信機の周波数が一致し復帰する。
+                await _lighting.InitializeTransmitterAsync(ch, PowerValue);
+
+                SettingStatusMessage = $"受信端チャンネル変更 完了（端末・送信機とも CH{ch}）";
+                CommandLogRequested?.Invoke("TX", $"受信端ch変更 完了 → CH{ch}（送信機も CH{ch} に設定）");
+                TransmitterInitialized?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                SettingStatusMessage = $"受信端チャンネル変更 失敗: {ex.Message}";
+                CommandLogRequested?.Invoke("ERR", $"受信端ch変更 失敗: {ex.Message}");
             }
             finally
             {

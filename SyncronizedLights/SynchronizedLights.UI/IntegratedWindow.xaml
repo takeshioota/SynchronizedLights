@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:views="clr-namespace:Lib.Ui.Screens.Views;assembly=Lib.Ui.Screens"
+        xmlns:conv="clr-namespace:Lib.Ui.Screens.Converters;assembly=Lib.Ui.Screens"
         mc:Ignorable="d"
         Title="SynchronizedLights"
         WindowState="Maximized"
@@ -201,6 +202,11 @@
             <DockPanel DataContext="{Binding CommandVm}">
                 <!-- 右寄せボタン群 -->
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="ToggleCommandLogButton" Content="ログを隠す"
+                            Click="ToggleCommandLog_Click"
+                            Style="{StaticResource GrandMaButtonStyle}"
+                            MinHeight="28" Padding="8,2" Margin="4,0"
+                            ToolTip="コマンドログの表示/非表示を切り替え（本番中は非表示で画面を広く使えます）"/>
                     <Button x:Name="ToggleCommandPanelButton" Content="分離"
                             Click="ToggleCommandPanel_Click"
                             Style="{StaticResource GrandMaButtonStyle}"
@@ -266,10 +272,10 @@
             <Grid.RowDefinitions>
                 <!-- 上段: シーケンス一覧 + エディタ -->
                 <RowDefinition Height="*"/>
-                <!-- スプリッタ -->
-                <RowDefinition Height="6"/>
-                <!-- 下段: コマンドログ -->
-                <RowDefinition Height="120" MinHeight="60"/>
+                <!-- スプリッタ（コマンドログ非表示時は高さ0に折り畳む） -->
+                <RowDefinition x:Name="CommandLogSplitterRow" Height="6"/>
+                <!-- 下段: コマンドログ（本番中は非表示可。トグルで折り畳み） -->
+                <RowDefinition x:Name="CommandLogRow" Height="120" MinHeight="60"/>
             </Grid.RowDefinitions>
 
             <!-- ============ 上段: シーケンス一覧(左) + エディタ(右) ============ -->
@@ -305,13 +311,23 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+                        <!-- 2026-07-16 オペレータ要望: シーケンス一覧を見やすく。
+                             フォント既定(約12px)→16px(約130%)、各行に上下余白を付与し行高を約130%に。 -->
                         <ListBox Grid.Row="2"
                                  ItemsSource="{Binding Sequences}"
                                  SelectedItem="{Binding SelectedSequence, Mode=TwoWay}"
                                  DisplayMemberPath="Name"
+                                 FontSize="16"
                                  Background="#0F0F0F" Foreground="#F2F2F2"
                                  BorderBrush="{StaticResource BorderBrushAmber}" BorderThickness="1"
-                                 Margin="0,0,0,4"/>
+                                 Margin="0,0,0,4">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="4,6"/>
+                                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
                         <!-- 新規（全幅） -->
                         <Button Grid.Row="3" Content="新規" Command="{Binding NewSequenceCommand}"
                                 Style="{StaticResource GrandMaButtonStyle}" MinHeight="28" Margin="0,0,0,4"/>
@@ -513,7 +529,7 @@
                           Margin="0,0,0,4">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="No"
-                                            Binding="{Binding RowNumber, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.##}}"
+                                            Binding="{Binding RowNumber, UpdateSourceTrigger=LostFocus, Converter={x:Static conv:NonNegativeIntegerOrBlankConverter.Instance}}"
                                             Width="50" IsReadOnly="False"
                                             ElementStyle="{StaticResource ZeroBlankTextStyle}"/>
                         <DataGridTextColumn Header="Name" Binding="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
@@ -597,10 +613,10 @@
             </Grid>
 
             <!-- スプリッタ(横) -->
-            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="#2A2A2A" Height="6"/>
+            <GridSplitter x:Name="CommandLogSplitter" Grid.Row="1" HorizontalAlignment="Stretch" Background="#2A2A2A" Height="6"/>
 
             <!-- ============ 下段: コマンドログ（全幅） ============ -->
-            <Border Grid.Row="2" Background="#0A0A0A" BorderBrush="{StaticResource BorderBrushAmber}"
+            <Border x:Name="CommandLogPanel" Grid.Row="2" Background="#0A0A0A" BorderBrush="{StaticResource BorderBrushAmber}"
                     BorderThickness="1">
                 <Grid DataContext="{Binding SequenceVm}">
                     <Grid.RowDefinitions>

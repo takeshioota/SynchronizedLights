@@ -508,7 +508,8 @@ namespace Lib.Ui.Screens.ViewModels
             color2B = src.Color2B ?? 0;
             _bpm = src.Bpm ?? 120;
             // F1: StepNumber があればそのまま使用（なければ RenumberEditingSteps で自動採番される）
-            if (src.StepNumber.HasValue) rowNumber = src.StepNumber.Value;
+            // No 列は「空欄(0) または 0 以上の整数」に統一。旧データの小数/負数は非負整数へ丸める。
+            if (src.StepNumber.HasValue) rowNumber = Math.Max(0, Math.Round(src.StepNumber.Value, MidpointRounding.AwayFromZero));
             isLocked = src.IsLocked;
             // Chase/OL 指定（実行モード）の永続化を復元 → Trig 列に表示（実行はしない）
             trig = string.IsNullOrEmpty(src.LoopTrig) ? "" : src.LoopTrig;
@@ -583,7 +584,13 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 if (_effectCycleDurationMs != value)
                 {
-                    _effectCycleDurationMs = Math.Max(0, value);
+                    // BUG-20260729-04/05: Effect 周期が低すぎるとランプが発光停止するため、
+                    // Effect 種別ごとの下限（SevenColor=80 / Breathing=30 / その他=20 ms）でクランプする。
+                    // 非 Effect 行は従来どおり下限 0。
+                    int min = (CommandType == "Effect")
+                        ? SequenceStep.GetMinEffectCycleMs(EffectType)
+                        : 0;
+                    _effectCycleDurationMs = Math.Max(min, value);
                     OnPropertyChanged();
                 }
             }
@@ -826,8 +833,9 @@ namespace Lib.Ui.Screens.ViewModels
                 ColorR = ColorR,
                 ColorG = ColorG,
                 ColorB = ColorB,
+                // BUG-20260729-04/05: 保存時にも Effect 種別別の下限でクランプ（旧データ・setter すり抜け対策）。
                 EffectCycleDurationMs = (CommandType == "Effect" && EffectCycleDurationMs > 0)
-                    ? EffectCycleDurationMs
+                    ? Math.Max(SequenceStep.GetMinEffectCycleMs(EffectType), EffectCycleDurationMs)
                     : (int?)null,
                 FadeSteps = (CommandType == "Effect" && FadeSteps > 0)
                     ? FadeSteps
