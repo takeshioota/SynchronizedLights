@@ -285,8 +285,28 @@ namespace Lib.Application.Models
             return Math.Clamp(cycleMs / 20, 10, 150);
         }
 
-        /// <summary>API 送信用：EffectCycleDurationMs が未設定なら既定値（1000）を返す</summary>
-        public int GetEffectCycleDurationOrDefault() => EffectCycleDurationMs ?? 1000;
+        /// <summary>
+        /// Effect 種別ごとの周期(ms)下限。低すぎる周期でランプが発光停止するのを防ぐ（BUG-20260729-04/05）。
+        /// SevenColor=80 / Breathing=30 / Flash・FadeIn・FadeOut=20 / それ以外=0。
+        /// </summary>
+        public static int GetMinEffectCycleMs(string? effectType) => effectType switch
+        {
+            "SevenColor" => 80,
+            "Breathing" => 30,
+            "Flash" or "FadeIn" or "FadeOut" => 20,
+            _ => 0,
+        };
+
+        /// <summary>
+        /// API 送信用：EffectCycleDurationMs が未設定なら既定値（1000）を返す。
+        /// BUG-20260729-04/05: Effect 時は種別別の下限（<see cref="GetMinEffectCycleMs"/>）でクランプし、
+        /// UI setter / ToModel をすり抜けた低すぎる周期による発光停止を防ぐ（最終防御）。
+        /// </summary>
+        public int GetEffectCycleDurationOrDefault()
+        {
+            var v = EffectCycleDurationMs ?? 1000;
+            return IsEffect ? Math.Max(GetMinEffectCycleMs(EffectType), v) : v;
+        }
 
         /// <summary>
         /// [互換] 補間ステップ数の計算ヘルパー（旧 API 互換）。

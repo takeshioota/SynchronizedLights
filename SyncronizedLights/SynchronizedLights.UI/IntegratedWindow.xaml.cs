@@ -41,15 +41,11 @@ namespace SynchronizedLights.UI
 
             // NO.22: カラーピッカー確定時にシーケンス行にも色を反映
             // NO.37: 反映後にその行を再実行し、変更した色を実機へ送信する（旧実装は反映のみで未送信だった）
+            // BUG-20260728-06: 色反映を Undo 対象にするため VM 側 ApplyColorFromPicker 経由に統一
+            //                  （SaveUndoState → 色反映 → ReExecuteCurrentStep をまとめて実施）。
             _commandVm.ColorPickerConfirmed += (r, g, b) =>
             {
-                if (_sequenceVm.SelectedStep != null)
-                {
-                    _sequenceVm.SelectedStep.ColorR = r;
-                    _sequenceVm.SelectedStep.ColorG = g;
-                    _sequenceVm.SelectedStep.ColorB = b;
-                    _sequenceVm.ReExecuteCurrentStep();
-                }
+                _sequenceVm.ApplyColorFromPicker(r, g, b);
             };
 
             // 送信機初期化などのコマンドログを、統合ウィンドウ下部のコマンドログへ流す。
@@ -360,6 +356,50 @@ namespace SynchronizedLights.UI
         }
 
         #endregion コマンドパネル分離/統合
+
+        #region コマンドログ 表示/非表示
+
+        /// <summary>コマンドログが現在非表示かどうか</summary>
+        private bool _isCommandLogHidden;
+
+        /// <summary>非表示にする直前のログ行の高さ（再表示時に復元）</summary>
+        private GridLength _savedCommandLogHeight = new GridLength(120);
+
+        /// <summary>
+        /// 本番中はコマンドログが不要なため、ワンクリックで折り畳み/展開する。
+        /// 非表示時はログ行とスプリッタを高さ0に折り畳み、シーケンスエディタを画面いっぱいに広げる。
+        /// トグルボタンは常時見える上部ステータスバーにあるため、非表示後も再表示できる。
+        /// </summary>
+        private void ToggleCommandLog_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCommandLogHidden)
+            {
+                // 再表示：折り畳み前の高さへ復元
+                CommandLogRow.Height = _savedCommandLogHeight;
+                CommandLogRow.MinHeight = 60;
+                CommandLogSplitterRow.Height = new GridLength(6);
+                CommandLogSplitter.Visibility = Visibility.Visible;
+                CommandLogPanel.Visibility = Visibility.Visible;
+                ToggleCommandLogButton.Content = "ログを隠す";
+                _isCommandLogHidden = false;
+                Serilog.Log.Information("CommandLog shown");
+            }
+            else
+            {
+                // 非表示：現在の高さを保存してから折り畳む
+                _savedCommandLogHeight = CommandLogRow.Height;
+                CommandLogRow.MinHeight = 0;
+                CommandLogRow.Height = new GridLength(0);
+                CommandLogSplitterRow.Height = new GridLength(0);
+                CommandLogSplitter.Visibility = Visibility.Collapsed;
+                CommandLogPanel.Visibility = Visibility.Collapsed;
+                ToggleCommandLogButton.Content = "ログを表示";
+                _isCommandLogHidden = true;
+                Serilog.Log.Information("CommandLog hidden");
+            }
+        }
+
+        #endregion コマンドログ 表示/非表示
 
         #endregion Window ライフサイクル
 

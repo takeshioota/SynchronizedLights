@@ -1,0 +1,52 @@
+<Window x:Class="Lib.Ui.Screens.Views.DlgInternalProgramEdit"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="A1 内蔵プログラム編集"
+        SizeToContent="WidthAndHeight"
+        MinWidth="340"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#1A1A1A"
+        Foreground="#F2F2F2">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100"/>
+            <ColumnDefinition Width="200"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 名前 -->
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="名前:" VerticalAlignment="Center" Margin="0,0,0,8"/>
+        <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtName" Margin="0,0,0,8"
+                 Background="#2A2A2A" Foreground="#F2F2F2" BorderBrush="#555"
+                 Padding="6,4" FontSize="14"/>
+
+        <!-- フレーム番号 -->
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="フレーム番号:" VerticalAlignment="Center" Margin="0,0,0,8"/>
+        <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtFrameNo" Margin="0,0,0,8"
+                 Background="#2A2A2A" Foreground="#F2F2F2" BorderBrush="#555"
+                 Padding="6,4" FontSize="14" HorizontalContentAlignment="Right"/>
+
+        <!-- 有効 -->
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="表示:" VerticalAlignment="Center"/>
+        <CheckBox Grid.Row="2" Grid.Column="1" x:Name="ChkEnabled" VerticalAlignment="Center"
+                  Foreground="#F2F2F2" Content="有効"/>
+
+        <!-- ボタン -->
+        <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                    Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="OK" Width="80" MinHeight="30" Margin="0,0,8,0"
+                    Click="BtnOk_Click" IsDefault="True"
+                    Background="#FFC107" Foreground="#1A1A1A" FontWeight="Bold"/>
+            <Button Content="Cancel" Width="80" MinHeight="30"
+                    Click="BtnCancel_Click" IsCancel="True"
+                    Background="#333" Foreground="#F2F2F2"/>
+        </StackPanel>
+    </Grid>
+</Window>

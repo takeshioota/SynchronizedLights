@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="../../SynchrolightAPI/SynchrolightAPI.Core/SynchrolightAPI.Core.csproj" />
+  <Project Path="../../SynchrolightAPI/SynchrolightAPI/SynchrolightAPI.csproj" />
+  <Project Path="../../SynchrolightAPI/SynchrolightAPI.Api/SynchrolightAPI.Api.csproj" />
+  <Project Path="Lib.Application/Lib.Application.csproj" />
+  <Project Path="Lib.Domain/Lib.Domain.csproj" />
+  <Project Path="Lib.Ui.Screens/Lib.Ui.Screens.csproj" />
+  <Project Path="Lib.UiFramework/Lib.UiFramework.csproj" />
+  <Project Path="SynchronizedLights.UI/SynchronizedLights.UI.csproj" />
+</Solution>

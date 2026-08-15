@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+        xmlns:conv="clr-namespace:Lib.Ui.Screens.Converters"
         mc:Ignorable="d"
         Title="シーケンス編集"
         Width="1150"
@@ -480,7 +481,7 @@
                   Margin="0,0,0,4">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="No"
-		                          Binding="{Binding RowNumber, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.##}}"
+		                          Binding="{Binding RowNumber, UpdateSourceTrigger=LostFocus, Converter={x:Static conv:NonNegativeIntegerOrBlankConverter.Instance}}"
 		                          Width="50"
 		                          IsReadOnly="False"/>
 
@@ -849,7 +850,7 @@
                                 Style="{StaticResource GrandMaButtonStyle}"
                                 MinHeight="34" Width="90"
                                 Margin="0,0,4,0"
-                                ToolTip="全ステップをNo列の番号（1.1, 2.5 等）で昇順にソート"/>
+                                ToolTip="全ステップをNo列の番号（0 以上の整数）で昇順にソート"/>
                         <!-- NO.20: 全クリアボタン削除（押し間違い防止） -->
                         <Button Content="行削除"
                                 Command="{Binding RemoveStepCommand}"
