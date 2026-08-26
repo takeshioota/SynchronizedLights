@@ -507,9 +507,9 @@ namespace Lib.Ui.Screens.ViewModels
             color2G = src.Color2G ?? 0;
             color2B = src.Color2B ?? 0;
             _bpm = src.Bpm ?? 120;
-            // F1: StepNumber があればそのまま使用（なければ RenumberEditingSteps で自動採番される）
-            // No 列は「空欄(0) または 0 以上の整数」に統一。旧データの小数/負数は非負整数へ丸める。
-            if (src.StepNumber.HasValue) rowNumber = Math.Max(0, Math.Round(src.StepNumber.Value, MidpointRounding.AwayFromZero));
+            // No 欄機能変更仕様(0825): 小数1桁(00.0〜99.9)を保持。null=空欄(未設定)で 00.0 と区別する。
+            // 旧データも値をそのまま復元（丸めない。表示は SequenceNoConverter が "00.0" 形式へ整形）。
+            rowNumber = src.StepNumber;
             isLocked = src.IsLocked;
             // Chase/OL 指定（実行モード）の永続化を復元 → Trig 列に表示（実行はしない）
             trig = string.IsNullOrEmpty(src.LoopTrig) ? "" : src.LoopTrig;
@@ -731,13 +731,14 @@ namespace Lib.Ui.Screens.ViewModels
         private bool isCurrentlyPlaying;
 
         /// <summary>
-        /// F1: DataGrid 表示用のステップ番号（小数入力対応、例: 1.0, 1.1, 2.5）
-        /// 概要：オペレータが手入力で小数番号を振り、ソートに使用できる。
-        ///       行追加・削除・移動・ソート時に SequenceEditorViewModel 側で振り直される。
+        /// DataGrid 表示用のステップ番号（No 欄機能変更仕様 0825）。
+        /// 概要：整数部2桁・小数部1桁の「00.0」形式（範囲 00.0〜99.9）で表示／格納する。
+        ///       null = 空欄（未設定）で、値 0.0（"00.0"）とは区別する。
+        ///       表示整形・入力検証は SequenceNoConverter / SequenceNoValidationRule が担当。
         ///       永続化対象（StepNumber として ToModel に含める）。
         /// </summary>
         [ObservableProperty]
-        private double rowNumber;
+        private double? rowNumber;
 
         /// <summary>
         /// ロック状態（true = 選択時に実行しない）
