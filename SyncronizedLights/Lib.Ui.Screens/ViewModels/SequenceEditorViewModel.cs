@@ -1194,7 +1194,8 @@ namespace Lib.Ui.Screens.ViewModels
             _suppressAutoExecute = true;
             try
             {
-                var sorted = EditingSteps.OrderBy(w => w.RowNumber).ToList();
+                // No 欄は double?（null=空欄）。空欄は末尾へ回してソートする。
+                var sorted = EditingSteps.OrderBy(w => w.RowNumber ?? double.MaxValue).ToList();
                 EditingSteps.Clear();
                 foreach (var w in sorted) EditingSteps.Add(w);
                 RenumberEditingSteps();
@@ -1809,20 +1810,42 @@ namespace Lib.Ui.Screens.ViewModels
                     StatusMessage = "レインボーカラーは2色以上必要です。";
                     return;
                 }
+                var effCycle = EffectiveRainbowCycleMs(RainbowMode, RainbowCycleDurationMs, RainbowFadeInMs, RainbowFadeOutMs);
                 await _lighting.StartRainbowAsync(
-                    RainbowMode, colors, RainbowCycleDurationMs,
+                    RainbowMode, colors, effCycle,
                     RainbowMode == RainbowMode.Blink ? RainbowBlinkPeriodMs : null,
                     RainbowMode == RainbowMode.Blink ? RainbowDutyRatio : null,
                     RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeIn ? RainbowFadeInMs : null,
                     RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeOut ? RainbowFadeOutMs : null);
-                AppendLog("TX", $"Rainbow {RainbowMode} ({colors.Count}色, cycle={RainbowCycleDurationMs}ms)");
-                StatusMessage = $"Rainbow {RainbowMode} 開始（{colors.Count}色）";
+                var cycleNote = effCycle != RainbowCycleDurationMs ? $" ※FI/FOに合わせcycle {RainbowCycleDurationMs}→{effCycle}ms" : "";
+                AppendLog("TX", $"Rainbow {RainbowMode} ({colors.Count}色, cycle={effCycle}ms){cycleNote}");
+                StatusMessage = $"Rainbow {RainbowMode} 開始（{colors.Count}色）{cycleNote}";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Rainbow 開始失敗: {ex.Message}";
                 AppendLog("ERR", $"Rainbow start failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// FI/FO 系レインボーの色切替間隔をフェード時間以上へ補正した実効値を返す（仕様3.18注記3）。
+        /// 「色切替間隔 &lt; フェード時間」だとフェード途中で次色へ強制遷移し「光はじめが一定でない」不具合になる。
+        /// 補正は API 側ループが権威的に行うが、UI でもログ/ステータスに実効値を示すため同じ計算をする
+        /// （フェード値は API と同じ 256-3000ms で評価）。Solid/Blink/Random は補正対象外。
+        /// </summary>
+        private static int EffectiveRainbowCycleMs(RainbowMode mode, int cycleMs, int fadeInMs, int fadeOutMs)
+        {
+            int fi = Math.Clamp(fadeInMs, 256, 3000);
+            int fo = Math.Clamp(fadeOutMs, 256, 3000);
+            int minCycle = mode switch
+            {
+                RainbowMode.FadeInOut => fi + fo,
+                RainbowMode.FadeIn => fi,
+                RainbowMode.FadeOut => fo,
+                _ => 0,
+            };
+            return (cycleMs > 0 && minCycle > 0) ? Math.Max(cycleMs, minCycle) : cycleMs;
         }
 
         /// <summary>レインボーエフェクトを停止する</summary>
@@ -1983,14 +2006,16 @@ namespace Lib.Ui.Screens.ViewModels
                     return;
                 }
                 var sectionNo = 16 + modeInt; // 3.16〜3.21
+                var effCycle = EffectiveRainbowCycleMs(mode, RainbowCycleDurationMs, RainbowFadeInMs, RainbowFadeOutMs);
                 await _lighting.StartRainbowAsync(
-                    mode, colors, RainbowCycleDurationMs,
+                    mode, colors, effCycle,
                     mode == RainbowMode.Blink ? RainbowBlinkPeriodMs : null,
                     mode == RainbowMode.Blink ? RainbowDutyRatio : null,
                     mode is RainbowMode.FadeInOut or RainbowMode.FadeIn ? RainbowFadeInMs : null,
                     mode is RainbowMode.FadeInOut or RainbowMode.FadeOut ? RainbowFadeOutMs : null);
-                AppendLog("TX", $"3.{sectionNo} Rainbow {mode} ({colors.Count}色, cycle={RainbowCycleDurationMs}ms)");
-                StatusMessage = $"3.{sectionNo} Rainbow {mode} 開始（{colors.Count}色）";
+                var cycleNote = effCycle != RainbowCycleDurationMs ? $" ※FI/FOに合わせcycle {RainbowCycleDurationMs}→{effCycle}ms" : "";
+                AppendLog("TX", $"3.{sectionNo} Rainbow {mode} ({colors.Count}色, cycle={effCycle}ms){cycleNote}");
+                StatusMessage = $"3.{sectionNo} Rainbow {mode} 開始（{colors.Count}色）{cycleNote}";
             }
             catch (Exception ex)
             {
@@ -3376,6 +3401,7 @@ namespace Lib.Ui.Screens.ViewModels
                             fadeIn = RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeIn ? RainbowFadeInMs : (int?)null;
                             fadeOut = RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeOut ? RainbowFadeOutMs : (int?)null;
                         }
+                        cycle = EffectiveRainbowCycleMs(rbMode, cycle, fadeIn ?? 1000, fadeOut ?? 1000);
                         await _lighting.StartRainbowAsync(rbMode, colors, cycle, blink, duty, fadeIn, fadeOut);
                         AppendLog("TX", $"Rainbow {rbMode} ({colors.Count}色, cycle={cycle}ms)");
                         StatusMessage = $"Rainbow {rbMode} 開始";
@@ -4194,10 +4220,16 @@ namespace Lib.Ui.Screens.ViewModels
                     {
                         var rbColors = step.RainbowColors ?? DefaultRainbowColors()
                             .Select(c => new Rgb(c.R, c.G, c.B)).ToList();
-                        await _lighting.StartRainbowAsync(
-                            step.RainbowMode ?? RainbowMode.Solid,
-                            rbColors,
+                        var rbMode = step.RainbowMode ?? RainbowMode.Solid;
+                        var rbCycle = EffectiveRainbowCycleMs(
+                            rbMode,
                             step.RainbowCycleDurationMs ?? 1000,
+                            step.RainbowFadeInMs ?? 1000,
+                            step.RainbowFadeOutMs ?? 1000);
+                        await _lighting.StartRainbowAsync(
+                            rbMode,
+                            rbColors,
+                            rbCycle,
                             step.RainbowBlinkPeriodMs,
                             step.RainbowDutyRatio,
                             step.RainbowFadeInMs,
@@ -4587,7 +4619,7 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>ソート用にプロパティ値を取得する</summary>
         private static object GetSortValue(SequenceStepWrapper w, string? path) => path switch
         {
-            "RowNumber" => w.RowNumber,
+            "RowNumber" => w.RowNumber ?? double.MaxValue,
             "Comment" => w.Comment ?? "",
             "TimeSec" => w.TimeSec ?? 0.0,
             "TimeMs" => w.TimeMs,
@@ -4603,7 +4635,7 @@ namespace Lib.Ui.Screens.ViewModels
             "FrameNo" => w.FrameNo,
             "Note" => w.Note ?? "",
             "RetransmitCount" => w.RetransmitCount,
-            _ => w.RowNumber,
+            _ => w.RowNumber ?? double.MaxValue,
         };
 
         /// <summary>停止中のポーリング間隔（軽量）</summary>

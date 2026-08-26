@@ -528,10 +528,31 @@
                           Sorting="StepDataGrid_Sorting"
                           Margin="0,0,0,4">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="No"
-                                            Binding="{Binding RowNumber, UpdateSourceTrigger=LostFocus, Converter={x:Static conv:NonNegativeIntegerOrBlankConverter.Instance}}"
-                                            Width="50" IsReadOnly="False"
-                                            ElementStyle="{StaticResource ZeroBlankTextStyle}"/>
+                        <!-- No 欄機能変更仕様(0825): 00.0 形式(整数2桁/小数1桁, 範囲00.0〜99.9)。空欄=未設定。
+                             小数2桁以上・範囲外は ValidationRule で赤枠＋ツールチップ表示（値は未確定）。 -->
+                        <DataGridTextColumn Header="No" Width="50" IsReadOnly="False"
+                                            ElementStyle="{StaticResource ZeroBlankTextStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="RowNumber" UpdateSourceTrigger="LostFocus"
+                                         Converter="{x:Static conv:SequenceNoConverter.Instance}">
+                                    <Binding.ValidationRules>
+                                        <conv:SequenceNoValidationRule/>
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                            <DataGridTextColumn.EditingElementStyle>
+                                <Style TargetType="TextBox">
+                                    <Style.Triggers>
+                                        <Trigger Property="Validation.HasError" Value="True">
+                                            <Setter Property="BorderBrush" Value="Red"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="ToolTip"
+                                                    Value="{Binding RelativeSource={RelativeSource Self}, Path=(Validation.Errors)[0].ErrorContent}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.EditingElementStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn Header="Name" Binding="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" Width="130"/>
                         <DataGridTextColumn Header="Time(sec)"
                                             Binding="{Binding TimeSec, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.0##}}"
