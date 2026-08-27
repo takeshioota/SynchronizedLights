@@ -507,9 +507,10 @@ namespace Lib.Ui.Screens.ViewModels
             color2G = src.Color2G ?? 0;
             color2B = src.Color2B ?? 0;
             _bpm = src.Bpm ?? 120;
-            // No 欄機能変更仕様(0825): 小数1桁(00.0〜99.9)を保持。null=空欄(未設定)で 00.0 と区別する。
-            // 旧データも値をそのまま復元（丸めない。表示は SequenceNoConverter が "00.0" 形式へ整形）。
-            rowNumber = src.StepNumber;
+            // No 欄機能変更仕様(0825/改訂): 小数1桁(00.0〜99.9)を保持。空欄は不可のため、
+            // 未設定(null)は 00.0 とみなす。旧データの null も 00.0 として復元する
+            // （丸めない。表示は SequenceNoConverter が "00.0" 形式へ整形）。
+            rowNumber = src.StepNumber ?? 0.0;
             isLocked = src.IsLocked;
             // Chase/OL 指定（実行モード）の永続化を復元 → Trig 列に表示（実行はしない）
             trig = string.IsNullOrEmpty(src.LoopTrig) ? "" : src.LoopTrig;
@@ -731,14 +732,15 @@ namespace Lib.Ui.Screens.ViewModels
         private bool isCurrentlyPlaying;
 
         /// <summary>
-        /// DataGrid 表示用のステップ番号（No 欄機能変更仕様 0825）。
+        /// DataGrid 表示用のステップ番号（No 欄機能変更仕様 0825/改訂）。
         /// 概要：整数部2桁・小数部1桁の「00.0」形式（範囲 00.0〜99.9）で表示／格納する。
-        ///       null = 空欄（未設定）で、値 0.0（"00.0"）とは区別する。
+        ///       空欄は不可。未設定(null)は 00.0 として扱う（表示・保存とも 00.0）。
+        ///       新規行の既定値も 00.0（0.0）。
         ///       表示整形・入力検証は SequenceNoConverter / SequenceNoValidationRule が担当。
         ///       永続化対象（StepNumber として ToModel に含める）。
         /// </summary>
         [ObservableProperty]
-        private double? rowNumber;
+        private double? rowNumber = 0.0;
 
         /// <summary>
         /// ロック状態（true = 選択時に実行しない）
@@ -853,8 +855,8 @@ namespace Lib.Ui.Screens.ViewModels
                 Color2B = (CommandType == "Color2") ? Color2B : null,
                 // BPM は Chase/OL のテンポにも使うため常時保存する（Color2 廃止後は限定保存だと 120 に戻っていた）
                 Bpm = Bpm,
-                // F1: ステップ番号を永続化
-                StepNumber = RowNumber,
+                // F1: ステップ番号を永続化。空欄不可のため未設定(null)は 00.0 として保存する。
+                StepNumber = RowNumber ?? 0.0,
                 IsLocked = IsLocked,
                 // Chase/OL 指定（実行モード）を永続化
                 LoopTrig = string.IsNullOrEmpty(Trig) ? "" : Trig,

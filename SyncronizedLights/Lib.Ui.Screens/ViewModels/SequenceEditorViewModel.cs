@@ -1194,8 +1194,8 @@ namespace Lib.Ui.Screens.ViewModels
             _suppressAutoExecute = true;
             try
             {
-                // No 欄は double?（null=空欄）。空欄は末尾へ回してソートする。
-                var sorted = EditingSteps.OrderBy(w => w.RowNumber ?? double.MaxValue).ToList();
+                // No 欄は 00.0〜99.9。空欄不可のため未設定(null)は 00.0 とみなしてソートする。
+                var sorted = EditingSteps.OrderBy(w => w.RowNumber ?? 0.0).ToList();
                 EditingSteps.Clear();
                 foreach (var w in sorted) EditingSteps.Add(w);
                 RenumberEditingSteps();
@@ -4554,15 +4554,13 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>
         /// EditingSteps の RowNumber を振り直す
         /// 概要：行追加・削除・複製・移動・全クリア・テンプレ挿入後に呼ぶ。
-        ///       F1 修正: RowNumber が 0（未設定）の行のみ自動採番する。
-        ///       ユーザーが手入力した番号は保持される。
+        ///       自動採番はせず、オペレータが手動で No を振る運用とする。
         /// </summary>
         private void RenumberEditingSteps()
         {
-            // 新規追加行（RowNumber == 0）は空欄のまま残す。
-            // オペレータが手動で番号を振る運用とする。
-            // RowNumber == 0 は DataGrid 上で空欄表示される（StringFormat 0.## → "0" は表示されるが、
-            // 実際には未設定状態を示す）。
+            // 自動採番はしない（オペレータが手動で No を振る運用）。
+            // No 欄機能変更仕様(0825/改訂): 空欄は不可。新規追加行の既定値は 00.0 で、
+            // DataGrid 上には "00.0" と表示される（SequenceNoConverter が整形）。
         }
 
         /// <summary>
@@ -4619,7 +4617,7 @@ namespace Lib.Ui.Screens.ViewModels
         /// <summary>ソート用にプロパティ値を取得する</summary>
         private static object GetSortValue(SequenceStepWrapper w, string? path) => path switch
         {
-            "RowNumber" => w.RowNumber ?? double.MaxValue,
+            "RowNumber" => w.RowNumber ?? 0.0,
             "Comment" => w.Comment ?? "",
             "TimeSec" => w.TimeSec ?? 0.0,
             "TimeMs" => w.TimeMs,
@@ -4635,7 +4633,7 @@ namespace Lib.Ui.Screens.ViewModels
             "FrameNo" => w.FrameNo,
             "Note" => w.Note ?? "",
             "RetransmitCount" => w.RetransmitCount,
-            _ => w.RowNumber ?? double.MaxValue,
+            _ => w.RowNumber ?? 0.0,
         };
 
         /// <summary>停止中のポーリング間隔（軽量）</summary>
