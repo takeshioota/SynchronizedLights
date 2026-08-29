@@ -3706,7 +3706,7 @@ namespace Lib.Ui.Screens.ViewModels
         #region v3.9: Chase（往復）/ Overlap（OL）
 
         /// <summary>
-        /// Chase/OL で Time・BPM が未設定（Time=0 かつ BPM が既定 120 または 0）のときに用いる
+        /// Chase/OL で Time・BPM が未設定（Time=0 かつ BPM=0）のときに用いる
         /// 1 ステップあたりの既定周期（ms）。これにより未設定でも一定ペースで自動サイクルする。
         /// </summary>
         private const int DefaultLoopStepMs = 1000;
@@ -3959,10 +3959,10 @@ namespace Lib.Ui.Screens.ViewModels
                         //   （継続すると次サイクルの色送信で off が打ち消されるため）。
                         if (IsOffStep(step)) { StopLoopExecution(); break; }
 
-                        // 待機時間: BPM > 0 なら BPM 優先、そうでなければ Time 列
-                        // 未設定（Time=0 かつ BPM 既定120/0）のときは既定周期で自動サイクル（1色目で固着しない）
+                        // 待機時間: BPM > 0 なら BPM 優先（60000÷BPM ミリ秒。120 も特別扱いせず単調に効く）、
+                        // そうでなければ Time 列。未設定（Time=0 かつ BPM=0）のときは既定周期で自動サイクル（1色目で固着しない）
                         int waitMs;
-                        if (step.Bpm > 0 && step.Bpm != 120)
+                        if (step.Bpm > 0)
                         {
                             waitMs = Math.Max(20, 60000 / step.Bpm);
                         }
@@ -4068,9 +4068,11 @@ namespace Lib.Ui.Screens.ViewModels
                         }
 
                         // フェード時間: 次の行の BPM/Time。
-                        // 未設定（Time=0 かつ BPM 既定120/0）は既定周期で自動サイクル（0 だと無遅延ループ＝暴走するため）
+                        // BPM > 0 なら 60000÷BPM ミリ秒（120 も特別扱いせず単調に効く。旧仕様は 120 を未設定に化かし
+                        //   80→750ms が 120 より速い非単調挙動の原因だった）。
+                        // 未設定（Time=0 かつ BPM=0）は既定周期で自動サイクル（0 だと無遅延ループ＝暴走するため）
                         int fadeMs;
-                        if (next.Bpm > 0 && next.Bpm != 120)
+                        if (next.Bpm > 0)
                         {
                             fadeMs = Math.Max(20, 60000 / next.Bpm);
                         }
@@ -4145,7 +4147,7 @@ namespace Lib.Ui.Screens.ViewModels
                         // 当該ステップを表示する時間だけ待機（BPM>0 を優先、未設定/0 は既定1秒）。
                         int bpm = step.Bpm ?? 0;
                         int waitMs;
-                        if (bpm > 0 && bpm != 120)
+                        if (bpm > 0)
                             waitMs = Math.Max(20, 60000 / bpm);
                         else
                             waitMs = step.TimeMs > 0 ? step.TimeMs : 1000;
@@ -4855,7 +4857,7 @@ namespace Lib.Ui.Screens.ViewModels
                 if ((a.LoopTrig ?? "") != (b.Trig ?? "")) return true;
                 if (a.TransitionMs != b.TransitionMs) return true;
                 if ((a.Color2R ?? 0) != b.Color2R || (a.Color2G ?? 0) != b.Color2G || (a.Color2B ?? 0) != b.Color2B) return true;
-                if ((a.Bpm ?? 120) != b.Bpm) return true;
+                if ((a.Bpm ?? 0) != b.Bpm) return true;
 
                 // Rainbow 行のみ: パラメータのみ変更（Cmd 据え置き）でも未保存と判定する。
                 // b.ToModel() で mode 別の条件付き null 化を a と同一に揃えてから比較（非Rainbow行の誤検知を防止）。
