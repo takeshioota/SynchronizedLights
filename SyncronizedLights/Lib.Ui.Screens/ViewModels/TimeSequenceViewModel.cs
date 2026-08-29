@@ -506,7 +506,8 @@ namespace Lib.Ui.Screens.ViewModels
             color2R = src.Color2R ?? 0;
             color2G = src.Color2G ?? 0;
             color2B = src.Color2B ?? 0;
-            _bpm = src.Bpm ?? 120;
+            // 0 = 未設定。旧「120=未設定」の特別扱いは撤廃したため、null は 0（未設定）に寄せるだけ。
+            _bpm = src.Bpm ?? 0;
             // No 欄機能変更仕様(0825/改訂): 小数1桁(00.0〜99.9)を保持。空欄は不可のため、
             // 未設定(null)は 00.0 とみなす。旧データの null も 00.0 として復元する
             // （丸めない。表示は SequenceNoConverter が "00.0" 形式へ整形）。
@@ -643,9 +644,12 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private byte color2B;
 
-        /// <summary>BPM（Color2 時のみ有効、2色交互点灯の周期）— 0〜6000。
-        /// NO.31: 0 を許可（0=未設定。自動送りせず Time(sec)/手動送りにフォールバック）。</summary>
-        private int _bpm = 120;
+        /// <summary>BPM（Chase / OL のテンポ）— 0〜6000。
+        /// 0 = 未設定（空欄相当。自動送りせず Time(sec)/手動送りにフォールバック）。
+        /// 1〜6000 は実テンポとして 60000÷BPM ミリ秒で単調に効く（120 も特別扱いせず 500ms）。
+        /// ※旧仕様は既定値 120 を「未設定」に化かしていたため、80→750ms が 120(=1000ms 相当)より
+        ///   速くなる非単調挙動が発生していた。既定を 0 に変更し 120 の特別扱いを撤廃して解消。</summary>
+        private int _bpm = 0;
         public int Bpm
         {
             get => _bpm;
@@ -853,7 +857,7 @@ namespace Lib.Ui.Screens.ViewModels
                 Color2R = (CommandType == "Color2") ? Color2R : null,
                 Color2G = (CommandType == "Color2") ? Color2G : null,
                 Color2B = (CommandType == "Color2") ? Color2B : null,
-                // BPM は Chase/OL のテンポにも使うため常時保存する（Color2 廃止後は限定保存だと 120 に戻っていた）
+                // BPM は Chase/OL のテンポにも使うため常時保存する（0=未設定。旧「120=未設定」扱いは撤廃）
                 Bpm = Bpm,
                 // F1: ステップ番号を永続化。空欄不可のため未設定(null)は 00.0 として保存する。
                 StepNumber = RowNumber ?? 0.0,
