@@ -2884,6 +2884,13 @@ namespace Lib.Ui.Screens.ViewModels
             _transitionCts?.Cancel();
             _subSequenceCts?.Cancel();
 
+            // BUG-20260902-02: 予約済みのトレーリング再実行を解除し、さらに停止直後の武装/発火を
+            // 一定時間抑止する。停止ボタンのクリック（グリッド外への CommitEdit）が本メソッドの後に
+            // ReExecuteCurrentStep を走らせて再武装するタイミングがあるため、解除だけでは足りず窓で弾く。
+            _reExecuteScheduled = false;
+            _reExecuteTarget = null;
+            _suppressReExecuteUntil = DateTime.UtcNow.AddMilliseconds(ReExecuteTrailingMs + 250);
+
             // セマフォが保持されたままの場合に強制解放（Chase 中の API 呼び出しがブロックしている場合の救済）
             if (_executionSemaphore.CurrentCount == 0)
             {
@@ -2903,9 +2910,28 @@ namespace Lib.Ui.Screens.ViewModels
                 await _lighting.StopEffectAsync();
                 try { await _lighting.StopRainbowAsync(); }
                 catch { /* Rainbow が走っていなければ無視 */ }
-                StatusMessage = "停止しました。";
-                AppendLog("TX", "EffectStop + RainbowStop");
-                AppendContinuousSendStopLog();
+
+                // BUG-20260901-01 / 停止後消灯対策: 単発実行の停止でも、一括再生停止
+                // (StopSequenceWithColorHoldAsync) と同様に「直近に実行したステップの設定色」を即再送して
+                // ホールドする。StartEffect/StartRainbow は _lastSentColor を更新しないため、これを怠ると
+                // 停止後に KeepAlive が陳腐化した旧色を復活させて残色になる（＝最後に再生した色が発色）か、
+                // _lastSentColor が null のまま何も送られず端末がセルフモードに落ちて数秒後に消灯する。
+                // ここで即再送すれば API 側の連続送信が途切れなく継続し（KeepAlive の 800ms 穴も無く）、
+                // 停止時にそのステップの設定色だけが点灯する。何も実行していなければ従来どおり色は送らない。
+                if (_lastExecutedColor.HasValue)
+                {
+                    var (r, g, b) = _lastExecutedColor.Value;
+                    await _lighting.SetColorAsync(Target.All, new Rgb(r, g, b));
+                    StatusMessage = $"停止しました（色 RGB({r},{g},{b}) を保持）。";
+                    AppendLog("TX", $"EffectStop + RainbowStop → Color ({r},{g},{b}) 維持");
+                    AppendContinuousSendStartLog();
+                }
+                else
+                {
+                    StatusMessage = "停止しました。";
+                    AppendLog("TX", "EffectStop + RainbowStop");
+                    AppendContinuousSendStopLog();
+                }
             }
             catch (Exception ex)
             {
@@ -3158,6 +3184,10 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 await _lighting.StopSequenceAsync();
+                // BUG-20260902-02: 一括再生停止時に IsPlaying を即 false 化する。従来はポーリング
+                // （最大200ms）まで stale=true が残り、直後の停止が誤ってこの再生停止分岐へ入る等の
+                // 副作用があった。API 状態ポーリングとも整合（次tickで同値に収束）。
+                IsPlaying = false;
 
                 // 停止時点の色を再送して LED 状態を維持する
                 if (lastWrapper != null)
@@ -3405,6 +3435,9 @@ namespace Lib.Ui.Screens.ViewModels
                         await _lighting.StartRainbowAsync(rbMode, colors, cycle, blink, duty, fadeIn, fadeOut);
                         AppendLog("TX", $"Rainbow {rbMode} ({colors.Count}色, cycle={cycle}ms)");
                         StatusMessage = $"Rainbow {rbMode} 開始";
+                        // BUG-20260901-01 / 停止後消灯対策: 単発 Rainbow の停止時に保持すべき色を決定的にするため
+                        // 先頭パレット色を記録する（未設定だと停止時に前ステップの陳腐化色が残色になる）。
+                        if (colors.Count > 0) _lastExecutedColor = (colors[0].R, colors[0].G, colors[0].B);
                         break;
                     }
 
@@ -3491,6 +3524,13 @@ namespace Lib.Ui.Screens.ViewModels
         private bool _reExecuteScheduled;
         private SequenceStepWrapper? _reExecuteTarget;
 
+        // BUG-20260902-02: 停止直後はトレーリング再実行を抑止する期限。停止ボタンのクリックで
+        // グリッド外にフォーカスが移ると CommitEdit → CellEditEnding → ReExecuteCurrentStep が
+        // デバウンスを武装し、約 ReExecuteTrailingMs 後に演出を再点灯してしまう（＝一旦停止後に再生）。
+        // 停止時にこの期限を先へ倒し、武装（ReExecuteCurrentStep）と発火（RunTrailingReExecuteAsync）
+        // の両方をこの窓の間だけ弾く。窓はデバウンス遅延＋ディスパッチャ遅延を吸収する短時間。
+        private DateTime _suppressReExecuteUntil = DateTime.MinValue;
+
         /// <summary>
         /// セル編集確定・カラーピッカー確定時に現在ステップを再実行する（コードビハインドから呼び出し用）。
         /// </summary>
@@ -3505,6 +3545,8 @@ namespace Lib.Ui.Screens.ViewModels
             if (IsProgressLocked) return;
             if (SelectedStep == null) return;
             if (_lighting == null || !_lighting.IsConnected) return;
+            // BUG-20260902-02: 停止直後（停止ボタンの CommitEdit 由来を含む）は再武装しない。
+            if (DateTime.UtcNow < _suppressReExecuteUntil) return;
 
             _reExecuteTarget = SelectedStep;
             _lastReExecuteRequest = DateTime.UtcNow;
@@ -3546,6 +3588,8 @@ namespace Lib.Ui.Screens.ViewModels
 
                 if (_suppressAutoExecute || IsProgressLocked) return;
                 if (_lighting == null || !_lighting.IsConnected) return;
+                // BUG-20260902-02: 停止直後の窓では発火しない（停止後に演出が再点灯するのを防ぐ）。
+                if (DateTime.UtcNow < _suppressReExecuteUntil) return;
                 // 対象行が選択されたままの時のみ実行（行を切り替えていれば OnSelectedStepChanged が実行済み）
                 if (SelectedStep == null || !ReferenceEquals(SelectedStep, _reExecuteTarget)) return;
 

@@ -718,6 +718,10 @@ namespace Lib.Application.Facades
                 }
                 else
                 {
+                    // BUG-20260901-01 / 停止後消灯対策: Rainbow 停止後に KeepAlive が保持する色として
+                    // 先頭パレット色を記録する（陳腐化した旧色や null の復活・消灯を防ぐ）。実行中は
+                    // _apiEffectRunning=true で KeepAlive を抑止するため副作用はない。
+                    if (colors.Count > 0) _lastSentColor = colors[0];
                     Log.Information("[Api] Rainbow started. mode={Mode}, colors={N}, cycle={Cycle}ms",
                         mode, colors.Count, cycleDurationMs);
                 }
@@ -917,6 +921,13 @@ namespace Lib.Application.Facades
                 }
                 else
                 {
+                    // BUG-20260901-01 / 停止後消灯対策: エフェクト停止後に KeepAlive が保持すべき色として
+                    // エフェクトの基準色を記録する。StartEffect/StartRainbow はこれまで _lastSentColor を
+                    // 更新しておらず、停止（_apiEffectRunning=false 化）後に KeepAlive が陳腐化した旧色
+                    // （前ステップ／別シーケンスの色）を復活させて残色になるか、_lastSentColor が null の
+                    // まま何も送らず端末がセルフモードに落ちて数秒後に消灯していた。実行中は
+                    // _apiEffectRunning=true で KeepAlive を抑止するため、ここで設定しても副作用はない。
+                    _lastSentColor = color;
                     Log.Information(
                         "[Api] StartEffect: type={Type}, continuous={Cont}, msg={Msg}",
                         effectType, continuous, result.Message);
