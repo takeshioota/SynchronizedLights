@@ -226,6 +226,13 @@ public interface ILightingFacade
     Task<(bool IsPlaying, string? Name, int CurrentStepIndex, int TotalStepCount)> GetSequencePlayStatusDetailedAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// API が直近に送出した単色（フェード等の「現在の光度」）を取得する（GET /api/effect/current-color）。
+    /// 停止時に、設定色フルではなくこの色で保持することで「停止した瞬間の光度をキープ」を実現する。
+    /// 取得できない／未対応／未送出時は null（呼び出し側は従来のホールド色にフォールバックする）。
+    /// </summary>
+    Task<Rgb?> GetCurrentColorAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// API サーバー上のシーケンス名一覧を取得する（GET /api/sequence）
     /// </summary>
     Task<IReadOnlyList<string>> ListSequenceNamesAsync(CancellationToken ct = default);
