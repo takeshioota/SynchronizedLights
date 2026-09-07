@@ -9,6 +9,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Data;
 using System.Linq;
 using System.Threading;
@@ -486,7 +487,11 @@ namespace Lib.Ui.Screens.ViewModels
         private int _fadeSteps;
         private int _transitionMs;
 
-        public SequenceStepWrapper() { }
+        public SequenceStepWrapper()
+        {
+            // Rainbow 列サマリ（"N色 (モード)"）を色数の増減に自動追従させる（20260904）
+            rainbowColors.CollectionChanged += RainbowColors_CollectionChanged;
+        }
 
         public SequenceStepWrapper(SequenceStep src)
         {
@@ -528,6 +533,8 @@ namespace Lib.Ui.Screens.ViewModels
             _rainbowDutyRatio = src.RainbowDutyRatio ?? 5;
             rainbowFadeInMs = src.RainbowFadeInMs ?? 1000;
             rainbowFadeOutMs = src.RainbowFadeOutMs ?? 1000;
+            // Rainbow 列サマリ（"N色 (モード)"）を色数の増減に自動追従させる（20260904）
+            rainbowColors.CollectionChanged += RainbowColors_CollectionChanged;
         }
 
         /// <summary>開始時刻（ms）— 内部値</summary>
@@ -828,6 +835,107 @@ namespace Lib.Ui.Screens.ViewModels
         partial void OnColorRChanged(byte value) => OnPropertyChanged(nameof(ColorPreviewBrush));
         partial void OnColorGChanged(byte value) => OnPropertyChanged(nameof(ColorPreviewBrush));
         partial void OnColorBChanged(byte value) => OnPropertyChanged(nameof(ColorPreviewBrush));
+
+        // ─── Rainbow グリッド見える化・行編集（20260904）───────────────────────
+        // 概要：DataGrid の「Rainbow」列でこの行のパレット／モードを一覧表示し、
+        //       行の右クリック（ダブルクリック）→ 行専用エディタで色数可変（2〜7色）に編集する。
+        //       行ごとの色数・モードはデータ層（RainbowColors/RainbowMode）で既に成立済み。
+
+        /// <summary>この行が Rainbow コマンドか（Rainbow 列の表示可否／編集可否の判定）</summary>
+        public bool IsRainbow => CommandType == "Rainbow";
+
+        /// <summary>Rainbow モードの短縮ラベル（グリッド／エディタ表示用）</summary>
+        public string RainbowModeLabel => RainbowMode switch
+        {
+            RainbowMode.Solid => "常時",
+            RainbowMode.Blink => "点滅",
+            RainbowMode.FadeInOut => "FI/FO",
+            RainbowMode.FadeIn => "FI",
+            RainbowMode.FadeOut => "FO",
+            RainbowMode.Random => "ランダム",
+            _ => ""
+        };
+
+        // 端末仕様: random(3.21) は A9 02 パレットを無視して内蔵7色（赤橙黄緑青藍紫）で光る。
+        // そのためグリッドの見た目も random 行だけは固定7色で表示し、実機と一致させる（20260904）。
+        private static readonly RgbColorItem[] RandomFixedColors =
+        {
+            new(255, 0, 0), new(255, 165, 0), new(255, 255, 0), new(0, 255, 0),
+            new(0, 0, 255), new(0, 0, 139), new(128, 0, 128),
+        };
+
+        /// <summary>
+        /// グリッド Rainbow 列に表示する色。Random 行は端末仕様どおり<strong>固定7色</strong>を表示し、
+        /// それ以外はその行の RainbowColors を表示する。
+        /// </summary>
+        public System.Collections.Generic.IEnumerable<RgbColorItem> RainbowDisplayColors =>
+            RainbowMode == RainbowMode.Random ? RandomFixedColors : RainbowColors;
+
+        /// <summary>グリッド Rainbow 列のサマリ（例 "3色 (FI/FO)"）。非 Rainbow 行は空。
+        /// Random は端末仕様で常に内蔵7色のため "7色 (ランダム)" と表示する。</summary>
+        public string RainbowSummary =>
+            !IsRainbow
+                ? ""
+                : RainbowMode == RainbowMode.Random
+                    ? $"7色 ({RainbowModeLabel})"
+                    : $"{RainbowColors?.Count ?? 0}色 ({RainbowModeLabel})";
+
+        /// <summary>Rainbow モードの ComboBox バインド用（enum ↔ index）</summary>
+        public int RainbowModeIndex
+        {
+            get => (int)RainbowMode;
+            set
+            {
+                if (value >= 0 && value <= 5)
+                    RainbowMode = (RainbowMode)value;
+            }
+        }
+
+        partial void OnCommandTypeChanged(string value)
+        {
+            OnPropertyChanged(nameof(IsRainbow));
+            OnPropertyChanged(nameof(RainbowSummary));
+        }
+
+        partial void OnRainbowModeChanged(RainbowMode value)
+        {
+            OnPropertyChanged(nameof(RainbowModeIndex));
+            OnPropertyChanged(nameof(RainbowModeLabel));
+            OnPropertyChanged(nameof(RainbowSummary));
+            // Random ⇄ 他モードの切替でグリッド表示色（固定7色 or 行パレット）が変わる
+            OnPropertyChanged(nameof(RainbowDisplayColors));
+        }
+
+        // RainbowColors コレクションそのものが差し替えられたとき（例：共有パネルの「この行に適用」で
+        // 新しい ObservableCollection を代入）に、購読を張り替えつつサマリの色数を更新する。
+        // ※単なる add/remove は RainbowColors_CollectionChanged が拾う。
+        partial void OnRainbowColorsChanged(
+            ObservableCollection<RgbColorItem>? oldValue,
+            ObservableCollection<RgbColorItem> newValue)
+        {
+            if (oldValue != null) oldValue.CollectionChanged -= RainbowColors_CollectionChanged;
+            if (newValue != null) newValue.CollectionChanged += RainbowColors_CollectionChanged;
+            OnPropertyChanged(nameof(RainbowSummary));
+            OnPropertyChanged(nameof(RainbowDisplayColors));
+        }
+
+        private void RainbowColors_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            OnPropertyChanged(nameof(RainbowSummary));
+            OnPropertyChanged(nameof(RainbowDisplayColors));
+        }
+
+        /// <summary>
+        /// 行 Rainbow 編集ダイアログ確定後に、グリッドの Rainbow 列表示を更新する。
+        /// 色数（RainbowColors のコレクション変化）はスカラ通知で拾えないため明示的に呼ぶ。
+        /// </summary>
+        public void RefreshRainbowSummary()
+        {
+            OnPropertyChanged(nameof(IsRainbow));
+            OnPropertyChanged(nameof(RainbowModeLabel));
+            OnPropertyChanged(nameof(RainbowSummary));
+            OnPropertyChanged(nameof(RainbowDisplayColors));
+        }
 
         /// <summary>永続化用 SequenceStep に変換</summary>
         public SequenceStep ToModel()

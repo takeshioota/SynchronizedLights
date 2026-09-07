@@ -562,6 +562,51 @@
                                             ElementStyle="{StaticResource ZeroDimTextStyle}"/>
                         <DataGridComboBoxColumn Header="Cmd" ItemsSource="{StaticResource CommandTypeOptions}"
                                                 SelectedValueBinding="{Binding CommandType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
+                        <!-- Rainbow 見える化・行編集列（20260904）：Rainbow 行はパレットとモードを一覧表示し、
+                             右クリック「Rainbow編集…」またはダブルクリックで行専用エディタを開く。 -->
+                        <DataGridTemplateColumn Header="Rainbow" Width="180" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent"
+                                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                            ToolTip="ダブルクリック／右クリックで Rainbow の色・モードを編集"
+                                            MouseLeftButtonDown="RainbowCell_MouseLeftButtonDown">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Rainbow編集…" Click="RowRainbowEdit_Click"
+                                                          IsEnabled="{Binding IsRainbow}"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsRainbow}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <ItemsControl ItemsSource="{Binding RainbowDisplayColors}" VerticalAlignment="Center">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Width="12" Height="12" Margin="1,0" CornerRadius="2"
+                                                                BorderBrush="#555" BorderThickness="1"
+                                                                Background="{Binding HexColor}"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="{Binding RainbowSummary}" Margin="4,0,0,0"
+                                                       VerticalAlignment="Center" FontSize="11" Foreground="#CCC"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="" Width="30" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>

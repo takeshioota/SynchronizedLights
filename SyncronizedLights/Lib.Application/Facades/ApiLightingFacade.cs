@@ -1180,6 +1180,40 @@ namespace Lib.Application.Facades
         }
 
         /// <summary>
+        /// API が直近に送出した単色（フェード等の「現在の光度」）を取得する（GET /api/effect/current-color, 20260904）。
+        /// 停止時に、設定色フルではなくこの色で保持することで「停止した瞬間の光度をキープ」を実現する。
+        /// 取得できない／未対応／未送出時は null を返す（呼び出し側は従来のホールド色にフォールバックする）。
+        /// </summary>
+        public async Task<Rgb?> GetCurrentColorAsync(CancellationToken ct = default)
+        {
+            if (!_isConnected) return null;
+            try
+            {
+                using var response = await _httpClient.GetAsync("api/effect/current-color", ct);
+                if (!response.IsSuccessStatusCode) return null;
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+                if (!doc.RootElement.TryGetProperty("data", out var data)) return null;
+                if (!(data.TryGetProperty("hasColor", out var hc) && hc.ValueKind == System.Text.Json.JsonValueKind.True))
+                    return null;
+
+                byte GetByte(string name) =>
+                    data.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.Number
+                        ? (byte)Math.Clamp(v.GetInt32(), 0, 255)
+                        : (byte)0;
+
+                return new Rgb(GetByte("r"), GetByte("g"), GetByte("b"));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Api] GetCurrentColor failed: {Err}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
         /// 登録済みシーケンス名一覧（GET /api/sequence）
         /// </summary>
         public async Task<IReadOnlyList<string>> ListSequenceNamesAsync(

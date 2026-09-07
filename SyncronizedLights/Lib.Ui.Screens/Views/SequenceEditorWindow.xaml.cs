@@ -421,5 +421,36 @@ namespace Lib.Ui.Screens.Views
                 vm.EditCustomColorCommand.Execute(item);
             }
         }
+
+        /// <summary>
+        /// グリッド Rainbow 列の右クリック「Rainbow編集…」：行専用エディタを開く（20260904）
+        /// </summary>
+        private void RowRainbowEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem) return;
+            if (menuItem.Parent is not ContextMenu contextMenu) return;
+            if (contextMenu.PlacementTarget is not FrameworkElement target) return;
+            if (target.DataContext is not SequenceStepWrapper row) return;
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            if (vm.EditRowRainbowCommand.CanExecute(row))
+                vm.EditRowRainbowCommand.Execute(row);
+        }
+
+        /// <summary>
+        /// グリッド Rainbow 列のダブルクリック：Rainbow 行なら行専用エディタを開く（20260904）
+        /// </summary>
+        private void RainbowCell_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount != 2) return;
+            if (sender is not FrameworkElement fe) return;
+            if (fe.DataContext is not SequenceStepWrapper row) return;
+            if (!row.IsRainbow) return;
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            e.Handled = true;
+            if (vm.EditRowRainbowCommand.CanExecute(row))
+                vm.EditRowRainbowCommand.Execute(row);
+        }
     }
 }

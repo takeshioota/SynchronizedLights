@@ -83,6 +83,12 @@ namespace Lib.Ui.Screens.ViewModels
         private (byte R, byte G, byte B)? _lastExecutedColor;
 
         /// <summary>
+        /// 前回実行したステップが Effect（Fade/Flash/Breathing 等）だったか（20260904）。
+        /// 停止時に「設定色フル」ではなく「その瞬間の光度（API の現在色）」で保持するかの判定に使う。
+        /// </summary>
+        private bool _lastExecutedWasEffect;
+
+        /// <summary>
         /// B7 修正: ステップ実行の排他制御用セマフォ
         /// 概要：複数のステップ実行が同時に走ると API 呼び出しが競合し、
         ///       まれに応答が得られない問題を防止する。
@@ -1948,6 +1954,43 @@ namespace Lib.Ui.Screens.ViewModels
             }
         }
 
+        /// <summary>
+        /// シーケンスグリッドの行を右クリック（またはダブルクリック）して呼ばれる、行専用の Rainbow 編集。
+        /// 概要：その行（SequenceStepWrapper）の色パレット（2〜7色・行ごとに色数可変）／モード／速度・周期・
+        ///       FI/FO を、行専用ダイアログ（DlgRainbowRowEditor）で直接編集する。
+        ///       共有 Rainbow パネル（下部）の設定とは独立し、その行だけを変更する。
+        ///       Wrapper を直接編集するため、開く前に SaveUndoState() を取得し（1操作で Undo 可能）、
+        ///       閉じた後に RefreshRainbowSummary() でグリッドの Rainbow 列表示を更新する。
+        /// </summary>
+        [RelayCommand]
+        private void EditRowRainbow(SequenceStepWrapper? row)
+        {
+            if (row == null) return;
+            if (!row.IsRainbow)
+            {
+                StatusMessage = "この行は Rainbow ではありません（コマンドを Rainbow にしてから編集してください）。";
+                return;
+            }
+
+            // 色が 2 色未満（未設定・旧データ）の行は、編集しやすいよう既定7色を入れておく。
+            if (row.RainbowColors.Count < 2)
+            {
+                row.RainbowColors = new ObservableCollection<RgbColorItem>(DefaultRainbowColors());
+            }
+
+            SaveUndoState();
+
+            var dlg = new DlgRainbowRowEditor(row)
+            {
+                Owner = System.Windows.Application.Current?.MainWindow
+            };
+            dlg.ShowDialog();
+
+            row.RefreshRainbowSummary();
+            StatusMessage = $"行の Rainbow 設定を更新（{row.RainbowColors.Count}色 / {row.RainbowModeLabel}）";
+            AppendLog("INFO", $"行 Rainbow 編集: {row.RainbowColors.Count}色 mode={row.RainbowMode}");
+        }
+
         /// <summary>3.15 色テーブルのみ送信する（0xA9 0x02）</summary>
         [RelayCommand]
         private async Task SendColorTable()
@@ -2907,23 +2950,34 @@ namespace Lib.Ui.Screens.ViewModels
             // 単発エフェクト + Rainbow 停止
             try
             {
+                // 停止時に保持する色を決める。
+                //   ・Effect(Fade/Flash/Breathing 等)の停止 → 「停止した瞬間の光度」で保持する（20260904 / 案B）。
+                //     フェードは API が 1 フレームずつ A2 を送出しているため、その直近色（＝今出ている色）を取得して
+                //     ホールドすると、設定色フルへ跳ねずに Ver.1.4.8 と同じ「途中の明るさで固定」になる。
+                //   ・それ以外（Color/Off/Rainbow 等） → 従来どおり「直近に実行したステップの設定色」を保持する。
+                // いずれも取得できなければ _lastExecutedColor にフォールバックする。
+                // 停止後に色を再送してホールドするのは BUG-20260901-01（残色/消灯）対策も兼ねる。
+                Rgb? holdColor = null;
+                if (_lastExecutedWasEffect)
+                {
+                    var cur = await _lighting.GetCurrentColorAsync();
+                    if (cur != null) holdColor = cur;
+                }
+                if (holdColor == null && _lastExecutedColor.HasValue)
+                {
+                    var (lr, lg, lb) = _lastExecutedColor.Value;
+                    holdColor = new Rgb(lr, lg, lb);
+                }
+
                 await _lighting.StopEffectAsync();
                 try { await _lighting.StopRainbowAsync(); }
                 catch { /* Rainbow が走っていなければ無視 */ }
 
-                // BUG-20260901-01 / 停止後消灯対策: 単発実行の停止でも、一括再生停止
-                // (StopSequenceWithColorHoldAsync) と同様に「直近に実行したステップの設定色」を即再送して
-                // ホールドする。StartEffect/StartRainbow は _lastSentColor を更新しないため、これを怠ると
-                // 停止後に KeepAlive が陳腐化した旧色を復活させて残色になる（＝最後に再生した色が発色）か、
-                // _lastSentColor が null のまま何も送られず端末がセルフモードに落ちて数秒後に消灯する。
-                // ここで即再送すれば API 側の連続送信が途切れなく継続し（KeepAlive の 800ms 穴も無く）、
-                // 停止時にそのステップの設定色だけが点灯する。何も実行していなければ従来どおり色は送らない。
-                if (_lastExecutedColor.HasValue)
+                if (holdColor != null)
                 {
-                    var (r, g, b) = _lastExecutedColor.Value;
-                    await _lighting.SetColorAsync(Target.All, new Rgb(r, g, b));
-                    StatusMessage = $"停止しました（色 RGB({r},{g},{b}) を保持）。";
-                    AppendLog("TX", $"EffectStop + RainbowStop → Color ({r},{g},{b}) 維持");
+                    await _lighting.SetColorAsync(Target.All, holdColor);
+                    StatusMessage = $"停止しました（色 RGB({holdColor.R},{holdColor.G},{holdColor.B}) を保持）。";
+                    AppendLog("TX", $"EffectStop + RainbowStop → Color ({holdColor.R},{holdColor.G},{holdColor.B}) 維持");
                     AppendContinuousSendStartLog();
                 }
                 else
@@ -3201,6 +3255,14 @@ namespace Lib.Ui.Screens.ViewModels
                     }
                     else
                     {
+                        // 20260904: Effect(フェード等)の途中で停止した場合は「その瞬間の光度」で保持する（案B）。
+                        // フェードは API が 1 フレームずつ送出しており、その直近色を取得してホールドする。
+                        // 取得できなければ従来どおり設定色を保持する。
+                        if (lastWrapper.CommandType == "Effect")
+                        {
+                            var cur = await _lighting.GetCurrentColorAsync();
+                            if (cur != null) color = cur;
+                        }
                         await _lighting.SetColorAsync(Target.All, color);
                         AppendLog("TX", $"Sequence Stop → Color ({color.R},{color.G},{color.B}) 維持");
                         AppendContinuousSendStartLog();
@@ -3315,6 +3377,9 @@ namespace Lib.Ui.Screens.ViewModels
                     Log.Warning("[PERF] {Msg}", msg); // NO.27/28: 現地ログ解析で遅延を捕捉できるよう永続化
                 }
 
+                // 20260904: 停止時の色保持方式の判定用フラグを既定 false にし、Effect ケースでのみ true にする。
+                _lastExecutedWasEffect = false;
+
                 switch (step.CommandType)
                 {
                     case "Color":
@@ -3384,6 +3449,7 @@ namespace Lib.Ui.Screens.ViewModels
                         AppendLog("TX", $"Effect {FormatEffectDisplayName(step.EffectType, step.Continuous)} ({step.ColorR},{step.ColorG},{step.ColorB}) {FormatEffectParamsForLog(step.EffectType, step.GetEffectCycleDurationOrDefault(), step.GetFadeStepsOrDefault(), step.RetransmitCount, effectContinuous)}");
                         AppendContinuousSendStartLog();
                         _lastExecutedColor = (step.ColorR, step.ColorG, step.ColorB);
+                        _lastExecutedWasEffect = true; // 停止時は「その瞬間の光度」で保持する（20260904）
                         break;
 
                     case "EffectStop":
@@ -4128,6 +4194,17 @@ namespace Lib.Ui.Screens.ViewModels
                         var from = new Rgb(current.ColorR, current.ColorG, current.ColorB);
                         var to = new Rgb(next.ColorR, next.ColorG, next.ColorB);
 
+                        // BUG-20260904-01(No.13): OL 停止時に「OL の色」で保持するための追跡。
+                        // OL はセグメントごとに FadeColorAsync でクロスフェードするが、Chase の
+                        // ExecuteStepInLoopAsync（_lastExecutedColor/_lastExecutedWasEffect を毎ステップ更新）と違い、
+                        // OL ループはこれらを一切更新していなかった。そのため単発停止（StopExecutionAsync）の
+                        // 保持色決定が OL 直前に実行した Color ステップの陳腐値のままとなり、停止で OL ではなく
+                        // 直前 CMD:Color の色が点灯していた（「OL のときだけ」再現した原因）。
+                        // Effect フェード停止と同じ案B（GetCurrentColorAsync で「その瞬間の光度」を保持）に揃えるため
+                        // _lastExecutedWasEffect=true とし、取得失敗時のフォールバックにセグメント目標色 to を残す。
+                        _lastExecutedColor = (to.R, to.G, to.B);
+                        _lastExecutedWasEffect = true;
+
                         // 現在色→次色へクロスフェード。シーケンスの Color 遷移（TransitionMs）と同じ堅牢経路
                         // （API 側で ≈50fps 補間＋各フレーム保持中も再送）に統一する。HTTP は 1 セグメント 1 回だけ。
                         // 旧実装は UI 側で毎フレーム SetColorAsync（HTTP≈50回/秒）を叩いており、API 側の StartColorHold が
@@ -4224,6 +4301,9 @@ namespace Lib.Ui.Screens.ViewModels
 
             try
             {
+                // 20260904: 停止時の色保持方式の判定用フラグを既定 false にし、Effect ケースでのみ true にする。
+                _lastExecutedWasEffect = false;
+
                 switch (step.CommandType)
                 {
                     case "Color":
@@ -4252,6 +4332,7 @@ namespace Lib.Ui.Screens.ViewModels
                             continuous: effectContinuous,
                             ct: ct);
                         _lastExecutedColor = (step.ColorR, step.ColorG, step.ColorB);
+                        _lastExecutedWasEffect = true; // 停止時は「その瞬間の光度」で保持する（20260904）
                         break;
 
                     case "EffectStop":

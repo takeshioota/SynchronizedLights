@@ -530,6 +530,11 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             IsBusy = true;
+            // 端末ch変更は送信機CH4→3→2の各chでA6/AD×3回＋約1.5秒待機＋最終初期化と、
+            // 完了まで数秒かかる。途中で閉じると端末と送信機のchが不一致のまま残るため、
+            // 送信機初期化と同様に完了まで接続設定ダイアログの「閉じる」を無効化する
+            // （IsInitializing / CanClose・×/Alt+F4 も OnClosing でキャンセル）。
+            IsInitializing = true;
             try
             {
                 CommandLogRequested?.Invoke("TX", $"受信端ch変更 開始 → CH{ch}");
@@ -567,6 +572,7 @@ namespace Lib.Ui.Screens.ViewModels
             finally
             {
                 IsBusy = false;
+                IsInitializing = false;
             }
         }
 

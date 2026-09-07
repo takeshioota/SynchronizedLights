@@ -7,8 +7,8 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<!-- NO.33: 実行中に画面表示するバージョン番号 -->
-		<Version>2.0.3</Version>
-		<InformationalVersion>2.0.3 (tuki.)</InformationalVersion>
+		<Version>2.1.0</Version>
+		<InformationalVersion>2.1.0 (tuki.)</InformationalVersion>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 	</PropertyGroup>
 

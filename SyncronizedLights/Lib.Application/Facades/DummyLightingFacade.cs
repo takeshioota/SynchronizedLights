@@ -511,6 +511,10 @@ namespace Lib.Application.Facades
             return Task.FromResult((_dummyPlayingSequence != null, _dummyPlayingSequence, -1, 0));
         }
 
+        /// <summary>直近送出色の取得（Dummy: 常に null）</summary>
+        public Task<Rgb?> GetCurrentColorAsync(CancellationToken ct = default)
+            => Task.FromResult<Rgb?>(null);
+
         /// <summary>
         /// 登録済みシーケンス名一覧（Dummy 疑似実装）
         /// </summary>
