@@ -83,24 +83,32 @@ namespace Lib.Ui.Screens.Views
             e.Handled = true;
         }
 
+        // 仕様3.18-3.20: FI/FO 系（フェード包絡モード）は RGB 最小25（0x19）。
+        // その行がフェードモードのときは、色編集値を 25 未満なら 25 に補正して
+        // グリッド表示・端末送出値と一致させる（他モードは 0〜255 をそのまま許容）。
+        private static byte ClampForMode(byte v, bool fade)
+            => fade && v < SequenceStepWrapper.RainbowFadeRgbMin ? SequenceStepWrapper.RainbowFadeRgbMin : v;
+
         private void EditColor(RgbColorItem item)
         {
+            bool fade = Row?.IsRainbowFadeMode == true;
+
             var dlg = new DlgColorPicker { Owner = this };
             dlg.SetInitialColor(item.R, item.G, item.B);
 
             // プレビュー：スウォッチをリアルタイム更新（HexColor 通知で反映）
             dlg.OnColorChanged = (r, g, b) =>
             {
-                item.R = r;
-                item.G = g;
-                item.B = b;
+                item.R = ClampForMode(r, fade);
+                item.G = ClampForMode(g, fade);
+                item.B = ClampForMode(b, fade);
             };
 
             if (dlg.ShowDialog() == true)
             {
-                item.R = dlg.SelectedR;
-                item.G = dlg.SelectedG;
-                item.B = dlg.SelectedB;
+                item.R = ClampForMode(dlg.SelectedR, fade);
+                item.G = ClampForMode(dlg.SelectedG, fade);
+                item.B = ClampForMode(dlg.SelectedB, fade);
             }
         }
 
