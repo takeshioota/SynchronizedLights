@@ -864,12 +864,29 @@ namespace Lib.Ui.Screens.ViewModels
             new(0, 0, 255), new(0, 0, 139), new(128, 0, 128),
         };
 
+        /// <summary>この行のモードがフェード包絡（FI/FO・FI・FO）か。仕様3.18-3.20 の RGB 最小25 対象。</summary>
+        public bool IsRainbowFadeMode =>
+            RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeIn or RainbowMode.FadeOut;
+
+        /// <summary>仕様3.18-3.20: FI/FO 系の RGB 最小設定値（0x19 = 25）。上限は 255（byte 上限と一致）。</summary>
+        public const byte RainbowFadeRgbMin = 25;
+
+        /// <summary>FI/FO 系での RGB 各成分クランプ（25 未満は 25 に引き上げる）。</summary>
+        private static byte ClampFadeComponent(byte v) => v < RainbowFadeRgbMin ? RainbowFadeRgbMin : v;
+
         /// <summary>
         /// グリッド Rainbow 列に表示する色。Random 行は端末仕様どおり<strong>固定7色</strong>を表示し、
-        /// それ以外はその行の RainbowColors を表示する。
+        /// FI/FO 系（3.18-3.20）は仕様の RGB 最小25 に合わせてクランプした色を表示する（送出値と一致）。
+        /// それ以外はその行の RainbowColors をそのまま表示する。
         /// </summary>
         public System.Collections.Generic.IEnumerable<RgbColorItem> RainbowDisplayColors =>
-            RainbowMode == RainbowMode.Random ? RandomFixedColors : RainbowColors;
+            RainbowMode == RainbowMode.Random
+                ? RandomFixedColors
+                : IsRainbowFadeMode
+                    ? (RainbowColors ?? new ObservableCollection<RgbColorItem>())
+                        .Select(c => new RgbColorItem(
+                            ClampFadeComponent(c.R), ClampFadeComponent(c.G), ClampFadeComponent(c.B)))
+                    : RainbowColors;
 
         /// <summary>グリッド Rainbow 列のサマリ（例 "3色 (FI/FO)"）。非 Rainbow 行は空。
         /// Random は端末仕様で常に内蔵7色のため "7色 (ランダム)" と表示する。</summary>
