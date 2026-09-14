@@ -354,6 +354,7 @@
 
                         <DataGridTextColumn Header="再送"
                                             Binding="{Binding RetransmitCount}"
+                                            Visibility="Collapsed"
                                             Width="70">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">

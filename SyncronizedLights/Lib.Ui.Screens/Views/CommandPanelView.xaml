@@ -123,10 +123,20 @@
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="40" FontWeight="Bold" Margin="0,0,4,4"/>
                     <Button Content="Chase" Command="{Binding StartChaseCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"
-                            Foreground="#00E5FF" FontWeight="Bold"/>
+                            Foreground="#00E5FF" FontWeight="Bold"
+                            ToolTip="選択した連続行を上から下へ反復して順送りする（末尾で先頭へ戻る）"/>
+                    <Button Content="Chase2" Command="{Binding StartChase2Command}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="70" Margin="0,0,4,4"
+                            Foreground="#00E5FF" FontWeight="Bold"
+                            ToolTip="1回のみ：選択した連続行を上から下へ1回だけ順送りし、最終行で点灯を保持する（繰り返さない）"/>
                     <Button Content="OL" Command="{Binding StartOverlapCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
-                            Foreground="#69F0AE" FontWeight="Bold"/>
+                            Foreground="#69F0AE" FontWeight="Bold"
+                            ToolTip="選択した連続行を色クロスフェードで反復する（末尾で先頭へ戻る）"/>
+                    <Button Content="OL2" Command="{Binding StartOverlap2Command}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
+                            Foreground="#69F0AE" FontWeight="Bold"
+                            ToolTip="1回のみ：選択した連続行を色クロスフェードで1回だけ送り、最終行の色を保持する（繰り返さない）"/>
                     <Button Content="解除" Command="{Binding ClearLoopMarkCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
                             ToolTip="選択行（未選択なら全行）の Chase/OL 指定を解除する"/>
@@ -270,7 +280,7 @@
                         <TextBlock Text="点滅周期(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="60" Text="{Binding RainbowBlinkPeriodMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                                 Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（100〜3600ms）"/>
+                                 Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（10〜5000ms・仕様書V4.7）"/>
                         <TextBlock Text="比率:" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="40" Text="{Binding RainbowDutyRatio, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
@@ -278,11 +288,11 @@
                         <TextBlock Text="FI(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="60" Text="{Binding RainbowFadeInMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                                 Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜3000ms）"/>
+                                 Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜5000ms・仕様書V4.7）"/>
                         <TextBlock Text="FO(ms):" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="60" Text="{Binding RainbowFadeOutMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                                 Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜3000ms）"/>
+                                 Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜5000ms・仕様書V4.7）"/>
                     </WrapPanel>
                     <!-- 実行ボタン -->
                     <WrapPanel Orientation="Horizontal">

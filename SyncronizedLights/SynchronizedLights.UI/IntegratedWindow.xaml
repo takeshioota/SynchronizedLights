@@ -557,7 +557,7 @@
                         <DataGridTextColumn Header="Time(sec)"
                                             Binding="{Binding TimeSec, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.0##}}"
                                             Width="65"/>
-                        <DataGridTextColumn Header="Trig" Binding="{Binding Trig}" Width="50" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Trig" Binding="{Binding Trig}" Width="64" IsReadOnly="True"/>
                         <DataGridTextColumn Header="BPM" Binding="{Binding Bpm, UpdateSourceTrigger=PropertyChanged}" Width="50"
                                             ElementStyle="{StaticResource ZeroDimTextStyle}"/>
                         <DataGridComboBoxColumn Header="Cmd" ItemsSource="{StaticResource CommandTypeOptions}"
@@ -633,7 +633,9 @@
                         <DataGridTextColumn Header="Frame" Binding="{Binding FrameNo, UpdateSourceTrigger=PropertyChanged}" Width="50"
                                             ElementStyle="{StaticResource ZeroDimTextStyle}"/>
                         <DataGridTextColumn Header="Memo" Binding="{Binding Note, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        <!-- TX（再送回数）は既定 3 のまま非表示。値は保持され API へ送出される（表示のみ抑止） -->
                         <DataGridTextColumn Header="TX" Binding="{Binding RetransmitCount, UpdateSourceTrigger=PropertyChanged}" Width="40"
+                                            Visibility="Collapsed"
                                             ElementStyle="{StaticResource ZeroDimTextStyle}"/>
                     </DataGrid.Columns>
                 </DataGrid>

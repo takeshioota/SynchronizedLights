@@ -79,7 +79,7 @@
             <TextBlock Text="点滅周期(ms):" VerticalAlignment="Center" Margin="0,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowBlinkPeriodMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（100〜3600ms）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（10〜5000ms・仕様書V4.7）"/>
             <TextBlock Text="比率:" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="40" Text="{Binding RainbowDutyRatio, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
@@ -87,11 +87,11 @@
             <TextBlock Text="FI(ms):" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowFadeInMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜3000ms）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜5000ms・仕様書V4.7）"/>
             <TextBlock Text="FO(ms):" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowFadeOutMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜3000ms）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜5000ms・仕様書V4.7）"/>
         </WrapPanel>
 
         <!-- ボタン -->
