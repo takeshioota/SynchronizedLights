@@ -66,10 +66,12 @@ public class EffectiveRainbowCycleMsTests
     }
 
     [Fact]
-    public void フェード時間は上限3000にクランプしてから評価()
+    public void フェード時間は上限5000にクランプしてから評価()
     {
-        // FI=5000 は 3000 に抑えられる → FadeIn の下限は 3000
-        Assert.Equal(3000, Invoke(RainbowMode.FadeIn, 100, 5000, 0));
+        // 仕様書V4.7で上限 3000→5000 に変更。FI=5000 はそのまま反映 → FadeIn の実効下限は 5000
+        Assert.Equal(5000, Invoke(RainbowMode.FadeIn, 100, 5000, 0));
+        // 上限超過（FI=6000）は 5000 に抑えられる
+        Assert.Equal(5000, Invoke(RainbowMode.FadeIn, 100, 6000, 0));
     }
 
     [Fact]

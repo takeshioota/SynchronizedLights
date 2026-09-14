@@ -191,16 +191,16 @@ namespace Lib.Application.Models
         /// <summary>色切り替え速度（ms）— 500〜2500。Solid/Random モードで使用。</summary>
         public int? RainbowCycleDurationMs { get; set; } = null;
 
-        /// <summary>点滅周期（ms）— 100〜3600。Blink モード時のみ。</summary>
+        /// <summary>点滅周期（ms）— 10〜5000（仕様書V4.7。旧V4.6は100〜3600）。Blink モード時のみ。</summary>
         public int? RainbowBlinkPeriodMs { get; set; } = null;
 
         /// <summary>点灯比率（1〜9 = 10%〜90%）— Blink モード時のみ。</summary>
         public byte? RainbowDutyRatio { get; set; } = null;
 
-        /// <summary>フェードイン時間（ms）— 256〜3000。FadeInOut/FadeIn モード時。</summary>
+        /// <summary>フェードイン時間（ms）— 256〜5000（仕様書V4.7。旧V4.6は256〜3000）。FadeInOut/FadeIn モード時。</summary>
         public int? RainbowFadeInMs { get; set; } = null;
 
-        /// <summary>フェードアウト時間（ms）— 256〜3000。FadeInOut/FadeOut モード時。</summary>
+        /// <summary>フェードアウト時間（ms）— 256〜5000（仕様書V4.7。旧V4.6は256〜3000）。FadeInOut/FadeOut モード時。</summary>
         public int? RainbowFadeOutMs { get; set; } = null;
 
         /// <summary>

@@ -614,8 +614,10 @@
 		                          Binding="{Binding ColorB, UpdateSourceTrigger=PropertyChanged}"
 		                          Width="45"/>
 
+                <!-- 再送回数（TX）は既定 3 のまま非表示。値は保持され API へ送出される（表示のみ抑止） -->
                 <DataGridTextColumn Header="再送"
 		                          Binding="{Binding RetransmitCount, UpdateSourceTrigger=PropertyChanged}"
+		                          Visibility="Collapsed"
 		                          Width="45"/>
 
                 <DataGridComboBoxColumn Header="エフェクト"

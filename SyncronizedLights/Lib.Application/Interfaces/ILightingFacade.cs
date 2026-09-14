@@ -101,10 +101,10 @@ public interface ILightingFacade
     /// <param name="mode">レインボーモード（Solid/Blink/FadeInOut/FadeIn/FadeOut/Random）</param>
     /// <param name="colors">カラーパレット（2〜7色）</param>
     /// <param name="cycleDurationMs">色切り替え速度（ミリ秒）— 500〜2500</param>
-    /// <param name="blinkPeriodMs">点滅周期（ms）— Blink モード時のみ: 100〜3600</param>
+    /// <param name="blinkPeriodMs">点滅周期（ms）— Blink モード時のみ: 10〜5000（仕様書V4.7。旧V4.6は100〜3600）</param>
     /// <param name="dutyRatio">点灯比率（1〜9 = 10%〜90%）— Blink モード時のみ</param>
-    /// <param name="fadeInMs">フェードイン時間（ms）— FadeInOut/FadeIn モード時: 256〜3000</param>
-    /// <param name="fadeOutMs">フェードアウト時間（ms）— FadeInOut/FadeOut モード時: 256〜3000</param>
+    /// <param name="fadeInMs">フェードイン時間（ms）— FadeInOut/FadeIn モード時: 256〜5000（仕様書V4.7。旧V4.6は256〜3000）</param>
+    /// <param name="fadeOutMs">フェードアウト時間（ms）— FadeInOut/FadeOut モード時: 256〜5000（仕様書V4.7。旧V4.6は256〜3000）</param>
     Task StartRainbowAsync(
         RainbowMode mode,
         IReadOnlyList<Rgb> colors,
