@@ -478,6 +478,7 @@
                   ScrollViewer.HorizontalScrollBarVisibility="Visible"
                   BeginningEdit="StepDataGrid_BeginningEdit"
                   CellEditEnding="StepDataGrid_CellEditEnding"
+                  PreviewMouseLeftButtonDown="StepDataGrid_PreviewMouseLeftButtonDown"
                   Margin="0,0,0,4">
             <DataGrid.Columns>
                 <!-- No 欄機能変更仕様(0825): 00.0 形式(整数2桁/小数1桁, 範囲00.0〜99.9)。空欄=未設定。
