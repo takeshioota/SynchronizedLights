@@ -58,6 +58,13 @@ namespace Lib.Application.Services
                 {
                     return CreateDefaults();
                 }
+                // 表記訂正（誤字「満点星」→「満天星」）。既に保存済みのデータにも反映し、変更時は再保存する。
+                bool migrated = false;
+                foreach (var e in list)
+                {
+                    if (e.Name == "満点星") { e.Name = "満天星"; migrated = true; }
+                }
+                if (migrated) SaveAll(list);
                 return list;
             }
             catch (Exception ex)
@@ -91,7 +98,7 @@ namespace Lib.Application.Services
         private static List<InternalProgramEntry> CreateDefaults() => new()
         {
             new() { Name = "Rainbow",  FrameNo = 0, Enabled = true },
-            new() { Name = "満点星",   FrameNo = 1, Enabled = true },
+            new() { Name = "満天星",   FrameNo = 1, Enabled = true },
             new() { Name = "Prog 2",   FrameNo = 2, Enabled = true },
             new() { Name = "Prog 3",   FrameNo = 3, Enabled = true },
             new() { Name = "Prog 4",   FrameNo = 4, Enabled = true },

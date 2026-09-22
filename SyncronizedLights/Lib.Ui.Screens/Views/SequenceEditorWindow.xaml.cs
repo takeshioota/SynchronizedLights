@@ -257,6 +257,51 @@ namespace Lib.Ui.Screens.Views
             return false;
         }
 
+        /// <summary>
+        /// データ行クリック時の Chase/OL 制御（統合画面 IntegratedWindow と同じ配線）。
+        /// PreviewMouseLeftButtonDown は実マウス入力でのみ発火し、ループのプログラム的な
+        /// 選択変更（エコー）や編集操作では呼ばれないため、確実にユーザーのクリック操作だけを拾える。
+        /// ・ループ実行中のクリック … 離脱（RequestLoopExit）。続く選択変更で off 判定＋実行。
+        /// ・ループ非実行中のクリック … 選択確定後にマーカー行の自動起動を試みる（Chase/OL）。
+        /// この配線が SequenceEditorWindow には無かったため、先頭 Chase/OL 行をクリックしても
+        /// ループが起動せず「Chase1／OL1 が機能しない」不具合になっていた
+        /// （BUG-20260920-01 / BUG-20260920-03。統合画面には元から配線あり）。
+        /// </summary>
+        private void StepDataGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (DataContext is not SequenceEditorViewModel vm) return;
+
+            // クリック対象がデータ行のときだけ処理（ヘッダ・スクロールバー等は無視）
+            if (e.OriginalSource is DependencyObject src && FindAncestor<DataGridRow>(src) != null)
+            {
+                if (vm.IsLoopRunning)
+                {
+                    vm.RequestLoopExit();
+                    // e.Handled は立てない。クリックはそのまま継続して行選択→実行させる。
+                }
+                else
+                {
+                    // 非実行中：PreviewMouseDown 時点では SelectedStep が未更新のため、
+                    // 選択確定後（Input 優先度）にマーカー行の自動起動を試みる。
+                    Dispatcher.BeginInvoke(
+                        new Action(() => vm.TryAutoStartLoopForSelectedRow()),
+                        System.Windows.Threading.DispatcherPriority.Input);
+                }
+            }
+        }
+
+        /// <summary>ビジュアルツリーを遡って指定型の祖先を探す。</summary>
+        private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T typed) return typed;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current)
+                          ?? LogicalTreeHelper.GetParent(current);
+            }
+            return null;
+        }
+
         // 押下中の煽りボタンのインデックス（離した時に二重 Release を防ぐ、未押下時は -1）
         private int _aggressivePressedIndex = -1;
 
