@@ -492,16 +492,22 @@ namespace SynchronizedLights.UI
         {
             try
             {
-                var current = _sequenceVm.SelectedStep;
-                StepDataGrid.SelectedItems.Clear();
-                if (current != null)
+                // BUG-20260923-02: グリッド行を選択し直すと OnSelectedStepChanged 経由でその行が
+                // 「選択即実行」され、Esc 停止直後に停止済みエフェクトがリセット（再実行）されてしまう。
+                // 選択復元は自動実行を抑止した状態で行い、Esc を停止ボタンと同じ挙動に揃える。
+                _sequenceVm.RunWithoutAutoExecute(() =>
                 {
-                    StepDataGrid.SelectedItem = current;
-                    var editableColumn = StepDataGrid.Columns.FirstOrDefault(c => !c.IsReadOnly);
-                    if (editableColumn != null)
-                        StepDataGrid.CurrentCell = new DataGridCellInfo(current, editableColumn);
-                }
-                StepDataGrid.Focus();
+                    var current = _sequenceVm.SelectedStep;
+                    StepDataGrid.SelectedItems.Clear();
+                    if (current != null)
+                    {
+                        StepDataGrid.SelectedItem = current;
+                        var editableColumn = StepDataGrid.Columns.FirstOrDefault(c => !c.IsReadOnly);
+                        if (editableColumn != null)
+                            StepDataGrid.CurrentCell = new DataGridCellInfo(current, editableColumn);
+                    }
+                    StepDataGrid.Focus();
+                });
             }
             catch
             {

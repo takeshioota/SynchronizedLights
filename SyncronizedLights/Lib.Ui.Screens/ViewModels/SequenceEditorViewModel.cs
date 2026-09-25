@@ -116,6 +116,20 @@ namespace Lib.Ui.Screens.ViewModels
         private bool _wasLoopRunningBeforeEmergency;
 
         /// <summary>
+        /// Q-20260920-04: Emergency 進入時に「ループ以外で再生中／エフェクト実行中／一括再生中だったか」を記録する。
+        /// false（＝停止済み）で進入した場合、解除時に選択行を再実行（＝再生し直し）せず、進入時の色を再表示して
+        /// 「停止」状態に戻す。true（＝再生中だった）なら従来どおり選択行を再実行して再生を復帰させる。
+        /// </summary>
+        private bool _wasActiveBeforeEmergency;
+
+        /// <summary>
+        /// Q-20260920-04: Emergency 進入時に表示していた色（停止時に保持していた色など）。
+        /// 黒送信の前に <see cref="ILightingFacade.LastSentColor"/> からキャッシュ即読みで退避し、
+        /// 解除時（停止状態だった場合）に再表示して「停止時の色」に戻す。取得できなければ null（消灯維持）。
+        /// </summary>
+        private Rgb? _colorBeforeEmergency;
+
+        /// <summary>
         /// サブシーケンス（Preset）実行のキャンセル用トークンソース
         /// </summary>
         private CancellationTokenSource? _subSequenceCts;
@@ -737,6 +751,20 @@ namespace Lib.Ui.Screens.ViewModels
             // 後だし優先: ExecuteStepWithoutAdvanceAsync 内で _transitionCts をキャンセルし、
             // 最新の選択だけが実行される
             _ = ExecuteStepWithoutAdvanceAsync();
+        }
+
+        /// <summary>
+        /// プログラムからの選択変更（グリッドの選択復元など）を、「選択即実行」
+        /// (<see cref="OnSelectedStepChanged"/>) を抑止した状態で実行する。
+        /// BUG-20260923-02: Esc 停止後にグリッド行を選択し直す際、停止済みエフェクトが
+        /// 選択即実行で再実行（＝リセット）され、Esc が停止ボタンと異なる挙動になる不具合を防ぐ。
+        /// </summary>
+        public void RunWithoutAutoExecute(Action action)
+        {
+            bool prev = _suppressAutoExecute;
+            _suppressAutoExecute = true;
+            try { action(); }
+            finally { _suppressAutoExecute = prev; }
         }
 
         /// <summary>
@@ -3111,6 +3139,10 @@ namespace Lib.Ui.Screens.ViewModels
                 // 復帰処理は退避フラグをここで消費する（例外経路でも取りこぼさない）
                 var wasLoopRunning = _wasLoopRunningBeforeEmergency;
                 _wasLoopRunningBeforeEmergency = false;
+                var wasActive = _wasActiveBeforeEmergency;
+                _wasActiveBeforeEmergency = false;
+                var colorBefore = _colorBeforeEmergency;
+                _colorBeforeEmergency = null;
 
                 // BUG-20260725-01: Emergency 進入前に Chase/OL ループが走っていて、かつ選択行が
                 // Chase/OL マーカーのままなら、そのブロックのループを再起動して動的点灯に復帰させる。
@@ -3130,10 +3162,32 @@ namespace Lib.Ui.Screens.ViewModels
                         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
                     }
                 }
+                else if (wasActive)
+                {
+                    // Emergency 進入前に（ループ以外で）再生中／エフェクト実行中だった → 従来どおり選択行を
+                    // 再実行して再生を復帰させる（単発 Effect/Rainbow はこれで正しく再開する）。
+                    try { await ExecuteStepWithoutAdvanceAsync(); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
+                }
                 else
                 {
-                    // 解除時は選択行を再実行して復帰（単発 Color/Effect/Rainbow はこれで正しく戻る）
-                    try { await ExecuteStepWithoutAdvanceAsync(); }
+                    // Q-20260920-04: 進入前は「停止／静止」状態だった → 選択行を再実行（再生し直し）せず、
+                    // 進入時に表示していた色（＝停止時の色）を再表示して「停止」状態に戻す。
+                    // これにより「Effect 実行→停止→Emergency Black→解除」で Effect が再生されてしまう違和感を解消する。
+                    try
+                    {
+                        if (colorBefore != null && _lighting != null && _lighting.IsConnected)
+                        {
+                            await _lighting.SetColorAsync(Target.All, colorBefore);
+                            StatusMessage = $"Emergency 解除: 停止時の色 RGB({colorBefore.R},{colorBefore.G},{colorBefore.B}) を再表示しました。";
+                            AppendLog("TX", $"Emergency 解除 → 停止時の色 ({colorBefore.R},{colorBefore.G},{colorBefore.B}) を再表示");
+                        }
+                        else
+                        {
+                            // 進入前も消灯（色未保持／未接続）だった → 何も再表示せず消灯のまま「停止」を維持する。
+                            StatusMessage = "Emergency モードを解除しました（停止状態を維持）。";
+                        }
+                    }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
                 }
                 return;
@@ -3152,6 +3206,13 @@ namespace Lib.Ui.Screens.ViewModels
             // BUG-20260725-01: ループ停止で状態が失われる前に、Chase/OL ループ実行中だったかを退避する。
             // 解除時にこれを見て、単発再実行ではなくループ再起動で復帰させる。
             _wasLoopRunningBeforeEmergency = IsLoopRunning;
+
+            // Q-20260920-04: ループ以外でも「再生中／エフェクト実行中／一括再生中」だったかを退避する。
+            // これが false（＝停止済み）なら、解除時に選択行を再実行（再生し直し）せず、進入時の色を再表示して
+            // 「停止」状態に戻す。黒を送る「前」に、いま表示している色をキャッシュ即読みで退避しておく
+            // （GetCurrentColorAsync は API への GET で緊急消灯を遅らせるため使わない）。
+            _wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false);
+            _colorBeforeEmergency = _lighting?.LastSentColor;
 
             // NO.36: 即応性確保 — 色送信より「先に」ローカルの連続送信ループを止める。
             // Color遷移ループ/Chase/OL/サブシーケンスが単一 HttpClient を占有し続けると、
@@ -3340,41 +3401,51 @@ namespace Lib.Ui.Screens.ViewModels
             var color = new Rgb(step.ColorR, step.ColorG, step.ColorB);
             var target = Target.All;
 
+            // BUG-20260923-03: 色→色（Color/Off）で、かつ API 側にエフェクト/レインボーが走っていない場合は、
+            // 毎ステップの事前停止（StopEffect/StopRainbow＋固定 50ms 待機）を省く。これらは Effect/Rainbow からの
+            // 遷移でのみ必要で、色→色では無駄。高 BPM の Chase では 1 ステップの固定オーバーヘッド（≈50ms＋HTTP 2 往復）が
+            // 周期を食い潰し、各色の実表示窓が消える＝「色飛び」の主因になっていた。省略で色→色は SetColor 1 往復まで軽量化する。
+            // ※走っていた場合でも SetColorAsync 自体が API 側 StartColorHold で走行中エフェクトを停止するため最終的に安全。
+            bool needPreStop = (step.CommandType is not "Color" and not "Off") || _lighting.IsEffectRunning;
+
             try
             {
-                // NO.15,17,18,19 修正: 全コマンド実行前に走行中エフェクトを確実に停止する。
-                // Effect→Effect 遷移時に旧エフェクトが停止されず競合していた問題を解消。
-                // NO.27,28 対策: 停止呼び出しがハングしても全体を長時間ブロックしないよう
-                //   短いタイムアウト(2s)を付与し、遅延区間特定のため所要時間を計測する。
-                var preStopSw = Stopwatch.StartNew();
-                using (var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                if (needPreStop)
                 {
-                    // RainbowPause は「その時の色を保持」するコマンド。ここで走行中のレインボー
-                    // （API 内部では Effect 扱いのループ）を止めてしまうと保持すべき色が失われ、
-                    // 直後の A9 04（現在色ホールド）が白点灯になる。事前停止せず、下部ボタンと同じく
-                    // PauseRainbow 自身に停止→現在色ホールドを任せる（StartPacketHold が内部で停止する）。
-                    if (step.CommandType is not "RainbowPause")
+                    // NO.15,17,18,19 修正: 全コマンド実行前に走行中エフェクトを確実に停止する。
+                    // Effect→Effect 遷移時に旧エフェクトが停止されず競合していた問題を解消。
+                    // NO.27,28 対策: 停止呼び出しがハングしても全体を長時間ブロックしないよう
+                    //   短いタイムアウト(2s)を付与し、遅延区間特定のため所要時間を計測する。
+                    var preStopSw = Stopwatch.StartNew();
+                    using (var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
                     {
-                        try { await _lighting.StopEffectAsync(stopCts.Token); }
-                        catch { /* 走っていない/タイムアウトは無視 */ }
+                        // RainbowPause は「その時の色を保持」するコマンド。ここで走行中のレインボー
+                        // （API 内部では Effect 扱いのループ）を止めてしまうと保持すべき色が失われ、
+                        // 直後の A9 04（現在色ホールド）が白点灯になる。事前停止せず、下部ボタンと同じく
+                        // PauseRainbow 自身に停止→現在色ホールドを任せる（StartPacketHold が内部で停止する）。
+                        if (step.CommandType is not "RainbowPause")
+                        {
+                            try { await _lighting.StopEffectAsync(stopCts.Token); }
+                            catch { /* 走っていない/タイムアウトは無視 */ }
+                        }
+
+                        if (step.CommandType is not "Rainbow" and not "RainbowStop" and not "RainbowPause")
+                        {
+                            try { await _lighting.StopRainbowAsync(stopCts.Token); }
+                            catch { /* 走っていない/タイムアウトは無視 */ }
+                        }
                     }
 
-                    if (step.CommandType is not "Rainbow" and not "RainbowStop" and not "RainbowPause")
+                    // API 側の停止処理完了を待つ（Effect→Effect 競合防止）。
+                    // NO.15/17/18/19: 30ms では端末側の停止完了に対して短く不作動が残るケースがあったため 50ms に引き上げ。
+                    await Task.Delay(50);
+
+                    if (preStopSw.ElapsedMilliseconds > 300)
                     {
-                        try { await _lighting.StopRainbowAsync(stopCts.Token); }
-                        catch { /* 走っていない/タイムアウトは無視 */ }
+                        var msg = $"プリ停止に {preStopSw.ElapsedMilliseconds}ms（cmd={step.CommandType}/{step.EffectType}）";
+                        AppendLog("PERF", msg);
+                        Log.Warning("[PERF] {Msg}", msg); // NO.27/28: 現地ログ解析で遅延を捕捉できるよう永続化
                     }
-                }
-
-                // API 側の停止処理完了を待つ（Effect→Effect 競合防止）。
-                // NO.15/17/18/19: 30ms では端末側の停止完了に対して短く不作動が残るケースがあったため 50ms に引き上げ。
-                await Task.Delay(50);
-
-                if (preStopSw.ElapsedMilliseconds > 300)
-                {
-                    var msg = $"プリ停止に {preStopSw.ElapsedMilliseconds}ms（cmd={step.CommandType}/{step.EffectType}）";
-                    AppendLog("PERF", msg);
-                    Log.Warning("[PERF] {Msg}", msg); // NO.27/28: 現地ログ解析で遅延を捕捉できるよう永続化
                 }
 
                 // 20260904: 停止時の色保持方式の判定用フラグを既定 false にし、Effect ケースでのみ true にする。
@@ -3810,6 +3881,41 @@ namespace Lib.Ui.Screens.ViewModels
         private static bool IsOnceTrig(string? t) => t == "Chase2" || t == "OL2";
 
         /// <summary>
+        /// Q-20260922-03: Trig 列の並びから「連続ブロックが2行未満（＝1行だけ残った孤児）の
+        /// ループマーカー」の行インデックス（昇順・重複なし）を返す。
+        /// 付与は連続2〜15行必須だが解除（ClearLoopMark）は1行ずつ可能なため、3行 Chase の2行だけ
+        /// 解除して1行だけ "Chase" マークが残る、といった状態が生じ得る。1行マークは再生時に
+        /// ループ起動せず単一 Color として振る舞う（実害なし）が、マーク表示だけが残って違和感になる。
+        /// この関数が返す孤児インデックスを解除することで、付与ルール（2行以上）と表示を一致させる。
+        /// 同種 Trig 文字列の連続ブロックのみを1グループと見なす（ブロック検出は各所と同一規則）。
+        /// 純ロジック（WPF 非依存）につき単体テスト可能。
+        /// </summary>
+        public static IReadOnlyList<int> FindOrphanLoopMarkIndices(IReadOnlyList<string?> trigs)
+        {
+            var result = new List<int>();
+            if (trigs == null) return result;
+
+            int i = 0;
+            while (i < trigs.Count)
+            {
+                var mode = trigs[i];
+                if (!IsLoopTrig(mode)) { i++; continue; }
+
+                // 同種マーカーの連続ブロックを展開（TryAutoStartLoop / ResolveLoopGroup と同じ規則）。
+                int j = i;
+                while (j + 1 < trigs.Count && trigs[j + 1] == mode) j++;
+                int count = j - i + 1;
+
+                // ブロックが2行未満（＝1行）なら孤児として解除対象に積む。
+                if (count < 2)
+                    for (int k = i; k <= j; k++) result.Add(k);
+
+                i = j + 1;
+            }
+            return result;
+        }
+
+        /// <summary>
         /// マウスクリックで Chase/OL を抜ける際に立てる一回限りのフラグ。
         /// 直後に確定する <see cref="SelectedStep"/> の変更（OnSelectedStepChanged）で消費し、
         /// 離脱先が off なら停止ボタン相当にするために使う。
@@ -4048,7 +4154,28 @@ namespace Lib.Ui.Screens.ViewModels
                 ? _currentSelectedSteps.ToList()
                 : EditingSteps.ToList();
             foreach (var w in targets) w.Trig = "";
-            StatusMessage = $"Chase/OL 指定を解除しました（{targets.Count} 行）。";
+
+            // Q-20260922-03: 部分解除で「1行だけ Chase/OL マークが残る」孤児を自動で掃除し、
+            // 付与ルール（連続2行以上）と表示を一致させる。
+            int normalized = NormalizeLoopMarks();
+
+            StatusMessage = normalized > 0
+                ? $"Chase/OL 指定を解除しました（{targets.Count} 行 ＋ 孤立マーク {normalized} 行を自動整理）。"
+                : $"Chase/OL 指定を解除しました（{targets.Count} 行）。";
+        }
+
+        /// <summary>
+        /// Q-20260922-03: Chase/OL マークの正規化。連続ブロックが2行未満になった孤児マーカーを解除する。
+        /// 付与は連続2〜15行必須だが解除は1行ずつ可能なため、部分解除で1行だけ残ったマークを掃除して
+        /// 「単一 Color 動作なのに Chase/OL マークだけ残る」違和感をなくす。API 側は無関係（UI 表示のみ）。
+        /// </summary>
+        /// <returns>解除した行数。</returns>
+        private int NormalizeLoopMarks()
+        {
+            var trigs = EditingSteps.Select(s => s.Trig).ToList();
+            var orphans = FindOrphanLoopMarkIndices(trigs);
+            foreach (var idx in orphans) EditingSteps[idx].Trig = "";
+            return orphans.Count;
         }
 
         /// <summary>
