@@ -1,10 +1,14 @@
 using Lib.Application.Models;
+using Lib.Domain.Enums;
+using Lib.Domain.ValueObjects;
 using Lib.Ui.Screens.ViewModels;
 
 namespace Lib.Ui.Screens.Tests;
 
 /// <summary>
 /// シーケンス行モデル(SequenceStepWrapper)の単体テスト。実プロダクトコードを直接検証。
+///  【BUG-20250922-01】恒久 WYSIWYG：Rainbow 行はパレット未設定（2色未満）なら既定7色を実データ
+///                      として実体化し、表示・保存・実機再生を行自身のパレットで一致させる。
 ///  【v2.0.1】BPM 既定値・クランプ・null マッピング（120 特別扱いの撤廃）。
 ///  【v2.0.0】No 列 RowNumber の型(double?)・既定・null マッピング（小数保持）。
 /// 純ロジック（実機不要）。
@@ -84,5 +88,74 @@ public class SequenceStepWrapperTests
     {
         var w = new SequenceStepWrapper { TimeMs = 0 };
         Assert.Null(w.TimeSec);
+    }
+
+    // ─────────── BUG-20250922-01: Rainbow 恒久 WYSIWYG（既定7色の実体化）───────────
+
+    [Fact]
+    public void Rainbow行_Cmd選択で既定7色を実データとして実体化する()
+    {
+        // Cmd 列で直接 Rainbow を選んだだけの行（mode 既定 Solid）。データそのものに既定7色が入り、
+        // 表示・保存・実機再生を行自身のパレットで一致させる（WYSIWYG）。
+        var w = new SequenceStepWrapper { CommandType = "Rainbow" };
+        Assert.Equal(7, w.RainbowColors.Count);          // データが実体化されている
+        Assert.Equal("7色 (常時)", w.RainbowSummary);
+        Assert.Equal(7, w.RainbowDisplayColors.Count());
+        // 実機再生も行の7色を採用する（ToModel が7色を永続化＝パネル非依存）。
+        Assert.Equal(7, w.ToModel().RainbowColors!.Count);
+    }
+
+    [Fact]
+    public void 旧データ_パレット無しRainbow行は読込時に既定7色へ実体化する()
+    {
+        // 保存済み（旧版）の RainbowColors=null な Rainbow 行を読込むと既定7色で実体化される。
+        var w = new SequenceStepWrapper(new SequenceStep { CommandType = "Rainbow", RainbowColors = null });
+        Assert.Equal(7, w.RainbowColors.Count);
+        Assert.Equal("7色 (常時)", w.RainbowSummary);
+    }
+
+    [Fact]
+    public void Rainbow行_2色以上のパレットは実体化で壊さない()
+    {
+        // 既に色があれば上書きしない（ユーザ設定を保持）。読込時も実数を表示。
+        var w = new SequenceStepWrapper(new SequenceStep
+        {
+            CommandType = "Rainbow",
+            RainbowMode = RainbowMode.FadeInOut,
+            RainbowColors = new() { new Rgb(255, 0, 0), new Rgb(0, 255, 0), new Rgb(0, 0, 255) },
+        });
+        Assert.Equal(3, w.RainbowColors.Count);
+        Assert.Equal("3色 (FI/FO)", w.RainbowSummary);
+        Assert.Equal(3, w.RainbowDisplayColors.Count());
+    }
+
+    [Fact]
+    public void Rainbow行_独自色にしてCmd往復しても既定7色へ戻さない()
+    {
+        var w = new SequenceStepWrapper { CommandType = "Rainbow" }; // 実体化で7色
+        w.RainbowColors.Clear();
+        w.RainbowColors.Add(new RgbColorItem(1, 2, 3));
+        w.RainbowColors.Add(new RgbColorItem(4, 5, 6)); // 独自2色
+        w.CommandType = "Color";                        // 退避（色は保持）
+        w.CommandType = "Rainbow";                      // 2色以上なので実体化しない
+        Assert.Equal(2, w.RainbowColors.Count);
+        Assert.Equal("2色 (常時)", w.RainbowSummary);
+    }
+
+    [Fact]
+    public void Rainbow行_Randomは端末仕様どおり常に7色ランダム()
+    {
+        // Random(3.21) は A9 02 パレットを無視し内蔵7色で光る＝色数に関わらず "7色 (ランダム)"。
+        var w = new SequenceStepWrapper { CommandType = "Rainbow", RainbowMode = RainbowMode.Random };
+        Assert.Equal("7色 (ランダム)", w.RainbowSummary);
+        Assert.Equal(7, w.RainbowDisplayColors.Count());
+    }
+
+    [Fact]
+    public void 非Rainbow行はサマリ空_かつ実体化しない()
+    {
+        var w = new SequenceStepWrapper { CommandType = "Color" };
+        Assert.Equal("", w.RainbowSummary);
+        Assert.Empty(w.RainbowColors);
     }
 }

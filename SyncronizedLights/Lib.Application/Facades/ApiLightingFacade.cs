@@ -111,6 +111,12 @@ namespace Lib.Application.Facades
 
         public bool IsConnected => _isConnected;
 
+        /// <summary>API 側でエフェクト／レインボーの連続送信が走っている見込み（BUG-20260923-03）。</summary>
+        public bool IsEffectRunning => _apiEffectRunning;
+
+        /// <summary>KeepAlive 用に保持している直近送出色（Q-20260920-04: Emergency 進入時の即時退避用）。</summary>
+        public Rgb? LastSentColor => _lastSentColor;
+
         public IReadOnlyList<string> ConnectedPorts => _connectedPorts.AsReadOnly();
 
         public int QueueLength => _queueLength;

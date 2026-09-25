@@ -535,6 +535,9 @@ namespace Lib.Ui.Screens.ViewModels
             rainbowFadeOutMs = src.RainbowFadeOutMs ?? 1000;
             // Rainbow 列サマリ（"N色 (モード)"）を色数の増減に自動追従させる（20260904）
             rainbowColors.CollectionChanged += RainbowColors_CollectionChanged;
+            // 恒久 WYSIWYG: 旧データのパレット無し Rainbow 行を読込時に既定7色で実体化する
+            // （BUG-20250922-01。差替時は OnRainbowColorsChanged が購読を張り替える）。
+            EnsureRainbowPaletteMaterialized();
         }
 
         /// <summary>開始時刻（ms）— 内部値</summary>
@@ -864,22 +867,55 @@ namespace Lib.Ui.Screens.ViewModels
             new(0, 0, 255), new(0, 0, 139), new(128, 0, 128),
         };
 
+        // 既定レインボー7色（赤→橙→黄→緑→青→藍→紫）。Cmd 列で直接 Rainbow を選んだ行や
+        // 旧データのパレット無し行は、これを実データとして投入（実体化）し、グリッド表示・保存(ToModel)・
+        // 実機再生をすべて行自身のパレットで一致させる＝恒久 WYSIWYG（BUG-20250922-01）。
+        // ※実機側も 2色未満はコマンドパネル設定へフォールバックするが、実体化により通常は発生しない。
+        private static readonly RgbColorItem[] DefaultRainbowPalette =
+        {
+            new(255, 0, 0), new(255, 165, 0), new(255, 255, 0), new(0, 255, 0),
+            new(0, 0, 255), new(0, 0, 139), new(128, 0, 128),
+        };
+
+        // Rainbow 行のパレットが有効か（2色以上）。実体化により Rainbow 行は通常ここが true になる
+        // （表示ゲッタの安全網。万一 2色未満でも既定7色として見せ実機の発色と一致させる）。
+        private bool HasRainbowPalette => RainbowColors != null && RainbowColors.Count >= 2;
+
+        /// <summary>
+        /// 恒久 WYSIWYG：Rainbow 行のパレットが未設定（2色未満）なら既定7色を実データとして投入する。
+        /// Cmd 列で直接 Rainbow にした行・旧データのパレット無し行を既定7色（赤橙黄緑青藍紫）で満たし、
+        /// グリッド表示／保存(ToModel)／実機再生をすべて行自身のパレットで一致させる。
+        /// 既に2色以上あれば何もしない（ユーザ設定を壊さない）。Random でも他モードへ切替えて破綻しない
+        /// よう同様に満たす（Random の表示・発色は端末仕様どおり内蔵固定7色）。
+        /// </summary>
+        private void EnsureRainbowPaletteMaterialized()
+        {
+            if (CommandType != "Rainbow") return;
+            if (RainbowColors != null && RainbowColors.Count >= 2) return;
+            RainbowColors = new ObservableCollection<RgbColorItem>(
+                DefaultRainbowPalette.Select(c => new RgbColorItem(c.R, c.G, c.B)));
+        }
+
         /// <summary>
         /// グリッド Rainbow 列に表示する色。Random 行は端末仕様どおり<strong>固定7色</strong>を表示し、
+        /// パレット未設定（2色未満）の行は実機のフォールバックに合わせ<strong>既定7色</strong>を表示する。
         /// それ以外はその行の RainbowColors をそのまま表示する。
         /// 仕様V4.9で FI/FO 系（3.18-3.20）も RGB 0〜255（最小25は誤記と訂正）となり、下限補正は行わない。
         /// </summary>
         public System.Collections.Generic.IEnumerable<RgbColorItem> RainbowDisplayColors =>
-            RainbowMode == RainbowMode.Random ? RandomFixedColors : RainbowColors;
+            RainbowMode == RainbowMode.Random ? RandomFixedColors
+            : HasRainbowPalette ? RainbowColors
+            : DefaultRainbowPalette;
 
         /// <summary>グリッド Rainbow 列のサマリ（例 "3色 (FI/FO)"）。非 Rainbow 行は空。
-        /// Random は端末仕様で常に内蔵7色のため "7色 (ランダム)" と表示する。</summary>
+        /// Random は端末仕様で常に内蔵7色のため "7色 (ランダム)"、パレット未設定（2色未満）の行も
+        /// 実機で既定7色にフォールバックするため "7色 (…)" と表示する（BUG-20250922-01）。</summary>
         public string RainbowSummary =>
             !IsRainbow
                 ? ""
-                : RainbowMode == RainbowMode.Random
+                : (RainbowMode == RainbowMode.Random || !HasRainbowPalette)
                     ? $"7色 ({RainbowModeLabel})"
-                    : $"{RainbowColors?.Count ?? 0}色 ({RainbowModeLabel})";
+                    : $"{RainbowColors.Count}色 ({RainbowModeLabel})";
 
         /// <summary>Rainbow モードの ComboBox バインド用（enum ↔ index）</summary>
         public int RainbowModeIndex
@@ -894,8 +930,12 @@ namespace Lib.Ui.Screens.ViewModels
 
         partial void OnCommandTypeChanged(string value)
         {
+            // 恒久 WYSIWYG: Cmd 列で直接 Rainbow にした空行へ既定7色を実データとして投入する
+            // （RainbowColors 差替が RainbowSummary/RainbowDisplayColors 通知も誘発する）。
+            EnsureRainbowPaletteMaterialized();
             OnPropertyChanged(nameof(IsRainbow));
             OnPropertyChanged(nameof(RainbowSummary));
+            OnPropertyChanged(nameof(RainbowDisplayColors));
         }
 
         partial void OnRainbowModeChanged(RainbowMode value)

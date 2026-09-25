@@ -49,6 +49,10 @@ namespace Lib.Application.Facades
         #region プロパティ (ILightingFacade)
 
         public bool IsConnected => _connectedPorts.Count > 0;
+        // オフライン擬似送信では実エフェクトは走らないため常に false（色→色の事前停止を省ける／BUG-20260923-03）。
+        public bool IsEffectRunning => false;
+        // オフライン擬似送信では色保持もしないため null（Q-20260920-04: Emergency 解除時の色再表示は実送信時のみ）。
+        public Rgb? LastSentColor => null;
         public IReadOnlyList<string> ConnectedPorts => _connectedPorts.AsReadOnly();
         public int QueueLength => _queueLength;
         public string? LastError => _lastError;

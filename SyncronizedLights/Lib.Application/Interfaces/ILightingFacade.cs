@@ -42,6 +42,21 @@ public interface ILightingFacade
     /// <summary>いずれかのポートが接続中かどうか</summary>
     bool IsConnected { get; }
 
+    /// <summary>
+    /// API 側でエフェクト／レインボーの連続送信が走っている見込みか（KeepAlive 抑止フラグと同一）。
+    /// BUG-20260923-03: 色→色（Color/Off）の連続実行で、実際には何も走っていないのに毎回
+    /// 事前停止（StopEffect/StopRainbow＋固定待機）していた無駄を省く判定に使う。
+    /// </summary>
+    bool IsEffectRunning { get; }
+
+    /// <summary>
+    /// KeepAlive 用に保持している「直近に送出した単色」（未送出時は null）。
+    /// Q-20260920-04: Emergency Black 進入時に、いま表示している色（＝停止時に保持していた色など）を
+    /// HTTP 往復なしで即時退避し、解除時に「停止状態の色」を再表示するために用いる。
+    /// GetCurrentColorAsync（API への GET）と異なりキャッシュ即読みでレイテンシを生まない。
+    /// </summary>
+    Rgb? LastSentColor { get; }
+
     /// <summary>現在接続中のポート名一覧</summary>
     IReadOnlyList<string> ConnectedPorts { get; }
 
