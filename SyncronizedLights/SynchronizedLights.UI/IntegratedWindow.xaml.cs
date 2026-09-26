@@ -593,8 +593,14 @@ namespace SynchronizedLights.UI
             {
                 if (_sequenceVm.IsLoopRunning)
                 {
-                    _sequenceVm.RequestLoopExit();
-                    // e.Handled は立てない。クリックはそのまま継続して行選択→実行させる。
+                    // BUG-20260926-02: 進行ロック中はループを止めない（本番中に先行して他行を編集するための機能）。
+                    // ロック中はクリックしても離脱せず、選択のみ確定させて編集可能にする（実行は
+                    // OnSelectedStepChanged が進行ロックで抑止、ループは SelectedStep を奪わないので選択は維持）。
+                    if (!_sequenceVm.IsProgressLocked)
+                    {
+                        _sequenceVm.RequestLoopExit();
+                    }
+                    // e.Handled は立てない。クリックはそのまま継続して行選択させる。
                 }
                 else
                 {
