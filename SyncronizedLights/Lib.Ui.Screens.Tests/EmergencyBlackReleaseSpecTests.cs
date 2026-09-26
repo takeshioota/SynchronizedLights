@@ -65,12 +65,72 @@ public class EmergencyBlackReleaseSpecTests
         Assert.Contains("var wasActive = _wasActiveBeforeEmergency;", vm);
         Assert.Contains("var colorBefore = _colorBeforeEmergency;", vm);
 
-        // 進入前がアクティブだった場合は従来どおり選択行を再実行（再生復帰）。
-        var activeBranch = Between(vm, "else if (wasActive)", "else");
+        // 進入前がアクティブだった（または Emergency 中に移動した）場合は選択行を実行（再生復帰／移動先起動）。
+        var activeBranch = Between(vm, "else if (navigated || wasActive)", "else");
         Assert.Contains("ExecuteStepWithoutAdvanceAsync()", activeBranch);
 
         // 停止済み（else）分岐では、選択行の再実行ではなく退避色の再表示（SetColorAsync）を行う。
-        var stoppedBranch = Between(vm, "進入前は「停止／静止」状態だった", "return;");
+        var stoppedBranch = Between(vm, "進入前は「停止／静止」状態で", "return;");
+        Assert.Contains("_lighting.SetColorAsync(Target.All, colorBefore)", stoppedBranch);
+        Assert.DoesNotContain("ExecuteStepWithoutAdvanceAsync()", stoppedBranch);
+    }
+
+    // ── BUG-20260926-01: Emergency 中の行移動を検知して移動先を実行/起動する ──────────────
+
+    [Fact]
+    public void 進入時に選択行を退避する_20260926()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 退避フィールドが存在する。
+        Assert.Contains("private SequenceStepWrapper? _selectedStepBeforeEmergency;", vm);
+
+        // 進入側で進入時の選択行を退避する（黒送信より前）。
+        Assert.Contains("_selectedStepBeforeEmergency = SelectedStep;", vm);
+        int capture = vm.IndexOf("_selectedStepBeforeEmergency = SelectedStep;", System.StringComparison.Ordinal);
+        Assert.True(capture >= 0, "選択行の退避コードが見つかりません");
+        int blackSend = vm.IndexOf("await _lighting.SetColorAsync(Target.All, color);", capture, System.StringComparison.Ordinal);
+        Assert.True(blackSend > capture, "進入時の選択行退避は黒送信より前でなければならない");
+    }
+
+    [Fact]
+    public void 解除時に移動有無を判定する_20260926()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 解除側で退避した選択行を消費し、現在の選択行と比較して移動有無を判定する。
+        Assert.Contains("var selectedBefore = _selectedStepBeforeEmergency;", vm);
+        Assert.Contains("bool navigated = !ReferenceEquals(SelectedStep, selectedBefore);", vm);
+    }
+
+    [Fact]
+    public void 解除時_移動先がループ行なら起動する_20260926()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 選択行が Chase/OL マーカーで、進入前ループ中 または Emergency 中に移動してきた場合に
+        // ループを（再）起動する（wasLoopRunning || navigated が条件に含まれる）。
+        Assert.Contains("if (SelectedStep != null && IsLoopTrig(SelectedStep.Trig)", vm);
+        Assert.Contains("&& (wasLoopRunning || navigated))", vm);
+    }
+
+    [Fact]
+    public void 解除時_移動していれば移動先の通常行を実行する_20260926()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // ループ以外の分岐は「移動した または 進入前アクティブ」で選択行を実行する。
+        var branch = Between(vm, "else if (navigated || wasActive)", "else");
+        Assert.Contains("ExecuteStepWithoutAdvanceAsync()", branch);
+    }
+
+    [Fact]
+    public void 解除時_移動なしかつ停止済みは停止色を再表示する_20260926()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // Q-20260920-04 を維持：移動なし かつ 停止済み（else）は再実行せず停止色を再表示する。
+        var stoppedBranch = Between(vm, "Emergency 中に選択行も移動していない", "return;");
         Assert.Contains("_lighting.SetColorAsync(Target.All, colorBefore)", stoppedBranch);
         Assert.DoesNotContain("ExecuteStepWithoutAdvanceAsync()", stoppedBranch);
     }

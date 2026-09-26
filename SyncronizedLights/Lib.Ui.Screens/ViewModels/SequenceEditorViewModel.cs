@@ -130,6 +130,15 @@ namespace Lib.Ui.Screens.ViewModels
         private Rgb? _colorBeforeEmergency;
 
         /// <summary>
+        /// BUG-20260926-01: Emergency 進入時に選択していた行。解除時に現在の選択行と比較し、Emergency 中に
+        /// 選択行を「移動したか」を判定する。移動していれば移動先の行を実行/起動して復帰させる（OL/Chase 行なら
+        /// ループ起動、通常行なら単発実行）。移動していなければ Q-20260920-04 どおり停止時の色を再表示する。
+        /// これにより「別行で Emergency 発動 → OL/Chase 行へ移動して解除」でループが始まらない／
+        /// 「別エフェクト行へ移動して解除」で前の色のまま停止する、という不具合を解消する。
+        /// </summary>
+        private SequenceStepWrapper? _selectedStepBeforeEmergency;
+
+        /// <summary>
         /// サブシーケンス（Preset）実行のキャンセル用トークンソース
         /// </summary>
         private CancellationTokenSource? _subSequenceCts;
@@ -194,8 +203,11 @@ namespace Lib.Ui.Screens.ViewModels
             OnPropertyChanged(nameof(ProgressLockButtonText));
             AppendLog("INFO", value ? "進行ロック ON" : "進行ロック OFF");
 
-            // ロック解除時: 現在選択中のステップを即時実行して復帰
-            if (!value && SelectedStep != null && _lighting != null && _lighting.IsConnected)
+            // ロック解除時: 現在選択中のステップを即時実行して復帰。
+            // ただし Chase/OL ループ実行中は、ループ側が次ステップで点灯を継続・復帰させるため単発実行しない
+            // （BUG-20260926-02: ロック中はループが SelectedStep を奪わないので、ここで編集用の選択行を撃つと
+            //   一瞬その色がちらついてからループに上書きされる。ループ中は撃たずにループへ復帰を委ねる）。
+            if (!value && !IsLoopRunning && SelectedStep != null && _lighting != null && _lighting.IsConnected)
             {
                 _ = ExecuteStepWithoutAdvanceAsync();
             }
@@ -2581,6 +2593,10 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // BUG-20260926-02: 進行ロック中はクリックと挙動を統一し「選択の移動のみ」にする。
+            // ループは止めず・実行もしない（入力手段＝クリック/矢印/Enter で結果が変わらないようにする）。
+            if (IsProgressLocked) { MoveSelectionDuringProgressLock(+1); return; }
+
             // 矢印キーと同じく、Chase/OL 実行中ならまずループを停止してから移動する（Enter も離脱手段）
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
@@ -2621,6 +2637,9 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (EditingSteps.Count == 0) return;
 
+            // BUG-20260926-02: 進行ロック中はクリックと挙動を統一し「選択の移動のみ」にする（ループ停止・実行なし）。
+            if (IsProgressLocked) { MoveSelectionDuringProgressLock(-1); return; }
+
             // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
@@ -2652,6 +2671,9 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (EditingSteps.Count == 0) return;
 
+            // BUG-20260926-02: 進行ロック中はクリックと挙動を統一し「選択の移動のみ」にする（ループ停止・実行なし）。
+            if (IsProgressLocked) { MoveSelectionDuringProgressLock(+1); return; }
+
             // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
@@ -2675,6 +2697,28 @@ namespace Lib.Ui.Screens.ViewModels
             // 矢印でマーカー行に「外から」入ったら自動起動（離脱操作中=wasLooping は起動しない）
             if (!wasLooping) TryAutoStartLoop(SelectedStep, prev);
             StatusMessage = $"次ステップへ移動：{newIndex + 1} / {EditingSteps.Count}";
+        }
+
+        /// <summary>
+        /// BUG-20260926-02: 進行ロック中の矢印/Enter による選択移動。ループを止めず・実行もせず、
+        /// 選択（ハイライト）だけを 1 行動かす。クリックでの行選択と挙動を一致させ、入力手段（クリック/
+        /// 矢印/Enter）によらず「進行ロック中は点灯を変えずに他行を編集できる」で一貫させる。
+        /// 実行は行わない（選択変更を受ける <see cref="OnSelectedStepChanged"/> が進行ロックで実行を抑止する）。
+        /// Chase/OL 実行中でもロック中はループが SelectedStep を奪わないため、ここで動かした選択は維持される。
+        /// </summary>
+        /// <param name="delta">+1 で次行、-1 で前行。</param>
+        private void MoveSelectionDuringProgressLock(int delta)
+        {
+            if (EditingSteps.Count == 0) return;
+
+            // 未選択なら先頭を選ぶ。選択済みなら delta 方向へ 1 行（範囲内にクランプ）。
+            int newIndex = CurrentStepIndex < 0
+                ? 0
+                : Math.Clamp(CurrentStepIndex + delta, 0, EditingSteps.Count - 1);
+
+            // 選択のみ移動（自動実行は OnSelectedStepChanged 側が進行ロックで抑止する）。
+            SelectedStep = EditingSteps[newIndex];
+            StatusMessage = $"進行ロック中: 選択 {newIndex + 1} / {EditingSteps.Count}（点灯は変更しません）";
         }
 
         /// <summary>
@@ -3143,37 +3187,46 @@ namespace Lib.Ui.Screens.ViewModels
                 _wasActiveBeforeEmergency = false;
                 var colorBefore = _colorBeforeEmergency;
                 _colorBeforeEmergency = null;
+                // BUG-20260926-01: Emergency 中に選択行を移動したか（進入時の選択行と現在の選択行が別インスタンスか）。
+                // 移動していれば「移動先の行を実行/起動して復帰」させる（＝停止色の再表示より優先）。
+                var selectedBefore = _selectedStepBeforeEmergency;
+                _selectedStepBeforeEmergency = null;
+                bool navigated = !ReferenceEquals(SelectedStep, selectedBefore);
 
-                // BUG-20260725-01: Emergency 進入前に Chase/OL ループが走っていて、かつ選択行が
-                // Chase/OL マーカーのままなら、そのブロックのループを再起動して動的点灯に復帰させる。
+                // BUG-20260725-01 / BUG-20260926-01: 選択行が Chase/OL マーカーで、かつ
+                //   ・進入前からループ実行中だった（再生中に押した→解除で復帰）／
+                //   ・Emergency 中に別行からこの行へ移動してきた（新規にループを起動したい）
+                // のいずれかなら、そのブロックのループを（再）起動して動的点灯に復帰させる。
                 // 単発の ExecuteStepWithoutAdvanceAsync だけだと、Chase 行は CommandType="Color"（単色）
                 // のため1色を出して固着していた（7色/Rainbow 等の Effect 行はAPI側が自走するため復帰できていた）。
-                if (wasLoopRunning && SelectedStep != null
-                    && IsLoopTrig(SelectedStep.Trig))
+                if (SelectedStep != null && IsLoopTrig(SelectedStep.Trig)
+                    && (wasLoopRunning || navigated))
                 {
                     // IsEmergencyActive は上で false 済みのため TryAutoStartLoop のガードを通過する。
                     TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
-                    AppendLog("INFO", $"Emergency 解除: {SelectedStep.Trig} ループを再起動");
+                    AppendLog("INFO", $"Emergency 解除: {SelectedStep.Trig} ループを{(wasLoopRunning ? "再" : "")}起動");
 
-                    // マーカー消失/進行ロック等で再起動できなかった場合は従来どおり単発再実行にフォールバック。
+                    // マーカー消失/進行ロック/孤児(1行)等で起動できなかった場合は単発再実行にフォールバック。
                     if (!IsLoopRunning)
                     {
                         try { await ExecuteStepWithoutAdvanceAsync(); }
                         catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
                     }
                 }
-                else if (wasActive)
+                else if (navigated || wasActive)
                 {
-                    // Emergency 進入前に（ループ以外で）再生中／エフェクト実行中だった → 従来どおり選択行を
-                    // 再実行して再生を復帰させる（単発 Effect/Rainbow はこれで正しく再開する）。
+                    // BUG-20260926-01: Emergency 中に別の（ループ以外の）行へ移動した → 移動先の行を実行して復帰。
+                    // Q-20260920-04: 進入前に（ループ以外で）再生中／エフェクト実行中だった → 選択行を再実行して再生復帰。
+                    // どちらも「選択行を実行して復帰させる」で共通（単発 Effect/Rainbow はこれで正しく再開/開始する）。
                     try { await ExecuteStepWithoutAdvanceAsync(); }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Emergency] 復帰失敗: {ex.Message}"); }
                 }
                 else
                 {
-                    // Q-20260920-04: 進入前は「停止／静止」状態だった → 選択行を再実行（再生し直し）せず、
-                    // 進入時に表示していた色（＝停止時の色）を再表示して「停止」状態に戻す。
-                    // これにより「Effect 実行→停止→Emergency Black→解除」で Effect が再生されてしまう違和感を解消する。
+                    // Q-20260920-04: 進入前は「停止／静止」状態で、かつ Emergency 中に選択行も移動していない
+                    // → 選択行を再実行（再生し直し）せず、進入時に表示していた色（＝停止時の色）を再表示して
+                    // 「停止」状態に戻す。これにより「Effect 実行→停止→Emergency Black→解除」で Effect が
+                    // 再生されてしまう違和感を解消する（移動していないケース限定でこの挙動を維持する）。
                     try
                     {
                         if (colorBefore != null && _lighting != null && _lighting.IsConnected)
@@ -3213,6 +3266,10 @@ namespace Lib.Ui.Screens.ViewModels
             // （GetCurrentColorAsync は API への GET で緊急消灯を遅らせるため使わない）。
             _wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false);
             _colorBeforeEmergency = _lighting?.LastSentColor;
+
+            // BUG-20260926-01: Emergency 中の行移動を検知するため、進入時の選択行を退避する。
+            // 解除時にこれと現在の選択行を比較し、移動していれば移動先の行を実行/起動して復帰させる。
+            _selectedStepBeforeEmergency = SelectedStep;
 
             // NO.36: 即応性確保 — 色送信より「先に」ローカルの連続送信ループを止める。
             // Color遷移ループ/Chase/OL/サブシーケンスが単一 HttpClient を占有し続けると、
@@ -3351,7 +3408,12 @@ namespace Lib.Ui.Screens.ViewModels
         /// <remarks>
         /// コードビハインドからの呼び出しには <see cref="ReExecuteCurrentStepAsync"/> を使用すること。
         /// </remarks>
-        private async Task ExecuteStepWithoutAdvanceAsync()
+        /// <param name="overrideStep">
+        /// 実行対象を明示指定する。null なら従来どおり <see cref="SelectedStep"/> を実行する。
+        /// BUG-20260926-02: 進行ロック中は Chase/OL ループがハイライト（SelectedStep）を奪わず、
+        /// ユーザーが編集用に選んだ行を維持したまま、ループ側は本来の step をここへ渡して実行する。
+        /// </param>
+        private async Task ExecuteStepWithoutAdvanceAsync(SequenceStepWrapper? overrideStep = null)
         {
             if (IsEmergencyActive)
             {
@@ -3363,8 +3425,9 @@ namespace Lib.Ui.Screens.ViewModels
                 StatusMessage = "オフライン（プレビュー：送信なし）";
                 return;
             }
-            // SelectedStep を直接参照することで、CurrentStepIndex のバインド同期タイミングに左右されない
-            var wrapper = SelectedStep;
+            // 実行対象。overrideStep があればそれを、無ければ SelectedStep を実行する（SelectedStep を
+            // 直接参照することで、CurrentStepIndex のバインド同期タイミングに左右されない）。
+            var wrapper = overrideStep ?? SelectedStep;
             if (wrapper == null) return;
 
             // ロック中の行は実行をスキップ（本番中に先の演出を安全に修正可能）
@@ -4238,16 +4301,21 @@ namespace Lib.Ui.Screens.ViewModels
 
                         var step = steps[i];
 
-                        _suppressAutoExecute = true;
-                        try
+                        // BUG-20260926-02: 進行ロック中はユーザーが別行を選択して編集できるよう、ループは
+                        // ハイライト（SelectedStep）を奪わない。実行対象は step を明示指定して継続させる。
+                        if (!IsProgressLocked)
                         {
-                            SelectedStep = step;
-                            CurrentStepIndex = EditingSteps.IndexOf(step);
+                            _suppressAutoExecute = true;
+                            try
+                            {
+                                SelectedStep = step;
+                                CurrentStepIndex = EditingSteps.IndexOf(step);
+                            }
+                            finally { _suppressAutoExecute = false; }
                         }
-                        finally { _suppressAutoExecute = false; }
 
                         var sw = Stopwatch.StartNew();
-                        await ExecuteStepWithoutAdvanceAsync();
+                        await ExecuteStepWithoutAdvanceAsync(step);
                         if (token.IsCancellationRequested) break;
 
                         // BUG-20260729-06/09: ループ内に off/SignalOff 行があれば、実行後にループを止める
@@ -4360,19 +4428,25 @@ namespace Lib.Ui.Screens.ViewModels
                         // 旧実装はフェード完了後に next へ更新していたため、群に入った瞬間はマーカーが入場行に
                         // 居座り、Chase（即・群先頭へジャンプ）と位相がずれ、Ret 退場のキー数・着地が食い違っていた。
                         // フェードは from=current / to=next のまま（見た目の色遷移は不変）。
-                        _suppressAutoExecute = true;
-                        try
+                        // BUG-20260926-02: 進行ロック中はハイライトを奪わず、ユーザーの編集用選択を維持する。
+                        // OL の色送出はローカルの current/next を使うため SelectedStep には依存しない。
+                        if (!IsProgressLocked)
                         {
-                            SelectedStep = current;
-                            CurrentStepIndex = EditingSteps.IndexOf(current);
+                            _suppressAutoExecute = true;
+                            try
+                            {
+                                SelectedStep = current;
+                                CurrentStepIndex = EditingSteps.IndexOf(current);
+                            }
+                            finally { _suppressAutoExecute = false; }
                         }
-                        finally { _suppressAutoExecute = false; }
 
                         // BUG-20260729-06/09: OL ブロック内に off/SignalOff 行があれば、色フェードせず
                         //   off を実行してループを止める（継続すると次セグメントの色送信で off が打ち消される）。
                         if (IsOffStep(current))
                         {
-                            try { await ExecuteStepWithoutAdvanceAsync(); }
+                            // 進行ロック中も SelectedStep を奪わないため、実行対象は current を明示指定する。
+                            try { await ExecuteStepWithoutAdvanceAsync(current); }
                             catch (Exception ex) { AppendLog("ERR", $"OL off 実行失敗: {ex.Message}"); }
                             StopLoopExecution();
                             break;
