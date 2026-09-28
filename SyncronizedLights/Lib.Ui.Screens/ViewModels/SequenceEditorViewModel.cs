@@ -3264,7 +3264,13 @@ namespace Lib.Ui.Screens.ViewModels
             // これが false（＝停止済み）なら、解除時に選択行を再実行（再生し直し）せず、進入時の色を再表示して
             // 「停止」状態に戻す。黒を送る「前」に、いま表示している色をキャッシュ即読みで退避しておく
             // （GetCurrentColorAsync は API への GET で緊急消灯を遅らせるため使わない）。
-            _wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false);
+            // BUG-20260928-02: Preset 親で子サブシーケンスをループ再生中だった場合も「再生中」に含める
+            // （下の _subSequenceCts?.Cancel() より前でここで捕捉する）。含めないと、Emergency 発動時点の子が
+            // Color だと IsEffectRunning=false のため停止扱いになり、解除時に色を再表示するだけで Preset 子ループが
+            // 復帰しない（子が Effect のときだけ IsEffectRunning で偶然復帰していた）不整合になる。含めることで、
+            // 解除時は選択中の Preset 行を ExecuteStepWithoutAdvanceAsync で再実行し、子ループを再起動する
+            // （＝Color 子でも Effect 子でも同じ復帰経路に一本化）。
+            _wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false) || _subSequenceCts != null;
             _colorBeforeEmergency = _lighting?.LastSentColor;
 
             // BUG-20260926-01: Emergency 中の行移動を検知するため、進入時の選択行を退避する。

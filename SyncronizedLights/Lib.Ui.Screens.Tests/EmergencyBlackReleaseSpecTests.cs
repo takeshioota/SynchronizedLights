@@ -44,8 +44,8 @@ public class EmergencyBlackReleaseSpecTests
         Assert.Contains("private bool _wasActiveBeforeEmergency;", vm);
         Assert.Contains("private Rgb? _colorBeforeEmergency;", vm);
 
-        // 進入側で、ループ以外のアクティブ（再生中／エフェクト実行中）と表示色を退避する。
-        Assert.Contains("_wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false);", vm);
+        // 進入側で、ループ以外のアクティブ（再生中／エフェクト実行中／Preset サブシーケンス再生中）と表示色を退避する。
+        Assert.Contains("_wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false) || _subSequenceCts != null;", vm);
         Assert.Contains("_colorBeforeEmergency = _lighting?.LastSentColor;", vm);
 
         // 退避は「黒(0,0,0)を送る SetColorAsync」より前で行う（黒で色が上書きされる前に読む）。
@@ -133,6 +133,37 @@ public class EmergencyBlackReleaseSpecTests
         var stoppedBranch = Between(vm, "Emergency 中に選択行も移動していない", "return;");
         Assert.Contains("_lighting.SetColorAsync(Target.All, colorBefore)", stoppedBranch);
         Assert.DoesNotContain("ExecuteStepWithoutAdvanceAsync()", stoppedBranch);
+    }
+
+    // ── BUG-20260928-02: Preset 親で子実行中の Emergency Black 解除で Preset 子ループを復帰する ──
+
+    [Fact]
+    public void 進入時にPresetサブシーケンス再生中もアクティブ扱いにする_20260928()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 子が Color でも Effect でも一貫して復帰させるため、_subSequenceCts 実行中を「再生中」に含める。
+        Assert.Contains(
+            "_wasActiveBeforeEmergency = IsPlaying || IsLoopRunning || (_lighting?.IsEffectRunning ?? false) || _subSequenceCts != null;",
+            vm);
+
+        // 捕捉はサブシーケンスのキャンセルより前で行う（キャンセル後だと null になり捕捉できない）。
+        int capture = vm.IndexOf("_wasActiveBeforeEmergency = IsPlaying || IsLoopRunning", System.StringComparison.Ordinal);
+        Assert.True(capture >= 0, "アクティブ状態の捕捉コードが見つかりません");
+        int cancelSub = vm.IndexOf("_subSequenceCts?.Cancel();", capture, System.StringComparison.Ordinal);
+        Assert.True(cancelSub > capture, "アクティブ状態の捕捉はサブシーケンスのキャンセルより前でなければならない");
+    }
+
+    [Fact]
+    public void 解除時_Preset再生中だった場合は選択Preset行を再実行して子ループを再起動する_20260928()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // wasActive（Preset 再生中を含む）分岐で選択行（＝Preset 行）を再実行する。
+        // ExecuteStepWithoutAdvanceAsync の case "Preset" が RunSubSequenceAsync を再起動する。
+        var activeBranch = Between(vm, "else if (navigated || wasActive)", "else");
+        Assert.Contains("ExecuteStepWithoutAdvanceAsync()", activeBranch);
+        Assert.Contains("RunSubSequenceAsync", vm);
     }
 
     // ── ヘルパー ─────────────────────────────────────────────────────────
