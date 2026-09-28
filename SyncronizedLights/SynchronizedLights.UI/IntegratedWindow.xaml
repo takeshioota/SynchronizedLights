@@ -558,7 +558,8 @@
                                             Binding="{Binding TimeSec, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.0##}}"
                                             Width="65"/>
                         <DataGridTextColumn Header="Trig" Binding="{Binding Trig}" Width="64" IsReadOnly="True"/>
-                        <DataGridTextColumn Header="BPM" Binding="{Binding Bpm, UpdateSourceTrigger=PropertyChanged}" Width="50"
+                        <!-- BUG-20260923-04: PropertyChanged だと int 往復で編集中に桁落ち（200→10）。LostFocus に統一。 -->
+                        <DataGridTextColumn Header="BPM" Binding="{Binding Bpm, UpdateSourceTrigger=LostFocus}" Width="50"
                                             ElementStyle="{StaticResource ZeroDimTextStyle}"/>
                         <DataGridComboBoxColumn Header="Cmd" ItemsSource="{StaticResource CommandTypeOptions}"
                                                 SelectedValueBinding="{Binding CommandType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80"/>

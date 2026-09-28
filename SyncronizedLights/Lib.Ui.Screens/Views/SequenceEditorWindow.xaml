@@ -536,8 +536,11 @@
 		                          Binding="{Binding TimeSec, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.0##}}"
 		                          Width="65"/>
 
+                <!-- BUG-20260923-04: int バインドで PropertyChanged だと 1 打鍵ごとに text→int→text 往復で
+                     中間テキストが正規化され桁が落ちる（例: 200 の先頭を 1 に→100 でなく 10）。隣の Time 列と
+                     同様 LostFocus にし、確定（セル離脱）時にだけ 1 回パースする。 -->
                 <DataGridTextColumn Header="BPM"
-		                          Binding="{Binding Bpm, UpdateSourceTrigger=PropertyChanged}"
+		                          Binding="{Binding Bpm, UpdateSourceTrigger=LostFocus}"
 		                          Width="50"/>
 
                 <DataGridComboBoxColumn Header="コマンド"
