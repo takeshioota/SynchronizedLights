@@ -166,7 +166,61 @@ public class EmergencyBlackReleaseSpecTests
         Assert.Contains("RunSubSequenceAsync", vm);
     }
 
+    // ── BUG-20260928-03: Emergency 中の矢印/Enter は選択移動のみ（先頭再開の表示不整合を解消） ──
+
+    [Fact]
+    public void 矢印とEnterはEmergency中はループを再起動せず選択移動のみにする_20260928()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 3 つのナビゲーション（Enter/Space=ExecuteCurrentStep, 前=PreviousStep, 次=NextStep）が
+        // Emergency 中は MoveSelectionDuringEmergency を呼んで早期 return する（通常のループ経路へ入らない）。
+        AssertEmergencyNavGuard(vm, "private void ExecuteCurrentStep()", "+1");
+        AssertEmergencyNavGuard(vm, "private void PreviousStep()", "-1");
+        AssertEmergencyNavGuard(vm, "private void NextStep()", "+1");
+    }
+
+    [Fact]
+    public void Emergency中移動ヘルパーはループ起動も実行もしない_20260928()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // メソッドシグネチャ以降（＝doc コメントを除く本体）を対象に走査する。
+        int sig = vm.IndexOf("private void MoveSelectionDuringEmergency(int delta)", System.StringComparison.Ordinal);
+        Assert.True(sig >= 0, "MoveSelectionDuringEmergency が見つかりません");
+        int end = vm.IndexOf("private bool MoveSelectionForLoopExit", sig, System.StringComparison.Ordinal);
+        Assert.True(end > sig, "MoveSelectionDuringEmergency の本体範囲が特定できません");
+        var body = vm.Substring(sig, end - sig);
+
+        // 選択のみ移動する（点灯は変えない）＝ループ停止/起動も単発実行も呼ばない。
+        Assert.DoesNotContain("StopLoopExecution()", body);
+        Assert.DoesNotContain("TryAutoStartLoop", body);
+        Assert.DoesNotContain("TryJumpOutOfLoopBlock", body);
+        Assert.DoesNotContain("ExecuteStepWithoutAdvanceAsync(", body);   // 実際の呼び出し（括弧付き）は無い
+        Assert.Contains("SelectedStep = EditingSteps[newIndex];", body);
+    }
+
+    [Fact]
+    public void Emergency中は選択移動でも実行が抑止される_20260928()
+    {
+        var vm = ReadSource("Lib.Ui.Screens", "ViewModels", "SequenceEditorViewModel.cs");
+
+        // 選択変更で走る ExecuteStepWithoutAdvanceAsync の入口に IsEmergencyActive の早期 return があること
+        // （＝MoveSelectionDuringEmergency が SelectedStep を変えても照明操作は行われない）。
+        var exec = Between(vm, "private async Task ExecuteStepWithoutAdvanceAsync(SequenceStepWrapper? overrideStep = null)", "return;");
+        Assert.Contains("if (IsEmergencyActive)", exec);
+    }
+
     // ── ヘルパー ─────────────────────────────────────────────────────────
+    private static void AssertEmergencyNavGuard(string source, string methodSig, string delta)
+    {
+        int m = source.IndexOf(methodSig, System.StringComparison.Ordinal);
+        Assert.True(m >= 0, $"メソッドが見つかりません: {methodSig}");
+        // メソッド先頭付近（日本語コメントを含む字数を考慮して広めに取る）に Emergency の早期分岐がある。
+        var head = source.Substring(m, System.Math.Min(1200, source.Length - m));
+        Assert.Contains($"if (IsEmergencyActive) {{ MoveSelectionDuringEmergency({delta}); return; }}", head);
+    }
+
     private static string Between(string text, string startMarker, string endMarker)
     {
         int s = text.IndexOf(startMarker, System.StringComparison.Ordinal);

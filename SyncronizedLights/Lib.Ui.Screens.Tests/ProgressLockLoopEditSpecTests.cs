@@ -87,8 +87,10 @@ public class ProgressLockLoopEditSpecTests
 
         int start = vm.IndexOf("private void MoveSelectionDuringProgressLock(int delta)", System.StringComparison.Ordinal);
         Assert.True(start >= 0, "MoveSelectionDuringProgressLock が見つかりません");
-        // 次のメソッド定義までを本体とみなす。
-        int end = vm.IndexOf("private bool MoveSelectionForLoopExit", start, System.StringComparison.Ordinal);
+        // 本体の直後に BUG-20260928-03 の MoveSelectionDuringEmergency が並ぶ。その doc コメント先頭
+        // （一意な "BUG-20260928-03"）を終端アンカーにし、ProgressLock 本体だけを切り出す
+        // （次メソッドの doc コメントに含まれる ExecuteStepWithoutAdvanceAsync 等を範囲に含めない）。
+        int end = vm.IndexOf("BUG-20260928-03", start, System.StringComparison.Ordinal);
         Assert.True(end > start, "MoveSelectionDuringProgressLock の本体範囲が特定できません");
         var body = vm.Substring(start, end - start);
 

@@ -2597,6 +2597,12 @@ namespace Lib.Ui.Screens.ViewModels
             // ループは止めず・実行もしない（入力手段＝クリック/矢印/Enter で結果が変わらないようにする）。
             if (IsProgressLocked) { MoveSelectionDuringProgressLock(+1); return; }
 
+            // BUG-20260928-03: Emergency Black/White 中も「選択の移動のみ」にする（ループ再起動も実行もしない）。
+            // Emergency 中はループが停止済みのため、通常経路（TryJumpOutOfLoopBlock→TryAutoStartLoop）に入ると
+            // Chase/OL ブロック先頭で「先頭から再開しました」だけ出て（TryAutoStartLoop は IsEmergencyActive で
+            // 起動しない）選択も動かない表示不整合になる。クリック（Emergency 中でも選択のみ移る）と挙動を揃える。
+            if (IsEmergencyActive) { MoveSelectionDuringEmergency(+1); return; }
+
             // 矢印キーと同じく、Chase/OL 実行中ならまずループを停止してから移動する（Enter も離脱手段）
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
@@ -2640,6 +2646,9 @@ namespace Lib.Ui.Screens.ViewModels
             // BUG-20260926-02: 進行ロック中はクリックと挙動を統一し「選択の移動のみ」にする（ループ停止・実行なし）。
             if (IsProgressLocked) { MoveSelectionDuringProgressLock(-1); return; }
 
+            // BUG-20260928-03: Emergency Black/White 中も「選択の移動のみ」にする（ループ再起動も実行もしない）。
+            if (IsEmergencyActive) { MoveSelectionDuringEmergency(-1); return; }
+
             // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
             bool wasLooping = IsLoopRunning;
             if (wasLooping) StopLoopExecution();
@@ -2673,6 +2682,9 @@ namespace Lib.Ui.Screens.ViewModels
 
             // BUG-20260926-02: 進行ロック中はクリックと挙動を統一し「選択の移動のみ」にする（ループ停止・実行なし）。
             if (IsProgressLocked) { MoveSelectionDuringProgressLock(+1); return; }
+
+            // BUG-20260928-03: Emergency Black/White 中も「選択の移動のみ」にする（ループ再起動も実行もしない）。
+            if (IsEmergencyActive) { MoveSelectionDuringEmergency(+1); return; }
 
             // 矢印キーは Chase/OL の離脱手段でもある。実行中ならまずループを停止する。
             bool wasLooping = IsLoopRunning;
@@ -2719,6 +2731,31 @@ namespace Lib.Ui.Screens.ViewModels
             // 選択のみ移動（自動実行は OnSelectedStepChanged 側が進行ロックで抑止する）。
             SelectedStep = EditingSteps[newIndex];
             StatusMessage = $"進行ロック中: 選択 {newIndex + 1} / {EditingSteps.Count}（点灯は変更しません）";
+        }
+
+        /// <summary>
+        /// BUG-20260928-03: Emergency Black/White 中の矢印/Enter による選択移動。進行ロック中と同様に
+        /// ループを（再）起動せず・実行もせず、選択（ハイライト）だけを 1 行動かす。
+        /// Emergency 中はループが停止しているため、通常の矢印経路（<see cref="TryJumpOutOfLoopBlock"/> →
+        /// <see cref="TryAutoStartLoop"/>）に入ると、Chase/OL ブロック先頭で「先頭から再開しました」という
+        /// ステータスだけが出て（TryAutoStartLoop は IsEmergencyActive ガードで実際には起動しない）、
+        /// 選択行も先頭へ動かない、という表示不整合になる。クリックでの行選択（Emergency 中でも選択のみ移る）
+        /// と挙動を一致させ、選択だけを動かす。解除時に navigated 判定で移動先を実行/起動して復帰する。
+        /// 実行は行わない（OnSelectedStepChanged → ExecuteStepWithoutAdvanceAsync が IsEmergencyActive で抑止）。
+        /// </summary>
+        /// <param name="delta">+1 で次行、-1 で前行。</param>
+        private void MoveSelectionDuringEmergency(int delta)
+        {
+            if (EditingSteps.Count == 0) return;
+
+            // 未選択なら先頭を選ぶ。選択済みなら delta 方向へ 1 行（範囲内にクランプ）。
+            int newIndex = CurrentStepIndex < 0
+                ? 0
+                : Math.Clamp(CurrentStepIndex + delta, 0, EditingSteps.Count - 1);
+
+            // 選択のみ移動（自動実行は ExecuteStepWithoutAdvanceAsync 側が IsEmergencyActive で抑止する）。
+            SelectedStep = EditingSteps[newIndex];
+            StatusMessage = $"Emergency 中: 選択 {newIndex + 1} / {EditingSteps.Count}（点灯は変更しません）";
         }
 
         /// <summary>
