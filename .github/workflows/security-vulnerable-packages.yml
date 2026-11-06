@@ -1,0 +1,97 @@
+name: Security - Vulnerable Packages
+
+# NuGet の脆弱パッケージ検査を CI に組み込む。
+# - push / PR 時：依存追加・更新で脆弱性が混入していないか検査
+# - 毎週スケジュール：コード無変更でも新規に公開された CVE を定期検知
+# - 手動実行（workflow_dispatch）も可能
+#
+# 注意：本 UI リポジトリの SynchronizedLights.UI.slnx は、隣接する
+#       SynchrolightAPI リポジトリのプロジェクトを相対パス（../../SynchrolightAPI/...）
+#       で参照しているため、UI 単独のチェックアウトでは解決できない。
+#       よって .slnx は使わず、UI 配下の各 csproj を個別に復元・検査して集計する。
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 1'   # 毎週月曜 00:00 UTC（＝月曜 09:00 JST）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_CLI_UI_LANGUAGE: en-US   # ログ出力を英語で固定（判定・可読性のため）
+
+jobs:
+  vulnerable-packages:
+    # WPF（net10.0-windows）プロジェクトを含むため Windows ランナーで検査する
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: SyncronizedLights
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Scan for vulnerable packages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p reports
+
+          # UI 配下の全 csproj（obj/bin を除く）を対象に、個別に復元・検査する
+          mapfile -t PROJECTS < <(find . -name '*.csproj' -not -path '*/obj/*' -not -path '*/bin/*' | sort)
+
+          TOTAL=0
+          {
+            echo '## 脆弱パッケージ検査結果'
+            echo ''
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for p in "${PROJECTS[@]}"; do
+            name=$(basename "$p" .csproj)
+            dotnet restore "$p" >/dev/null
+
+            # JSON 形式で取得（ロケールに依存せず機械判定するため）
+            dotnet list "$p" package --vulnerable --include-transitive \
+              --format json --output-version 1 > "reports/${name}.json"
+
+            # topLevel / transitive 両方を再帰走査し、脆弱性の件数をカウント
+            C=$(jq '[.. | .vulnerabilities? // empty | .[]] | length' "reports/${name}.json")
+            TOTAL=$((TOTAL + C))
+
+            # 人が読める一覧を Job Summary に出力
+            {
+              echo "### ${name} — ${C} 件"
+              echo '```'
+              dotnet list "$p" package --vulnerable --include-transitive
+              echo '```'
+              echo ''
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "検出された脆弱性の合計: ${TOTAL} 件"
+
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "::error::脆弱なパッケージが ${TOTAL} 件検出されました。Job Summary を確認してください。"
+            exit 1
+          fi
+          echo "脆弱なパッケージは検出されませんでした。"
+
+      - name: Upload scan result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerable-packages-report
+          path: SyncronizedLights/reports/
+          if-no-files-found: ignore
