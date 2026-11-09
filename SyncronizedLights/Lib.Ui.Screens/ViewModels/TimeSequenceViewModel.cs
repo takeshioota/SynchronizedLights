@@ -799,7 +799,9 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private int rainbowBlinkPeriodMs = 500;
 
-        /// <summary>点灯比率（1〜9）— Blink モード</summary>
+        /// <summary>点灯比率（0〜9）— Blink モード。
+        /// 追加開発(v2.12.0): 入力制限緩和により下限 0 を許容する（0 は受付値のまま送出し、端末側で 1 に補正される）。
+        /// 上限 9・整数(0〜9)の形式制約は維持する。</summary>
         private byte _rainbowDutyRatio = 5;
         public byte RainbowDutyRatio
         {
@@ -808,7 +810,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 if (_rainbowDutyRatio != value)
                 {
-                    _rainbowDutyRatio = Math.Clamp(value, (byte)1, (byte)9);
+                    _rainbowDutyRatio = Math.Clamp(value, (byte)0, (byte)9);
                     OnPropertyChanged();
                 }
             }

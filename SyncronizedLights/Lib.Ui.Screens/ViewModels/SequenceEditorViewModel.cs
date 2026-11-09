@@ -780,6 +780,36 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
+        /// 追加開発(v2.12.0 / No.28=BUG-20260923-02 取消し): ESC 押下時に「現在の演出を先頭から再開」する。
+        /// No.28 で ESC を停止ボタンと同じ『停止のみ』に揃えた修正を破棄し、修正前の再開動作へ戻す
+        /// （2026-11-05 クライアント要求）。停止処理（StopExecution）の直後に呼び出す想定。
+        ///   ・単発 Effect／Color／Rainbow 行 … ExecuteStepWithoutAdvanceAsync で現在行を 1 回再実行する
+        ///     （内部で _transitionCts をキャンセルするため、停止直後の再実行でも旧実行と重複しない）。
+        ///   ・OL/Chase ブロック行 … TryAutoStartLoop でブロック全体を先頭行から回し直す（ループ再起動）。
+        /// Emergency／進行ロック中・未接続・選択なしでは再開しない。
+        /// </summary>
+        public void ReExecuteCurrentStepForEsc()
+        {
+            if (IsEmergencyActive) return;
+            if (IsProgressLocked) return;
+            if (_lighting == null || !_lighting.IsConnected) return;
+            if (SelectedStep == null) return;
+
+            // 追加開発(v2.12.0): OL/Chase ブロック行は「単発再実行」ではなく、ブロック全体を先頭行から
+            // 回し直す（ループ再起動）。OnSelectedStepChanged の選択即実行はループ行を単発実行しないよう
+            // skip するが、ESC は「先頭から再開」が目的なので、ここでは skip せず TryAutoStartLoop で
+            // ループを起動する（停止は直前に StopExecution 済み。TryAutoStartLoop が先頭行から開始する）。
+            if (IsAutoStartableLoopBlockRow(SelectedStep))
+            {
+                TryAutoStartLoop(SelectedStep, null);
+                return;
+            }
+
+            // 単発 Effect／Color／Rainbow 行は現在行をそのまま再実行して先頭から再生する。
+            _ = ExecuteStepWithoutAdvanceAsync();
+        }
+
+        /// <summary>
         /// BUG-20260728-02: 選択行が Rainbow 行なら、その行に保存された Rainbow パラメータを
         /// コマンドパネルの各プロパティへ書き戻す（逆同期）。パネルへ値を代入するのみで、
         /// ステップへの再適用（ApplyRainbowToStep）や実機送信は行わない。
@@ -1720,7 +1750,9 @@ namespace Lib.Ui.Screens.ViewModels
         [ObservableProperty]
         private int rainbowBlinkPeriodMs = 500;
 
-        /// <summary>点灯比率（1〜9）— Blink モード</summary>
+        /// <summary>点灯比率（0〜9）— Blink モード（コマンドパネル）。
+        /// 追加開発(v2.12.0): 入力制限緩和により下限 0 を許容する（0 は受付値のまま送出し、端末側で 1 に補正される）。
+        /// 上限 9・整数(0〜9)の形式制約は維持する。</summary>
         private byte _rainbowDutyRatio = 5;
         public byte RainbowDutyRatio
         {
@@ -1729,7 +1761,7 @@ namespace Lib.Ui.Screens.ViewModels
             {
                 if (_rainbowDutyRatio != value)
                 {
-                    _rainbowDutyRatio = Math.Clamp(value, (byte)1, (byte)9);
+                    _rainbowDutyRatio = Math.Clamp(value, (byte)0, (byte)9);
                     OnPropertyChanged();
                 }
             }
@@ -1875,23 +1907,15 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// FI/FO 系レインボーの色切替間隔をフェード時間以上へ補正した実効値を返す（仕様3.18注記3）。
-        /// 「色切替間隔 &lt; フェード時間」だとフェード途中で次色へ強制遷移し「光はじめが一定でない」不具合になる。
-        /// 補正は API 側ループが権威的に行うが、UI でもログ/ステータスに実効値を示すため同じ計算をする
-        /// （フェード値は API と同じ 256-5000ms で評価。仕様書V4.7で上限3000→5000へ変更）。Solid/Blink/Random は補正対象外。
+        /// レインボーの色切替間隔(cycleMs)を返す。
+        /// 追加開発(v2.12.0): Rainbow 入力制限緩和により、従来 FI/FO 時間以上へ自動補正(=256/512等への切上げ)
+        /// していた処理を撤廃し、受付値をそのまま返す（パススルー）。色切替間隔とフェード時間の整合は端末側へ委ねる
+        /// （設計書4.1/4.4）。引数 fadeInMs/fadeOutMs は呼出し側の互換維持のため残すが、計算には用いない。
         /// </summary>
         private static int EffectiveRainbowCycleMs(RainbowMode mode, int cycleMs, int fadeInMs, int fadeOutMs)
         {
-            int fi = Math.Clamp(fadeInMs, 256, 5000);
-            int fo = Math.Clamp(fadeOutMs, 256, 5000);
-            int minCycle = mode switch
-            {
-                RainbowMode.FadeInOut => fi + fo,
-                RainbowMode.FadeIn => fi,
-                RainbowMode.FadeOut => fo,
-                _ => 0,
-            };
-            return (cycleMs > 0 && minCycle > 0) ? Math.Max(cycleMs, minCycle) : cycleMs;
+            _ = mode; _ = fadeInMs; _ = fadeOutMs;
+            return cycleMs;
         }
 
         /// <summary>レインボーエフェクトを停止する</summary>
@@ -3969,6 +3993,20 @@ namespace Lib.Ui.Screens.ViewModels
         private static bool IsOffStep(SequenceStepWrapper? w)
             => w != null && (w.CommandType == "Off" || w.CommandType == "SignalOff");
 
+        /// <summary>
+        /// 追加開発(v2.12.0 / BUG-20261109-01): Chase/OL ブロック先頭の「連続 off 行」の数を返す。
+        /// 先頭の off は「ループを止める終端」ではなく、点灯サイクル／クロスフェードの黒フレームとして扱い、
+        /// 黒→効果→…→黒 と脈動させる（＝先頭が off 始まりの Chase/OL が起動直後に即停止する不具合の対策）。
+        /// 内容（非 off 行）より後ろに来る off は従来どおり終端（停止）として扱う（BUG-20260729-06/09 を維持）。
+        /// 全行 off（退化ケース）は無限の空ループを避けるため 0 を返し、従来どおり先頭 off で停止させる。
+        /// </summary>
+        private static int LeadingOffCount(IList<SequenceStepWrapper> steps)
+        {
+            int n = 0;
+            while (n < steps.Count && IsOffStep(steps[n])) n++;
+            return n >= steps.Count ? 0 : n;   // 全 off は従来挙動（先頭 off で停止）
+        }
+
         // ─── Chase/OL の Trig 判定ヘルパー ────────────────────────────────
         // 反復版（"Chase"/"OL"）と 1回のみ版（"Chase2"/"OL2"＝上→下を1回送って最終行を保持）を
         // まとめて扱うための述語。ブロック検出（同一 Trig 文字列の連続行）は各所で共通のため、
@@ -4318,6 +4356,8 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
+            // BUG-20261109-01: 先頭の連続 off は「終端」ではなく黒フレーム扱い（止めずにループに含める）。
+            int leadingOff = LeadingOffCount(steps);
             var modeLabel = once ? "Chase2" : "Chase";
 
             // Trig 列にマーク（複数個所の Chase/OL を共存させるため、他グループの指定はクリアしない。
@@ -4361,9 +4401,11 @@ namespace Lib.Ui.Screens.ViewModels
                         await ExecuteStepWithoutAdvanceAsync(step);
                         if (token.IsCancellationRequested) break;
 
-                        // BUG-20260729-06/09: ループ内に off/SignalOff 行があれば、実行後にループを止める
+                        // BUG-20260729-06/09: 内容の後ろに来る off/SignalOff 行はループを止める終端として扱う
                         //   （継続すると次サイクルの色送信で off が打ち消されるため）。
-                        if (IsOffStep(step)) { StopLoopExecution(); break; }
+                        // BUG-20261109-01: ただし先頭の連続 off（leadingOff）は黒フレームとして止めず、
+                        //   黒を表示したうえでそのまま次へ進めて脈動ループさせる。
+                        if (IsOffStep(step) && i >= leadingOff) { StopLoopExecution(); break; }
 
                         // Chase2（once）: 最終行を実行したら待機せずに抜け、下の「最終行保持」フェーズへ。
                         if (once && i == steps.Count - 1) break;
@@ -4440,6 +4482,8 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
+            // BUG-20261109-01: 先頭の連続 off は「終端」ではなく黒フレーム扱い（止めずにクロスフェードに含める）。
+            int leadingOff = LeadingOffCount(steps);
             var trigValue = once ? "OL2" : "OL";
             var modeLabel = once ? "OL2" : "Overlap";
 
@@ -4458,6 +4502,8 @@ namespace Lib.Ui.Screens.ViewModels
 
             try
             {
+                // 項目2(OL繰り返しで色変化が急): 巻戻し区間のテンポ引き継ぎ用に直前区間のフェード時間を保持する。
+                int prevFadeMs = 0;
                 do
                 {
                     for (int i = 0; i < steps.Count; i++)
@@ -4484,9 +4530,11 @@ namespace Lib.Ui.Screens.ViewModels
                             finally { _suppressAutoExecute = false; }
                         }
 
-                        // BUG-20260729-06/09: OL ブロック内に off/SignalOff 行があれば、色フェードせず
-                        //   off を実行してループを止める（継続すると次セグメントの色送信で off が打ち消される）。
-                        if (IsOffStep(current))
+                        // BUG-20260729-06/09: 内容の後ろに来る off/SignalOff 行は色フェードせず off を実行して
+                        //   ループを止める（継続すると次セグメントの色送信で off が打ち消される）。
+                        // BUG-20261109-01: ただし先頭の連続 off（leadingOff）は黒フレームとして止めず、
+                        //   下のクロスフェード（黒→次色）に委ねて脈動ループさせる。
+                        if (IsOffStep(current) && i >= leadingOff)
                         {
                             // 進行ロック中も SelectedStep を奪わないため、実行対象は current を明示指定する。
                             try { await ExecuteStepWithoutAdvanceAsync(current); }
@@ -4515,6 +4563,18 @@ namespace Lib.Ui.Screens.ViewModels
                         {
                             fadeMs = next.TimeMs > 0 ? next.TimeMs : DefaultLoopStepMs;
                         }
+
+                        // 項目2(OL繰り返しで色変化が急): 巻戻し区間（最終行→先頭行）のフェード時間は先頭行由来だが、
+                        //   先頭行の Time/BPM は OL2 では遷移先にならず使われないため未設定(0)のまま放置されがち。
+                        //   そのまま既定値(DefaultLoopStepMs)になるとループ境界だけテンポが飛び「色変化が急」に見える。
+                        //   先頭行が未設定なら直前区間のフェード時間を引き継いで境目のテンポを維持する。
+                        //   OL2 には巻戻し区間が無いため影響しない（報告「OL のみ・OL2 では出ない」に対応）。
+                        bool isWrapSegment = !once && i == steps.Count - 1;   // このとき next == steps[0]
+                        if (isWrapSegment && next.Bpm <= 0 && next.TimeMs <= 0 && prevFadeMs > 0)
+                        {
+                            fadeMs = prevFadeMs;
+                        }
+                        prevFadeMs = fadeMs;
 
                         var from = new Rgb(current.ColorR, current.ColorG, current.ColorB);
                         var to = new Rgb(next.ColorR, next.ColorG, next.ColorB);

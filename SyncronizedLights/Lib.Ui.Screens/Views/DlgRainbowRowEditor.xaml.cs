@@ -108,9 +108,64 @@ namespace Lib.Ui.Screens.Views
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
-            Row?.RefreshRainbowSummary();
+            var row = Row;
+            if (row != null)
+            {
+                // 追加開発(v2.12.0): Rainbow 入力制限緩和。下限の独自補正は撤廃し受付値をそのまま送出するが、
+                // 「上限5000ms・整数・色数2〜7」の形式制約は維持する。範囲外の値は丸めたり桁落ちさせたりせず、
+                // エラーとして入力を差し戻す（＝値を受け付けない）。下限未満は端末側の補正に委ねる（設計書3.1/5）。
+                if (!ValidateRow(row, out string error))
+                {
+                    MessageBox.Show(this, error, "Rainbow 設定",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return; // ダイアログを閉じない＝範囲外の値を確定しない
+                }
+                row.RefreshRainbowSummary();
+            }
             DialogResult = true;
             Close();
+        }
+
+        /// <summary>
+        /// 追加開発(v2.12.0): Rainbow 入力の形式検証。時間系は 0〜5000ms（下限補正なし・上限超過は不可）、
+        /// 色数は 2〜7、点灯比率は 0〜9。範囲外は丸めずエラーメッセージを返す。
+        /// </summary>
+        private static bool ValidateRow(SequenceStepWrapper row, out string error)
+        {
+            const int TimeMax = 5000;
+
+            int n = row.RainbowColors?.Count ?? 0;
+            if (n < 2 || n > 7)
+            {
+                error = $"レインボーカラーは 2〜7 色で設定してください（現在 {n} 色）。";
+                return false;
+            }
+
+            var times = new (string Name, int Value)[]
+            {
+                ("速度(色切替間隔)", row.RainbowCycleDurationMs),
+                ("点滅周期", row.RainbowBlinkPeriodMs),
+                ("フェードイン時間(FI)", row.RainbowFadeInMs),
+                ("フェードアウト時間(FO)", row.RainbowFadeOutMs),
+            };
+            foreach (var t in times)
+            {
+                if (t.Value < 0 || t.Value > TimeMax)
+                {
+                    error = $"{t.Name} は 0〜{TimeMax}ms の範囲で入力してください（現在 {t.Value}ms）。\n"
+                          + $"※ 仕様下限未満の値は端末側で補正されます。{TimeMax}ms を超える値は設定できません。";
+                    return false;
+                }
+            }
+
+            if (row.RainbowDutyRatio > 9)
+            {
+                error = $"点灯比率は 0〜9 で入力してください（現在 {row.RainbowDutyRatio}）。";
+                return false;
+            }
+
+            error = string.Empty;
+            return true;
         }
     }
 }

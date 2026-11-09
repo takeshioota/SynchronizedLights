@@ -5,12 +5,11 @@ using Lib.Ui.Screens.ViewModels;
 namespace Lib.Ui.Screens.Tests;
 
 /// <summary>
-/// 【v2.0.0】Rainbow FI/FO の色切替間隔クランプ(EffectiveRainbowCycleMs)の単体テスト。
-/// 対象仕様: 仕様§3.18 注記3「フレーム移行時間はフェード時間以上／未満禁止」。
-///   色切替間隔 cycle が フェード時間(FI/FO) 未満だと、フェード途中で色フレームが前進し
-///   端末が不定位相でフェードを開始する（光はじめ不定）。cycle ≧ フェード時間 にクランプする。
+/// 【v2.12.0 追加開発】Rainbow 入力制限緩和の回帰ガード。
+/// 旧仕様(§3.18 注記3)では色切替間隔 cycle を フェード時間(FI/FO) 以上へ自動補正(=256/512等への切上げ)していたが、
+/// 追加開発でこの PC 側補正を撤廃し、受付値をそのまま用いる（色切替間隔とフェード時間の整合は端末側へ委ねる）。
+/// 本テストは EffectiveRainbowCycleMs が「如何なるモード/フェード時間でも cycle を変えずに返す（パススルー）」ことを縛る。
 /// private static メソッドをリフレクションで直接検証（純ロジック＝実機不要）。
-/// 実際の“光はじめ”の見た目は実機確認項目。
 /// </summary>
 public class EffectiveRainbowCycleMsTests
 {
@@ -25,58 +24,48 @@ public class EffectiveRainbowCycleMsTests
         => (int)Method.Invoke(null, new object[] { mode, cycle, fadeIn, fadeOut })!;
 
     [Fact]
-    public void FadeInOut_cycleがFIプラスFO未満なら合計へクランプ()
+    public void FadeInOut_cycleがFIプラスFO未満でも補正せずそのまま()
     {
-        // 既定 cycle=1000 < FI(1000)+FO(1000)=2000 → 2000 に補正（バグの本症状）
-        Assert.Equal(2000, Invoke(RainbowMode.FadeInOut, 1000, 1000, 1000));
+        // 旧仕様では 2000 へ切上げていたが、緩和後は受付値 1000 のまま返す。
+        Assert.Equal(1000, Invoke(RainbowMode.FadeInOut, 1000, 1000, 1000));
     }
 
     [Fact]
-    public void FadeInOut_cycleが十分大きければそのまま()
+    public void FadeIn_cycleがFI未満でも補正しない()
     {
-        Assert.Equal(5000, Invoke(RainbowMode.FadeInOut, 5000, 1000, 1000));
+        Assert.Equal(100, Invoke(RainbowMode.FadeIn, 100, 500, 0));
     }
 
     [Fact]
-    public void FadeIn_cycleはFI以上にクランプ()
+    public void FadeOut_cycleがFO未満でも補正しない()
     {
-        Assert.Equal(500, Invoke(RainbowMode.FadeIn, 100, 500, 0));
-    }
-
-    [Fact]
-    public void FadeOut_cycleはFO以上にクランプ()
-    {
-        Assert.Equal(500, Invoke(RainbowMode.FadeOut, 100, 0, 500));
+        Assert.Equal(100, Invoke(RainbowMode.FadeOut, 100, 0, 500));
     }
 
     [Theory]
     [InlineData(RainbowMode.Solid)]
     [InlineData(RainbowMode.Blink)]
-    public void 非フェードモードはクランプしない(RainbowMode mode)
+    [InlineData(RainbowMode.FadeIn)]
+    [InlineData(RainbowMode.FadeOut)]
+    [InlineData(RainbowMode.FadeInOut)]
+    [InlineData(RainbowMode.Random)]
+    public void 全モードでcycleはパススルー(RainbowMode mode)
     {
-        // minCycle=0 → cycle をそのまま返す
         Assert.Equal(300, Invoke(mode, 300, 1000, 1000));
     }
 
     [Fact]
-    public void フェード時間は下限256にクランプしてから評価()
+    public void 下限0や小さい値もそのまま返す()
     {
-        // FI=100 は 256 に引き上げられる → FadeIn の下限は 256
-        Assert.Equal(256, Invoke(RainbowMode.FadeIn, 100, 100, 0));
-    }
-
-    [Fact]
-    public void フェード時間は上限5000にクランプしてから評価()
-    {
-        // 仕様書V4.7で上限 3000→5000 に変更。FI=5000 はそのまま反映 → FadeIn の実効下限は 5000
-        Assert.Equal(5000, Invoke(RainbowMode.FadeIn, 100, 5000, 0));
-        // 上限超過（FI=6000）は 5000 に抑えられる
-        Assert.Equal(5000, Invoke(RainbowMode.FadeIn, 100, 6000, 0));
-    }
-
-    [Fact]
-    public void cycleが0なら0のまま_ガード()
-    {
+        // 緩和後は下限補正しない（0/1 もそのまま）。
         Assert.Equal(0, Invoke(RainbowMode.FadeInOut, 0, 1000, 1000));
+        Assert.Equal(1, Invoke(RainbowMode.FadeIn, 1, 6000, 0));
+    }
+
+    [Fact]
+    public void フェード時間が範囲外でもcycleには影響しない()
+    {
+        // フェード時間(FI/FO)は cycle の計算に一切使われない。
+        Assert.Equal(2500, Invoke(RainbowMode.FadeInOut, 2500, 6000, 99999));
     }
 }

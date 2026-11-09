@@ -469,10 +469,12 @@ namespace SynchronizedLights.UI
         }
 
         /// <summary>
-        /// NO.29: Esc 等での全停止と、停止後の DataGrid 編集可否の復帰をまとめて行う。
+        /// NO.29 / 追加開発(v2.12.0): Esc での停止と、停止後の DataGrid 編集可否の復帰をまとめて行う。
         /// OL/Chase は複数行選択(Extended)で起動するため、停止後に複数選択が残ると
         /// セル編集が始められなくなる（Time(sec)〜Memo が入力不可に見える）。
-        /// 停止後に単一選択へ収束し、編集可能セルとフォーカスを復帰する。
+        /// 停止後に単一選択へ収束し、編集可能セルとフォーカスを復帰したうえで、
+        /// 追加開発(No.28 取消し)により「現在の Effect を先頭から再開（再実行）」する。
+        /// ※本メソッドは Esc 専用。停止ボタンは StopExecutionCommand 直結で『停止のみ』を維持する。
         /// </summary>
         private void StopAllAndRestoreGrid()
         {
@@ -480,21 +482,21 @@ namespace SynchronizedLights.UI
             if (_sequenceVm.StopExecutionCommand.CanExecute(null))
                 _sequenceVm.StopExecutionCommand.Execute(null);
 
-            // ループ側の最終 SelectedStep 更新が走り終えてから収束させるため遅延実行する。
+            // ループ側の最終 SelectedStep 更新・停止後片付けが走り終えてから収束／再開させるため遅延実行する。
             Dispatcher.BeginInvoke(new Action(RestoreGridEditableAfterStop),
                 System.Windows.Threading.DispatcherPriority.Background);
         }
 
         /// <summary>
         /// NO.29: 複数選択を解除して現在ステップ1行のみ選択し、編集可能セル＋フォーカスを復帰する。
+        /// 追加開発(v2.12.0 / No.28=BUG-20260923-02 取消し): 復帰後に Esc の期待動作として現在行を再実行する。
+        /// 選択の張り替え自体は自動実行を抑止して行い（二重実行防止）、最後に明示的に 1 回だけ再開する。
         /// </summary>
         private void RestoreGridEditableAfterStop()
         {
             try
             {
-                // BUG-20260923-02: グリッド行を選択し直すと OnSelectedStepChanged 経由でその行が
-                // 「選択即実行」され、Esc 停止直後に停止済みエフェクトがリセット（再実行）されてしまう。
-                // 選択復元は自動実行を抑止した状態で行い、Esc を停止ボタンと同じ挙動に揃える。
+                // グリッド選択の収束・編集可能化は『選択即実行』を抑止した状態で行う（復帰操作では実行しない）。
                 _sequenceVm.RunWithoutAutoExecute(() =>
                 {
                     var current = _sequenceVm.SelectedStep;
@@ -508,6 +510,9 @@ namespace SynchronizedLights.UI
                     }
                     StepDataGrid.Focus();
                 });
+
+                // 追加開発(No.28 取消し): Esc は現在の Effect を先頭から再開（再実行）する。停止ボタンは停止のみ。
+                _sequenceVm.ReExecuteCurrentStepForEsc();
             }
             catch
             {

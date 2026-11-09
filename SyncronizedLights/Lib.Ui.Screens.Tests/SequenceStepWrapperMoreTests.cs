@@ -36,11 +36,15 @@ public class SequenceStepWrapperMoreTests
         Assert.Equal(5, w.EffectCycleDurationMs);
     }
 
+    // 追加開発(v2.12.0): Rainbow 入力制限緩和。点灯比率は下限 0 を許容（0 はそのまま保持し端末側で 1 に補正）。
+    // 上限 9 の形式制約のみ維持（9 超は 9 に抑える）。
     [Theory]
-    [InlineData(0, 1)]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(9, 9)]
     [InlineData(10, 9)]
     [InlineData(5, 5)]
-    public void RainbowDutyRatio_1から9にクランプ(int input, int expected)
+    public void RainbowDutyRatio_0から9を許容し上限9のみ維持(int input, int expected)
     {
         var w = new SequenceStepWrapper { RainbowDutyRatio = (byte)input };
         Assert.Equal((byte)expected, w.RainbowDutyRatio);

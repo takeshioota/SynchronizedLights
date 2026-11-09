@@ -71,7 +71,7 @@
             <TextBlock Text="速度(ms):" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="70" Text="{Binding RainbowCycleDurationMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="色切り替え速度（500〜2500ms）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="色切り替え速度（0〜5000ms）。入力値をそのまま送信します。"/>
         </WrapPanel>
 
         <!-- モード別パラメータ -->
@@ -79,19 +79,19 @@
             <TextBlock Text="点滅周期(ms):" VerticalAlignment="Center" Margin="0,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowBlinkPeriodMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（10〜5000ms・仕様書V4.7）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点滅周期（0〜5000ms）。入力値をそのまま送信。10ms 未満は端末側で 10ms に補正されます。"/>
             <TextBlock Text="比率:" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="40" Text="{Binding RainbowDutyRatio, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点灯比率（1-9 = 10%-90%）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="Blink モード: 点灯比率（0〜9 = 0%〜90%）。0 は入力値のまま送信し、端末側で 1(10%) に補正されます。"/>
             <TextBlock Text="FI(ms):" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowFadeInMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（256〜5000ms・仕様書V4.7）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="フェードイン時間（0〜5000ms）。入力値をそのまま送信。256ms 未満は端末側で 256ms に補正されます。"/>
             <TextBlock Text="FO(ms):" VerticalAlignment="Center" Margin="12,0,4,0"/>
             <TextBox Width="60" Text="{Binding RainbowFadeOutMs, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      Style="{StaticResource GrandMaTextBoxStyle}" HorizontalContentAlignment="Right"
-                     Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（256〜5000ms・仕様書V4.7）"/>
+                     Padding="6,2" MinHeight="28" ToolTip="フェードアウト時間（0〜5000ms）。入力値をそのまま送信。256ms 未満は端末側で 256ms に補正されます。"/>
         </WrapPanel>
 
         <!-- ボタン -->

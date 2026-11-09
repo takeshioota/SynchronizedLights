@@ -129,13 +129,16 @@ namespace Lib.Ui.Screens.Views
             // テキスト入力中（DataGrid セル編集中含む）はショートカットを抑制
             if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
             {
-                // ただし Esc は受け付ける（停止）
+                // ただし Esc は受け付ける（追加開発 v2.12.0 / No.28 取消し: 停止して現在の Effect を先頭から再開）
                 if (e.Key == Key.Escape)
                 {
                     e.Handled = true;
                     vm.StopLoopExecution();
                     if (vm.StopExecutionCommand.CanExecute(null))
                         vm.StopExecutionCommand.Execute(null);
+                    // 停止の後片付けが済んでから現在行を再実行する（旧実行と重複しないよう遅延）。
+                    Dispatcher.BeginInvoke(new System.Action(() => vm.ReExecuteCurrentStepForEsc()),
+                        System.Windows.Threading.DispatcherPriority.Background);
                 }
                 return;
             }
@@ -185,9 +188,12 @@ namespace Lib.Ui.Screens.Views
 
                 case Key.Escape:
                     e.Handled = true;
+                    // 追加開発(v2.12.0 / No.28 取消し): Esc は停止して現在の Effect を先頭から再開する（停止ボタンは停止のみ）。
                     vm.StopLoopExecution();
                     if (vm.StopExecutionCommand.CanExecute(null))
                         vm.StopExecutionCommand.Execute(null);
+                    Dispatcher.BeginInvoke(new System.Action(() => vm.ReExecuteCurrentStepForEsc()),
+                        System.Windows.Threading.DispatcherPriority.Background);
                     break;
             }
         }
