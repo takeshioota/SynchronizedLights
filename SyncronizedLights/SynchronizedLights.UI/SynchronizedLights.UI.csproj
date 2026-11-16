@@ -7,8 +7,9 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<!-- NO.33: 実行中に画面表示するバージョン番号 -->
-		<Version>1.4.9</Version>
-		<InformationalVersion>1.4.9 (SNO夏)</InformationalVersion>
+		<!-- tuki公演向け OL2追加 緊急提供版（Ver.1.4.8 基盤 + OL2 のみ） -->
+		<Version>1.4.8</Version>
+		<InformationalVersion>1.4.8-OL2</InformationalVersion>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 	</PropertyGroup>
 

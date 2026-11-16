@@ -126,7 +126,12 @@
                             Foreground="#00E5FF" FontWeight="Bold"/>
                     <Button Content="OL" Command="{Binding StartOverlapCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
-                            Foreground="#69F0AE" FontWeight="Bold"/>
+                            Foreground="#69F0AE" FontWeight="Bold"
+                            ToolTip="選択した連続行を色クロスフェードで反復する（末尾で先頭へ戻る）"/>
+                    <Button Content="OL2" Command="{Binding StartOverlap2Command}" IsEnabled="{Binding HasSelectedSequence}"
+                            Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
+                            Foreground="#69F0AE" FontWeight="Bold"
+                            ToolTip="1回のみ：選択した連続行を色クロスフェードで1回だけ送り、最終行の色を保持する（繰り返さない）"/>
                     <Button Content="解除" Command="{Binding ClearLoopMarkCommand}" IsEnabled="{Binding HasSelectedSequence}"
                             Style="{StaticResource GrandMaButtonStyle}" MinHeight="34" Width="50" Margin="0,0,4,4"
                             ToolTip="選択行（未選択なら全行）の Chase/OL 指定を解除する"/>

@@ -657,7 +657,7 @@ namespace Lib.Ui.Screens.ViewModels
                 // BUG-20260729-02: 先頭ステップが Chase/OL マーカーなら、単発実行ではなくループを自動起動し、
                 //   Color/Effect と同様に「シーケンス選択で即再生」する（クリック入口と同じ prevForEnterCheck:null）。
                 //   非マーカー先頭（Color/Effect 等）は従来どおり単発実行。
-                else if (SelectedStep.Trig == "Chase" || SelectedStep.Trig == "OL")
+                else if (IsLoopTrig(SelectedStep.Trig))
                 {
                     TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
                 }
@@ -2645,8 +2645,8 @@ namespace Lib.Ui.Screens.ViewModels
             int idx = CurrentStepIndex;
             if (idx < 0 || idx >= EditingSteps.Count) return false;
 
-            var mode = EditingSteps[idx].Trig;              // "Chase" / "OL" / ""
-            if (mode != "Chase" && mode != "OL") return false;
+            var mode = EditingSteps[idx].Trig;              // "Chase" / "OL" / "OL2" / ""
+            if (!IsLoopTrig(mode)) return false;
 
             // 同種マーカーの連続ブロックを展開（TryAutoStartLoop と同じ規則）
             int start = idx, end = idx;
@@ -3012,7 +3012,7 @@ namespace Lib.Ui.Screens.ViewModels
                 // 単発の ExecuteStepWithoutAdvanceAsync だけだと、Chase 行は CommandType="Color"（単色）
                 // のため1色を出して固着していた（7色/Rainbow 等の Effect 行はAPI側が自走するため復帰できていた）。
                 if (wasLoopRunning && SelectedStep != null
-                    && (SelectedStep.Trig == "Chase" || SelectedStep.Trig == "OL"))
+                    && IsLoopTrig(SelectedStep.Trig))
                 {
                     // IsEmergencyActive は上で false 済みのため TryAutoStartLoop のガードを通過する。
                     TryAutoStartLoop(SelectedStep, prevForEnterCheck: null);
@@ -3656,6 +3656,21 @@ namespace Lib.Ui.Screens.ViewModels
         private static bool IsOffStep(SequenceStepWrapper? w)
             => w != null && (w.CommandType == "Off" || w.CommandType == "SignalOff");
 
+        // ─── OL / OL2 の Trig 判定ヘルパー ────────────────────────────────
+        // 反復版 "OL" と 1回のみ版 "OL2"（上→下を1回フェードして最終行の色を保持）を
+        // まとめて扱うための述語。ブロック検出（同一 Trig 文字列の連続行）は既存どおり各行の
+        // Trig 文字列比較で行うため、これらは「OL 系かどうか」と「1回のみかどうか」の判定に使う。
+        // 本緊急提供版（Ver.1.4.8-OL2）では追加機能は OL2 のみ（Chase2 は対象外）。
+
+        /// <summary>Trig 値が OL 系（反復 "OL" / 1回のみ "OL2"）か。</summary>
+        private static bool IsOverlapTrig(string? t) => t == "OL" || t == "OL2";
+
+        /// <summary>Trig 値が Chase / OL いずれかのループマーカーか。</summary>
+        private static bool IsLoopTrig(string? t) => t == "Chase" || IsOverlapTrig(t);
+
+        /// <summary>Trig 値が「1回のみ（非反復・最終行保持）」モード（"OL2"）か。</summary>
+        private static bool IsOnceTrig(string? t) => t == "OL2";
+
         /// <summary>
         /// マウスクリックで Chase/OL を抜ける際に立てる一回限りのフラグ。
         /// 直後に確定する <see cref="SelectedStep"/> の変更（OnSelectedStepChanged）で消費し、
@@ -3726,6 +3741,24 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
+        /// OL2（1回のみ・最終行保持）実行を開始する。
+        /// 概要：OL と同様に選択した連続行(2-15行)を色クロスフェードで送るが、末尾で先頭へ戻らず、
+        ///       最終行の色に到達したらそのまま点灯を保持する（停止／↓離脱／別行クリックまで継続）。
+        ///       Trig 列に "OL2" を表示。本緊急提供版（Ver.1.4.8-OL2）の追加機能。
+        /// </summary>
+        [RelayCommand]
+        private async Task StartOverlap2Async()
+        {
+            var group = ResolveLoopGroup("OL2");
+            if (group == null)
+            {
+                StatusMessage = "OL2: 2〜15行の連続行を選択、または OL2 マーカー行を選択してください。";
+                return;
+            }
+            await StartOverlapExecutionAsync(group, once: true);
+        }
+
+        /// <summary>
         /// Chase/OL ボタン押下時に、実行対象の連続行グループを解決する。
         /// ① 連続 2〜7 行が選択されていればそれ（新規グループ定義／再定義）を優先。
         /// ② そうでなければ（1行だけ選択など）、選択行を含む同種マーカー(mode)の連続ブロックを対象にする。
@@ -3793,7 +3826,7 @@ namespace Lib.Ui.Screens.ViewModels
         {
             if (row == null) return false;
             var mode = row.Trig;
-            if (mode != "Chase" && mode != "OL") return false;
+            if (!IsLoopTrig(mode)) return false;
 
             int idx = EditingSteps.IndexOf(row);
             if (idx < 0) return false;
@@ -3817,8 +3850,8 @@ namespace Lib.Ui.Screens.ViewModels
         private void TryAutoStartLoop(SequenceStepWrapper? row, SequenceStepWrapper? prevForEnterCheck)
         {
             if (row == null) return;
-            var mode = row.Trig;                       // "Chase" / "OL" / ""
-            if (mode != "Chase" && mode != "OL") return;
+            var mode = row.Trig;                       // "Chase" / "OL" / "OL2" / ""
+            if (!IsLoopTrig(mode)) return;
             // オフライン（未接続）でも自動起動を許可（行送りプレビュー）。実送信は各ステップ側でスキップ。
             if (IsEmergencyActive || IsProgressLocked) return;
 
@@ -3842,8 +3875,9 @@ namespace Lib.Ui.Screens.ViewModels
             var group = new List<SequenceStepWrapper>();
             for (int i = start; i <= end; i++) group.Add(EditingSteps[i]);
 
-            if (mode == "Chase") _ = StartChaseExecutionAsync(group);
-            else                 _ = StartOverlapExecutionAsync(group);
+            // OL2（once）は最終行で止めて保持。OL/Chase は従来どおり反復。
+            if (IsOverlapTrig(mode)) _ = StartOverlapExecutionAsync(group, IsOnceTrig(mode));
+            else                     _ = StartChaseExecutionAsync(group);
         }
 
         /// <summary>
@@ -3963,9 +3997,12 @@ namespace Lib.Ui.Screens.ViewModels
         }
 
         /// <summary>
-        /// Overlap モードでのループ実行（色クロスフェード）
+        /// Overlap（OL）モードでの実行（色クロスフェード）。
+        /// <paramref name="once"/>=false: 上→下→先頭へ戻り反復（従来の OL）。
+        /// <paramref name="once"/>=true : 上→下を1回だけフェードし、最終行の色を保持（OL2）。末尾で先頭へ戻さない。
+        ///   保持中もトークンは生存＝IsLoopRunning true のままで、停止／↓離脱／別行クリックで解除する。
         /// </summary>
-        public async Task StartOverlapExecutionAsync(IList<SequenceStepWrapper> selectedSteps)
+        public async Task StartOverlapExecutionAsync(IList<SequenceStepWrapper> selectedSteps, bool once = false)
         {
             StopLoopExecution();
 
@@ -3993,9 +4030,11 @@ namespace Lib.Ui.Screens.ViewModels
             }
 
             var steps = indices.Select(i => EditingSteps[i]).ToList();
+            var trigValue = once ? "OL2" : "OL";
+            var modeLabel = once ? "OL2" : "Overlap";
 
             // Trig 列にマーク（他グループの指定はクリアせず対象行のみ上書き＝複数個所の共存を許可）
-            foreach (var s in steps) s.Trig = "OL";
+            foreach (var s in steps) s.Trig = trigValue;
 
             _loopCts = new CancellationTokenSource();
             var loopDone = new TaskCompletionSource<bool>();  // BUG-20260729-06/09: off 離脱時の in-flight 完了待ち用
@@ -4003,20 +4042,19 @@ namespace Lib.Ui.Screens.ViewModels
             OnPropertyChanged(nameof(IsLoopRunning));
             var token = _loopCts.Token;
 
-            StatusMessage = $"Overlap 実行中: {steps.Count} ステップ"
+            StatusMessage = $"{modeLabel} 実行中: {steps.Count} ステップ"
                 + (IsLightingOffline ? "（オフライン：送信なし）" : "");
-            AppendLog("INFO", $"Overlap 開始: {steps.Count} ステップ");
+            AppendLog("INFO", $"{modeLabel} 開始: {steps.Count} ステップ" + (once ? "（1回のみ・最終行保持）" : ""));
 
             try
             {
-                while (!token.IsCancellationRequested)
+                do
                 {
                     for (int i = 0; i < steps.Count; i++)
                     {
                         if (token.IsCancellationRequested) break;
 
                         var current = steps[i];
-                        var next = steps[(i + 1) % steps.Count];
 
                         // Chase と同じく、セグメント開始時に選択（ハイライト）を「現在行 current」へ即時反映する。
                         // これで Chase/OL の「群に入る/出る」体感（マーカー位相・退場キー数・着地行）が一致する。
@@ -4040,6 +4078,13 @@ namespace Lib.Ui.Screens.ViewModels
                             StopLoopExecution();
                             break;
                         }
+
+                        // OL2（once）: 最終行に到達したら次色へフェードせず、その色のまま「最終行保持」フェーズへ。
+                        //   直前セグメントで既に current（＝最終行）の色までフェード済みで、選択も current に反映済み。
+                        if (once && i == steps.Count - 1) break;
+
+                        // 次にフェードする行。once（OL2）は末尾で先頭へ戻さない（i は最終行未満が保証済み）。
+                        var next = once ? steps[i + 1] : steps[(i + 1) % steps.Count];
 
                         // フェード時間: 次の行の BPM/Time。
                         // 未設定（Time=0 かつ BPM 既定120/0）は既定周期で自動サイクル（0 だと無遅延ループ＝暴走するため）
@@ -4073,14 +4118,23 @@ namespace Lib.Ui.Screens.ViewModels
                         catch (OperationCanceledException) { break; }
                     }
                 }
+                while (!once && !token.IsCancellationRequested);
+
+                // OL2（once）: 1パス完了後、最終行の色を保持したまま「何らかの操作」まで待機する。
+                // トークン生存＝IsLoopRunning true のままなので、停止／↓離脱／別行クリックで解除される。
+                if (once && !token.IsCancellationRequested)
+                {
+                    try { await Task.Delay(Timeout.Infinite, token); }
+                    catch (OperationCanceledException) { }
+                }
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { AppendLog("ERR", $"Overlap エラー: {ex.Message}"); }
+            catch (Exception ex) { AppendLog("ERR", $"{modeLabel} エラー: {ex.Message}"); }
 
             loopDone.TrySetResult(true);  // BUG-20260729-06/09: off 離脱側の完了待ちを解除
             // Trig（OL 指定）は保存対象なのでループ終了時も残す。
-            StatusMessage = "Overlap 停止";
-            AppendLog("INFO", "Overlap 停止");
+            StatusMessage = $"{modeLabel} 停止";
+            AppendLog("INFO", $"{modeLabel} 停止");
         }
 
         #endregion Chase / Overlap
