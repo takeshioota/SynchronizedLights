@@ -160,12 +160,16 @@ public class SequenceStepWrapperMoreTests
             RainbowMode = RainbowMode.FadeInOut,
             RainbowFadeInMs = 1200,
             RainbowFadeOutMs = 1300,
+            RainbowBlinkPeriodMs = 800,
+            RainbowDutyRatio = 4,
         };
         var m = fio.ToModel();
         Assert.Equal(1200, m.RainbowFadeInMs);
         Assert.Equal(1300, m.RainbowFadeOutMs);
-        Assert.Null(m.RainbowBlinkPeriodMs);
-        Assert.Null(m.RainbowDutyRatio);
+        // No.44(B-20261120-04): 点滅周期・点灯比率はモードに関係なく常時保存する
+        // （旧仕様では非 Blink モードで null 化していたため、再読込で既定値に戻る不具合があった）。
+        Assert.Equal((int?)800, m.RainbowBlinkPeriodMs);
+        Assert.Equal((byte?)4, m.RainbowDutyRatio);
     }
 
     [Fact]

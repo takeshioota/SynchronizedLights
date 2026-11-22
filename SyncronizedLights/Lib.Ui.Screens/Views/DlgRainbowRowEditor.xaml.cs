@@ -132,40 +132,16 @@ namespace Lib.Ui.Screens.Views
         /// </summary>
         private static bool ValidateRow(SequenceStepWrapper row, out string error)
         {
-            const int TimeMax = 5000;
-
-            int n = row.RainbowColors?.Count ?? 0;
-            if (n < 2 || n > 7)
-            {
-                error = $"レインボーカラーは 2〜7 色で設定してください（現在 {n} 色）。";
-                return false;
-            }
-
-            var times = new (string Name, int Value)[]
-            {
-                ("速度(色切替間隔)", row.RainbowCycleDurationMs),
-                ("点滅周期", row.RainbowBlinkPeriodMs),
-                ("フェードイン時間(FI)", row.RainbowFadeInMs),
-                ("フェードアウト時間(FO)", row.RainbowFadeOutMs),
-            };
-            foreach (var t in times)
-            {
-                if (t.Value < 0 || t.Value > TimeMax)
-                {
-                    error = $"{t.Name} は 0〜{TimeMax}ms の範囲で入力してください（現在 {t.Value}ms）。\n"
-                          + $"※ 仕様下限未満の値は端末側で補正されます。{TimeMax}ms を超える値は設定できません。";
-                    return false;
-                }
-            }
-
-            if (row.RainbowDutyRatio > 9)
-            {
-                error = $"点灯比率は 0〜9 で入力してください（現在 {row.RainbowDutyRatio}）。";
-                return false;
-            }
-
-            error = string.Empty;
-            return true;
+            // No.41(B-20261120-01): 検証ロジックは RainbowInputValidator に集約し、コマンドパネル経路
+            // （ApplyRainbowToStep / StartRainbow）と共有する。本ダイアログの挙動は従来どおり。
+            return RainbowInputValidator.Validate(
+                row.RainbowColors?.Count ?? 0,
+                row.RainbowCycleDurationMs,
+                row.RainbowBlinkPeriodMs,
+                row.RainbowFadeInMs,
+                row.RainbowFadeOutMs,
+                row.RainbowDutyRatio,
+                out error);
         }
     }
 }

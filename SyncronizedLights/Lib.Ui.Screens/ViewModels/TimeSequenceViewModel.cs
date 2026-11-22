@@ -1024,10 +1024,11 @@ namespace Lib.Ui.Screens.ViewModels
                     ? RainbowColors.Select(c => new Rgb(c.R, c.G, c.B)).ToList()
                     : null,
                 RainbowCycleDurationMs = (CommandType == "Rainbow") ? RainbowCycleDurationMs : null,
-                RainbowBlinkPeriodMs = (CommandType == "Rainbow" && RainbowMode == RainbowMode.Blink)
-                    ? RainbowBlinkPeriodMs : null,
-                RainbowDutyRatio = (CommandType == "Rainbow" && RainbowMode == RainbowMode.Blink)
-                    ? RainbowDutyRatio : null,
+                // No.44(B-20261120-04): 点滅周期・点灯比率はモードに関係なく常時保存する。
+                // 以前は RainbowMode==Blink のときだけ保存していたため、非 Blink モードで入力した値が
+                // null 保存→再読込で既定(500/5)に戻る不具合があった（TimeMs/BPM が常時保存なのと整合させる）。
+                RainbowBlinkPeriodMs = (CommandType == "Rainbow") ? RainbowBlinkPeriodMs : null,
+                RainbowDutyRatio = (CommandType == "Rainbow") ? RainbowDutyRatio : null,
                 RainbowFadeInMs = (CommandType == "Rainbow" && RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeIn)
                     ? RainbowFadeInMs : null,
                 RainbowFadeOutMs = (CommandType == "Rainbow" && RainbowMode is RainbowMode.FadeInOut or RainbowMode.FadeOut)

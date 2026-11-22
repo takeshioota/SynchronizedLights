@@ -126,6 +126,15 @@ namespace Lib.Ui.Screens.Views
         {
             if (DataContext is not SequenceEditorViewModel vm) return;
 
+            // Q-20261120-01(No.46): Esc の長押し対策。押しっぱなしの OS オートリピートで Esc の
+            // KeyDown が連続発火し、停止→先頭から再開(ReExecuteCurrentStepForEsc)が連打される。
+            // リピートイベント(e.IsRepeat)は最初の1回だけ受け付け、以降は握りつぶす（太田さん案）。
+            if (e.Key == Key.Escape && e.IsRepeat)
+            {
+                e.Handled = true;
+                return;
+            }
+
             // テキスト入力中（DataGrid セル編集中含む）はショートカットを抑制
             if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
             {
@@ -135,7 +144,10 @@ namespace Lib.Ui.Screens.Views
                     e.Handled = true;
                     vm.StopLoopExecution();
                     if (vm.StopExecutionCommand.CanExecute(null))
+                    {
+                        vm.PrepareForEscResume(); // No.42/43: Rainbow 再開時は停止の赤ホールドを抑止
                         vm.StopExecutionCommand.Execute(null);
+                    }
                     // 停止の後片付けが済んでから現在行を再実行する（旧実行と重複しないよう遅延）。
                     Dispatcher.BeginInvoke(new System.Action(() => vm.ReExecuteCurrentStepForEsc()),
                         System.Windows.Threading.DispatcherPriority.Background);
@@ -191,7 +203,10 @@ namespace Lib.Ui.Screens.Views
                     // 追加開発(v2.12.0 / No.28 取消し): Esc は停止して現在の Effect を先頭から再開する（停止ボタンは停止のみ）。
                     vm.StopLoopExecution();
                     if (vm.StopExecutionCommand.CanExecute(null))
+                    {
+                        vm.PrepareForEscResume(); // No.42/43: Rainbow 再開時は停止の赤ホールドを抑止
                         vm.StopExecutionCommand.Execute(null);
+                    }
                     Dispatcher.BeginInvoke(new System.Action(() => vm.ReExecuteCurrentStepForEsc()),
                         System.Windows.Threading.DispatcherPriority.Background);
                     break;

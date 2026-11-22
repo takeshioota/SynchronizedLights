@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:sys="clr-namespace:System;assembly=System.Runtime"
         xmlns:conv="clr-namespace:Lib.Ui.Screens.Converters"
+        xmlns:val="clr-namespace:Lib.Ui.Screens.Validation"
         mc:Ignorable="d"
         Title="シーケンス編集"
         Width="1150"
@@ -608,15 +609,34 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="R"
-		                          Binding="{Binding ColorR, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="45"/>
-                <DataGridTextColumn Header="G"
-		                          Binding="{Binding ColorG, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="45"/>
-                <DataGridTextColumn Header="B"
-		                          Binding="{Binding ColorB, UpdateSourceTrigger=PropertyChanged}"
-		                          Width="45"/>
+<!-- No.45(B-20261120-05): R/G/B は LostFocus 確定＋0〜255 検証。範囲外・非整数は保存せず赤枠表示。 -->
+                <DataGridTextColumn Header="R" Width="45">
+                    <DataGridTextColumn.Binding>
+                        <Binding Path="ColorR" UpdateSourceTrigger="LostFocus">
+                            <Binding.ValidationRules>
+                                <val:ByteRangeValidationRule/>
+                            </Binding.ValidationRules>
+                        </Binding>
+                    </DataGridTextColumn.Binding>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="G" Width="45">
+                    <DataGridTextColumn.Binding>
+                        <Binding Path="ColorG" UpdateSourceTrigger="LostFocus">
+                            <Binding.ValidationRules>
+                                <val:ByteRangeValidationRule/>
+                            </Binding.ValidationRules>
+                        </Binding>
+                    </DataGridTextColumn.Binding>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="B" Width="45">
+                    <DataGridTextColumn.Binding>
+                        <Binding Path="ColorB" UpdateSourceTrigger="LostFocus">
+                            <Binding.ValidationRules>
+                                <val:ByteRangeValidationRule/>
+                            </Binding.ValidationRules>
+                        </Binding>
+                    </DataGridTextColumn.Binding>
+                </DataGridTextColumn>
 
                 <!-- 再送回数（TX）は既定 3 のまま非表示。値は保持され API へ送出される（表示のみ抑止） -->
                 <DataGridTextColumn Header="再送"

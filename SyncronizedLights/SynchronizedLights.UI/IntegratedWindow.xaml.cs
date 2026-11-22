@@ -410,6 +410,15 @@ namespace SynchronizedLights.UI
         /// </summary>
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
+            // Q-20261120-01(No.46): Esc の長押し対策。押しっぱなしの OS オートリピートで Esc の
+            // KeyDown が連続発火し、停止→先頭から再開が連打される。リピートイベント(e.IsRepeat)は
+            // 最初の1回だけ受け付け、以降は握りつぶす（太田さん案）。
+            if (e.Key == Key.Escape && e.IsRepeat)
+            {
+                e.Handled = true;
+                return;
+            }
+
             // テキスト入力中はショートカットを抑制（Esc のみ例外）
             if (Keyboard.FocusedElement is TextBox)
             {
@@ -480,7 +489,10 @@ namespace SynchronizedLights.UI
         {
             _sequenceVm.StopLoopExecution();
             if (_sequenceVm.StopExecutionCommand.CanExecute(null))
+            {
+                _sequenceVm.PrepareForEscResume(); // No.42/43: Rainbow 再開時は停止の赤ホールドを抑止
                 _sequenceVm.StopExecutionCommand.Execute(null);
+            }
 
             // ループ側の最終 SelectedStep 更新・停止後片付けが走り終えてから収束／再開させるため遅延実行する。
             Dispatcher.BeginInvoke(new Action(RestoreGridEditableAfterStop),

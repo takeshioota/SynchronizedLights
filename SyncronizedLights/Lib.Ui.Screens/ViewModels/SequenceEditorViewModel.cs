@@ -89,6 +89,14 @@ namespace Lib.Ui.Screens.ViewModels
         private bool _lastExecutedWasEffect;
 
         /// <summary>
+        /// No.42/43(B-20261120-02/-03): 直後の Esc 再開(先頭から再開)に伴う停止では、Rainbow の
+        /// 停止時に先頭パレット色(赤)を単色ホールド送出しないためのワンショットフラグ。
+        /// PrepareForEscResume() が「選択行が Rainbow のとき」のみ true にし、StopExecutionAsync が
+        /// 読み取って即 false に戻す。停止ボタン(直結)経由では立たないため、通常停止の挙動は不変。
+        /// </summary>
+        private bool _escRainbowResumePending;
+
+        /// <summary>
         /// B7 修正: ステップ実行の排他制御用セマフォ
         /// 概要：複数のステップ実行が同時に走ると API 呼び出しが競合し、
         ///       まれに応答が得られない問題を防止する。
@@ -777,6 +785,19 @@ namespace Lib.Ui.Screens.ViewModels
             _suppressAutoExecute = true;
             try { action(); }
             finally { _suppressAutoExecute = prev; }
+        }
+
+        /// <summary>
+        /// No.42/43(B-20261120-02/-03): Esc による「停止→先頭から再開」の直前に View から呼ぶ。
+        /// 選択行が Rainbow のときだけ、直後の停止で先頭パレット色(赤)を単色ホールド送出しないよう
+        /// ワンショットフラグを立てる。これにより Esc 再開が通常再生と同じ「色なし→Rainbow 開始」になり、
+        /// ・開始色が端末側のランダム選択に戻る（先頭色固定の解消＝No.42）
+        /// ・停止時に送っていた赤が残らず、赤→別色のちらつきも解消する（No.43）。
+        /// 停止ボタンは本メソッドを呼ばないため、通常停止の「停止色保持」挙動は従来どおり。
+        /// </summary>
+        public void PrepareForEscResume()
+        {
+            _escRainbowResumePending = SelectedStep != null && SelectedStep.CommandType == "Rainbow";
         }
 
         /// <summary>
@@ -1842,6 +1863,17 @@ namespace Lib.Ui.Screens.ViewModels
                 return;
             }
 
+            // No.41(B-20261120-01): パネル値の範囲検証。範囲外（時間 0〜5000ms 外・色数 2〜7 外・比率 0〜9 外）は
+            // エラーを表示して適用・保存・送信を行わない（行は変更しない）。
+            if (!RainbowInputValidator.Validate(
+                    RainbowColors.Count, RainbowCycleDurationMs, RainbowBlinkPeriodMs,
+                    RainbowFadeInMs, RainbowFadeOutMs, RainbowDutyRatio, out var applyError))
+            {
+                StatusMessage = $"Rainbow 設定エラー: {applyError}";
+                AppendLog("ERR", $"Rainbow 適用を中止（範囲外）: {applyError}");
+                return;
+            }
+
             foreach (var w in targets)
             {
                 w.CommandType = "Rainbow";
@@ -1883,9 +1915,13 @@ namespace Lib.Ui.Screens.ViewModels
             try
             {
                 var colors = RainbowColors.Select(c => new Rgb(c.R, c.G, c.B)).ToList();
-                if (colors.Count < 2)
+                // No.41(B-20261120-01): 送信前に範囲検証（色数 2〜7・時間 0〜5000ms・比率 0〜9）。範囲外は送信しない。
+                if (!RainbowInputValidator.Validate(
+                        colors.Count, RainbowCycleDurationMs, RainbowBlinkPeriodMs,
+                        RainbowFadeInMs, RainbowFadeOutMs, RainbowDutyRatio, out var startError))
                 {
-                    StatusMessage = "レインボーカラーは2色以上必要です。";
+                    StatusMessage = $"Rainbow 設定エラー: {startError}";
+                    AppendLog("ERR", $"Rainbow 開始を中止（範囲外）: {startError}");
                     return;
                 }
                 var effCycle = EffectiveRainbowCycleMs(RainbowMode, RainbowCycleDurationMs, RainbowFadeInMs, RainbowFadeOutMs);
@@ -3053,6 +3089,11 @@ namespace Lib.Ui.Screens.ViewModels
         [RelayCommand]
         private async Task StopExecutionAsync()
         {
+            // No.42/43: Esc 再開に伴う Rainbow 停止では先頭色(赤)の単色ホールドを送らない。
+            // フラグはワンショット（ここで読み取って即クリア）。停止ボタン経由では立たない。
+            bool suppressRainbowHold = _escRainbowResumePending;
+            _escRainbowResumePending = false;
+
             if (_lighting == null) return;
 
             // NO.21 修正: 全ループ・遷移・サブシーケンスを確実にキャンセルする
@@ -3091,15 +3132,21 @@ namespace Lib.Ui.Screens.ViewModels
                 // いずれも取得できなければ _lastExecutedColor にフォールバックする。
                 // 停止後に色を再送してホールドするのは BUG-20260901-01（残色/消灯）対策も兼ねる。
                 Rgb? holdColor = null;
-                if (_lastExecutedWasEffect)
+                // No.42/43: Esc 再開で停止直後に Rainbow を再開する場合は、停止時の単色ホールド
+                // （先頭パレット色＝赤）を一切送らない。再開の StartRainbow が色を確定するため、
+                // 残色対策(BUG-20260901-01)はホールド不要で担保される。
+                if (!suppressRainbowHold)
                 {
-                    var cur = await _lighting.GetCurrentColorAsync();
-                    if (cur != null) holdColor = cur;
-                }
-                if (holdColor == null && _lastExecutedColor.HasValue)
-                {
-                    var (lr, lg, lb) = _lastExecutedColor.Value;
-                    holdColor = new Rgb(lr, lg, lb);
+                    if (_lastExecutedWasEffect)
+                    {
+                        var cur = await _lighting.GetCurrentColorAsync();
+                        if (cur != null) holdColor = cur;
+                    }
+                    if (holdColor == null && _lastExecutedColor.HasValue)
+                    {
+                        var (lr, lg, lb) = _lastExecutedColor.Value;
+                        holdColor = new Rgb(lr, lg, lb);
+                    }
                 }
 
                 await _lighting.StopEffectAsync();
