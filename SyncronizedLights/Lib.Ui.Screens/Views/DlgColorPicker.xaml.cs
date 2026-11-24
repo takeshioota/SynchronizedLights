@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -76,6 +77,11 @@ namespace Lib.Ui.Screens.Views
         {
             InitializeComponent();
             InitializeSwatches();
+
+            // No.45(B-20261120-05): R/G/B 欄の貼り付けを数字のみに正規化する（"-5" や "12a" を弾く）。
+            DataObject.AddPastingHandler(TxtR, TxtRgb_Pasting);
+            DataObject.AddPastingHandler(TxtG, TxtRgb_Pasting);
+            DataObject.AddPastingHandler(TxtB, TxtRgb_Pasting);
 
             // v3.9: 0.5秒停止検出タイマー
             _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -294,11 +300,82 @@ namespace Lib.Ui.Screens.Views
             if (_isUpdating || _isRgbSliderUpdating) return;
             if (TxtR == null || TxtG == null || TxtB == null) return;
 
-            if (!byte.TryParse(TxtR.Text, out byte r)) return;
-            if (!byte.TryParse(TxtG.Text, out byte g)) return;
-            if (!byte.TryParse(TxtB.Text, out byte b)) return;
+            // No.45(B-20261120-05): 範囲外入力(>255 / 負値)を 0〜255 にクランプして取り込む。
+            // 旧実装の byte.TryParse では "256" 等がパース失敗 → 早期 return となり、直前の有効値
+            // (例: 25)が SelectedR に残ったまま OK 確定で保存され、見かけ上「256→25」の桁落ちに
+            // なっていた。int で解釈して 0〜255 にクランプすることで、上限も「256→255」と補正される。
+            // 空欄・入力途中(非数)は従来どおり無視し、再入力を妨げない。
+            if (!TryParseClampedByte(TxtR.Text, out byte r)) return;
+            if (!TryParseClampedByte(TxtG.Text, out byte g)) return;
+            if (!TryParseClampedByte(TxtB.Text, out byte b)) return;
 
             SetColorFromRgb(r, g, b);
+        }
+
+        /// <summary>
+        /// No.45(B-20261120-05): RGB テキスト入力を 0〜255 にクランプして解釈する。
+        /// 空欄・非整数は false（入力途中とみなし取り込まない）。範囲外は 0/255 にクランプして true を返す。
+        /// </summary>
+        public static bool TryParseClampedByte(string? text, out byte value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n))
+                return false;
+            value = (byte)Math.Clamp(n, 0, 255);
+            return true;
+        }
+
+        /// <summary>
+        /// No.45(B-20261120-05): R/G/B 欄は半角数字(0-9)のみ入力可。マイナス記号・小数点・文字・空白は
+        /// そもそも打てないようにする（負値や非整数が一瞬でも入らないようにするため）。
+        /// 上限(0〜255)のクランプは TxtRgb_TextChanged 側で行う。
+        /// </summary>
+        private void TxtRgb_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            e.Handled = !IsAsciiDigits(e.Text);
+        }
+
+        /// <summary>
+        /// No.45(B-20261120-05): R/G/B 欄への貼り付けを数字のみへ正規化する。
+        /// 数字が含まれなければ貼り付け自体を取消し、混在時は数字だけを貼り付ける。
+        /// </summary>
+        private void TxtRgb_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
+            if (!e.DataObject.GetDataPresent(DataFormats.UnicodeText))
+            {
+                e.CancelCommand();
+                return;
+            }
+            var pasted = e.DataObject.GetData(DataFormats.UnicodeText) as string ?? string.Empty;
+            var digits = KeepAsciiDigits(pasted);
+            if (digits.Length == 0)
+            {
+                e.CancelCommand();
+                return;
+            }
+            if (digits != pasted)
+            {
+                var replacement = new DataObject();
+                replacement.SetData(DataFormats.UnicodeText, digits);
+                e.DataObject = replacement;
+            }
+        }
+
+        /// <summary>入力文字列が全て半角数字(0-9)かどうか。空は false。</summary>
+        public static bool IsAsciiDigits(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            foreach (char c in s) if (c < '0' || c > '9') return false;
+            return true;
+        }
+
+        /// <summary>半角数字(0-9)以外を除去した文字列を返す。</summary>
+        public static string KeepAsciiDigits(string s)
+        {
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s) if (c >= '0' && c <= '9') sb.Append(c);
+            return sb.ToString();
         }
 
         /// <summary>

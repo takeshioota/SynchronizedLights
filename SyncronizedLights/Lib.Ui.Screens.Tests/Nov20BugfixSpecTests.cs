@@ -167,21 +167,80 @@ public class Nov20BugfixSpecTests
         Assert.DoesNotContain("ColorB, UpdateSourceTrigger=PropertyChanged", xaml);
     }
 
+    // ─── No.45 追加(2026-11-24): カラーピッカーダイアログ(DlgColorPicker)の RGB 直接入力 ───
+    // グリッドだけでなく DlgColorPicker の R/G/B テキストも範囲外をクランプして取り込む。
+    // 旧実装は byte.TryParse で "256" が失敗 → 直前の有効値(25)が残り「256→25」の桁落ちになっていた。
+
+    [Theory]
+    [InlineData("256", 255)]  // 上限超過はクランプ（←従来は桁落ちで 25 保存だった）
+    [InlineData("441", 255)]
+    [InlineData("-1", 0)]      // 下限未満はクランプ
+    [InlineData("0", 0)]
+    [InlineData("255", 255)]
+    [InlineData("128", 128)]
+    public void No45_カラーピッカーのRGBは範囲外をクランプして取り込む(string input, int expected)
+    {
+        Assert.True(Lib.Ui.Screens.Views.DlgColorPicker.TryParseClampedByte(input, out byte v));
+        Assert.Equal(expected, (int)v);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("abc")]
+    public void No45_カラーピッカーの空や非整数は取り込まない(string input)
+    {
+        // 入力途中とみなして取り込まない（再入力を妨げない）。
+        Assert.False(Lib.Ui.Screens.Views.DlgColorPicker.TryParseClampedByte(input, out _));
+    }
+
+    // No.45 追加(2026-11-24 B案): R/G/B 欄は数字のみ入力可（マイナス・小数点・文字はそもそも打てない）。
+
+    [Theory]
+    [InlineData("0", true)]
+    [InlineData("9", true)]
+    [InlineData("255", true)]
+    [InlineData("-", false)]   // マイナス記号は打てない
+    [InlineData(".", false)]
+    [InlineData("a", false)]
+    [InlineData(" ", false)]
+    [InlineData("1a", false)]
+    public void No45_カラーピッカーのRGB欄は数字のみ入力可(string input, bool allowed)
+    {
+        Assert.Equal(allowed, Lib.Ui.Screens.Views.DlgColorPicker.IsAsciiDigits(input));
+    }
+
+    [Theory]
+    [InlineData("-5", "5")]      // マイナス付き貼り付けは数字のみ残す
+    [InlineData("12a3", "123")]
+    [InlineData("25.5", "255")]
+    [InlineData("abc", "")]      // 数字が無ければ空（貼り付け取消相当）
+    public void No45_カラーピッカーの貼り付けは数字のみに正規化する(string pasted, string expected)
+    {
+        Assert.Equal(expected, Lib.Ui.Screens.Views.DlgColorPicker.KeepAsciiDigits(pasted));
+    }
+
     // ───────────────────────── No.46(Q-20261120-01) ─────────────────────────
     // Esc 長押し(オートリピート)は最初の1回だけ受け付ける(e.IsRepeat ガード)。
 
     [Fact]
-    public void No46_IntegratedWindowのEscはIsRepeatで抑止する()
+    public void No46_IntegratedWindowのEscはオートリピートを時間デバウンスで抑止する()
     {
         var win = ReadSource("SynchronizedLights.UI", "IntegratedWindow.xaml.cs");
-        Assert.Contains("e.Key == Key.Escape && e.IsRepeat", win);
+        Assert.Contains("EscRepeatSuppressMs", win);
+        Assert.Contains("_lastEscTick", win);
+        // 2026-11-24: VM/リモートで初回から IsRepeat=true になり Esc が全く効かない不具合のため、
+        // 「IsRepeat だけで早期 return」する実装に戻っていないこと。
+        Assert.DoesNotContain("e.Key == Key.Escape && e.IsRepeat", win);
     }
 
     [Fact]
-    public void No46_SequenceEditorWindowのEscはIsRepeatで抑止する()
+    public void No46_SequenceEditorWindowのEscはオートリピートを時間デバウンスで抑止する()
     {
         var win = ReadSource("Lib.Ui.Screens", "Views", "SequenceEditorWindow.xaml.cs");
-        Assert.Contains("e.Key == Key.Escape && e.IsRepeat", win);
+        Assert.Contains("EscRepeatSuppressMs", win);
+        Assert.Contains("_lastEscTick", win);
+        Assert.DoesNotContain("e.Key == Key.Escape && e.IsRepeat", win);
     }
 
     // ─────────────────────── No.42/43(B-20261120-02/-03) ───────────────────────

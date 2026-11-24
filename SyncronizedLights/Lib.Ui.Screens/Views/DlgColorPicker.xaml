@@ -140,21 +140,24 @@
                         ValueChanged="SldRgb_ValueChanged"/>
                 <TextBox x:Name="TxtR" Grid.Row="0" Grid.Column="2" Width="60" Margin="4,0,0,0"
                          HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
-                         Style="{StaticResource GrandMaTextBoxStyle}" TextChanged="TxtRgb_TextChanged"/>
+                         Style="{StaticResource GrandMaTextBoxStyle}"
+                         PreviewTextInput="TxtRgb_PreviewTextInput" TextChanged="TxtRgb_TextChanged"/>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="G" Foreground="#4CAF50" FontWeight="Bold" VerticalAlignment="Center"/>
                 <Slider x:Name="SldG" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="255"
                         SmallChange="1" LargeChange="10" VerticalAlignment="Center"
                         ValueChanged="SldRgb_ValueChanged"/>
                 <TextBox x:Name="TxtG" Grid.Row="1" Grid.Column="2" Width="60" Margin="4,0,0,0"
                          HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
-                         Style="{StaticResource GrandMaTextBoxStyle}" TextChanged="TxtRgb_TextChanged"/>
+                         Style="{StaticResource GrandMaTextBoxStyle}"
+                         PreviewTextInput="TxtRgb_PreviewTextInput" TextChanged="TxtRgb_TextChanged"/>
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="B" Foreground="#2196F3" FontWeight="Bold" VerticalAlignment="Center"/>
                 <Slider x:Name="SldB" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="255"
                         SmallChange="1" LargeChange="10" VerticalAlignment="Center"
                         ValueChanged="SldRgb_ValueChanged"/>
                 <TextBox x:Name="TxtB" Grid.Row="2" Grid.Column="2" Width="60" Margin="4,0,0,0"
                          HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
-                         Style="{StaticResource GrandMaTextBoxStyle}" TextChanged="TxtRgb_TextChanged"/>
+                         Style="{StaticResource GrandMaTextBoxStyle}"
+                         PreviewTextInput="TxtRgb_PreviewTextInput" TextChanged="TxtRgb_TextChanged"/>
             </Grid>
         </StackPanel>
 

@@ -25,6 +25,11 @@ namespace SynchronizedLights.UI
         private readonly SequenceEditorViewModel _sequenceVm;
         private CommandWindow? _commandWindow;
 
+        /// <summary>No.46: Esc オートリピート連打抑止用。直近に Esc を処理した時刻(ms)。未処理は long.MinValue。</summary>
+        private long _lastEscTick = long.MinValue;
+        /// <summary>No.46: この時間(ms)以内に連続発火した Esc はオートリピートとみなして握りつぶす。</summary>
+        private const long EscRepeatSuppressMs = 300;
+
         public IntegratedWindow()
         {
             InitializeComponent();
@@ -411,12 +416,21 @@ namespace SynchronizedLights.UI
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             // Q-20261120-01(No.46): Esc の長押し対策。押しっぱなしの OS オートリピートで Esc の
-            // KeyDown が連続発火し、停止→先頭から再開が連打される。リピートイベント(e.IsRepeat)は
-            // 最初の1回だけ受け付け、以降は握りつぶす（太田さん案）。
-            if (e.Key == Key.Escape && e.IsRepeat)
+            // KeyDown が連続発火し、停止→先頭から再開が連打される。当初は e.IsRepeat で弾いていたが、
+            // VM/リモートデスクトップ等では初回の KeyDown から IsRepeat=true になり得て「Esc が全く
+            // 効かない」不具合になった（2026-11-24 指摘）。IsRepeat に依存せず、直近 Esc 処理からの
+            // 経過時間でデバウンスする（初回・一定時間あけた押下は受け付け、連続発火のみ握りつぶす）。
+            // タイムスタンプは握りつぶした Esc でも更新するため、押しっぱなしでも1回しか実行しない。
+            if (e.Key == Key.Escape)
             {
-                e.Handled = true;
-                return;
+                long now = Environment.TickCount64;
+                bool isAutoRepeat = _lastEscTick != long.MinValue && (now - _lastEscTick) < EscRepeatSuppressMs;
+                _lastEscTick = now;
+                if (isAutoRepeat)
+                {
+                    e.Handled = true;
+                    return;
+                }
             }
 
             // テキスト入力中はショートカットを抑制（Esc のみ例外）

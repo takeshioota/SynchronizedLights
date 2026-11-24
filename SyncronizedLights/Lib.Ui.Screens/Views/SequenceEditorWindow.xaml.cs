@@ -122,17 +122,39 @@ namespace Lib.Ui.Screens.Views
         /// PreviewKeyDown：DataGrid より先にキー入力をキャッチして処理。
         /// e.Handled = true をコマンド実行前に設定するのが重要（DataGrid の二重処理防止）。
         /// </summary>
+        /// <summary>
+        /// Q-20261120-01(No.46): Esc 長押し(オートリピート)の連打抑止用。直近に Esc を処理した時刻
+        /// (Environment.TickCount64, ms)。未処理は long.MinValue。
+        /// </summary>
+        private long _lastEscTick = long.MinValue;
+
+        /// <summary>
+        /// Q-20261120-01(No.46): この時間(ms)以内に連続発火した Esc はオートリピートとみなして握りつぶす。
+        /// </summary>
+        private const long EscRepeatSuppressMs = 300;
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if (DataContext is not SequenceEditorViewModel vm) return;
 
             // Q-20261120-01(No.46): Esc の長押し対策。押しっぱなしの OS オートリピートで Esc の
             // KeyDown が連続発火し、停止→先頭から再開(ReExecuteCurrentStepForEsc)が連打される。
-            // リピートイベント(e.IsRepeat)は最初の1回だけ受け付け、以降は握りつぶす（太田さん案）。
-            if (e.Key == Key.Escape && e.IsRepeat)
+            // 当初は e.IsRepeat で弾いていたが、VM/リモートデスクトップ等では初回の KeyDown から
+            // IsRepeat=true になり得て「Esc が全く効かない」不具合になった（2026-11-24 指摘）。
+            // そこで IsRepeat に依存せず、直近 Esc 処理からの経過時間でデバウンスする：
+            //   ・初回および一定時間(EscRepeatSuppressMs)以上あいた押下 … 受け付ける
+            //   ・それ以内の連続発火（オートリピート）              … 握りつぶす
+            // タイムスタンプは握りつぶした Esc でも更新するため、押しっぱなしでも1回しか実行しない。
+            if (e.Key == Key.Escape)
             {
-                e.Handled = true;
-                return;
+                long now = Environment.TickCount64;
+                bool isAutoRepeat = _lastEscTick != long.MinValue && (now - _lastEscTick) < EscRepeatSuppressMs;
+                _lastEscTick = now;
+                if (isAutoRepeat)
+                {
+                    e.Handled = true;
+                    return;
+                }
             }
 
             // テキスト入力中（DataGrid セル編集中含む）はショートカットを抑制
